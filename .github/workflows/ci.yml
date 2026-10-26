@@ -17,6 +17,20 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: clothes
+          POSTGRES_PASSWORD: clothes
+          POSTGRES_DB: clothes_guide
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clothes -d clothes_guide"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
@@ -28,3 +42,19 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 校验代码
         run: pnpm check
+      - name: 执行数据库迁移
+        run: pnpm --filter @clothes-shopping-guide/api migration:up
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: clothes
+          DB_PASSWORD: clothes
+          DB_NAME: clothes_guide
+      - name: 执行数据库 Seeder
+        run: pnpm seed
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: clothes
+          DB_PASSWORD: clothes
+          DB_NAME: clothes_guide

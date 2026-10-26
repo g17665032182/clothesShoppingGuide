@@ -11,6 +11,7 @@
 
 ```text
 apps/                         独立应用，尚未绑定业务框架
+  api/                        NestJS + MikroORM + PostgreSQL 后端
 packages/
   shared/                     共享模块骨架，目前没有业务实现
   typescript-config/          共享 TypeScript 编译配置
@@ -22,11 +23,27 @@ packages/
 ```bash
 pnpm install --frozen-lockfile
 pnpm check
+pnpm seed
 pnpm format
 pnpm --filter @clothes-shopping-guide/shared build
+pnpm --filter @clothes-shopping-guide/api start:dev
 ```
 
-`pnpm check` 依次执行格式检查、类型检查和构建。当前没有业务逻辑和测试用例；新增功能时应在所属包中补充测试及 `test` 脚本，并接入 CI。
+`pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。当前没有业务逻辑和测试用例；新增功能时应在所属包中补充测试及 `test` 脚本，并接入 CI。
+
+## 后端 API
+
+后端位于 `apps/api`，使用 NestJS 12、MikroORM 7 和 PostgreSQL。复制 `apps/api/.env.example` 为 `.env` 后即可配置连接信息。
+
+```bash
+cp apps/api/.env.example apps/api/.env
+docker compose -f apps/api/docker-compose.yml up -d
+pnpm --filter @clothes-shopping-guide/api migration:up
+pnpm seed
+pnpm --filter @clothes-shopping-guide/api start:dev
+```
+
+健康检查地址为 `GET /api/health`。`seed` 会执行 `DatabaseSeeder`；当前没有业务 Entity，因此入口暂时为空，后续可在 `apps/api/src/database/seeders/DatabaseSeeder.ts` 中加入初始化数据。业务资源的 Entity、DTO 和 CRUD 路由需要先按契约文档确认后再增加。
 
 ## 新增模块
 
