@@ -1,6 +1,6 @@
 # clothesShoppingGuide
 
-服装购物指南的 Monorepo 基础仓库，使用 pnpm 原生 Workspace 管理应用和共享模块。
+服装购物指南的 Monorepo 后端仓库，使用 pnpm 原生 Workspace 管理应用和共享模块。
 
 ## 环境
 
@@ -45,7 +45,24 @@ pnpm migration:fresh
 pnpm --filter @clothes-shopping-guide/api start:dev
 ```
 
-健康检查地址为 `GET /api/health`。`migration:fresh` 会执行全部迁移并自动运行 `DatabaseSeeder`；单独执行 `pnpm seed` 只运行 Seeder。当前没有业务 Entity，因此入口暂时为空，后续可在 `apps/api/src/database/seeders/DatabaseSeeder.ts` 中加入初始化数据。业务资源的 Entity、DTO 和 CRUD 路由需要先按契约文档确认后再增加。
+健康检查地址为 `GET /api/health`。`migration:fresh` 会执行全部迁移并自动运行 `DatabaseSeeder`；单独执行 `pnpm seed` 只运行 Seeder。MikroORM CLI 使用 `tsx` 直接加载 TypeScript Entity，迁移和 Seeder 命令不依赖手工切换 loader。
+
+## 用户与鉴权
+
+用户模块位于 `apps/api/src/users`，认证模块位于 `apps/api/src/auth`。除健康检查、注册和登录外，接口都要求携带 `Authorization: Bearer <accessToken>`。
+
+```text
+POST  /api/auth/register  注册并返回 JWT
+POST  /api/auth/login     登录并返回 JWT
+GET   /api/auth/me        获取当前用户
+GET   /api/users/me       获取当前资料
+PATCH /api/users/me       修改昵称或密码
+GET   /api/users          管理员查看用户列表
+PATCH /api/users/:id      管理员修改角色、状态或昵称
+DELETE /api/users/:id     管理员禁用用户
+```
+
+密码使用 `bcryptjs` 哈希后保存，API 响应不会返回密码；JWT Guard 每次请求都会重新读取用户状态，因此管理员禁用用户后其旧 Token 会立即失效。默认 Seeder 管理员账号由 `SEED_ADMIN_*` 环境变量控制，生产环境必须替换 `JWT_SECRET` 和默认密码。完整字段、权限和错误契约见 [`docs/contracts/user-crud-contract.md`](./docs/contracts/user-crud-contract.md)。
 
 ## 新增模块
 

@@ -4,6 +4,9 @@
   "private": true,
   "description": "服装购物指南后端 API",
   "type": "module",
+  "mikro-orm": {
+    "tsLoader": "tsx"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
@@ -26,7 +29,9 @@
     "@nestjs/common": "12.2.0",
     "@nestjs/config": "12.0.1",
     "@nestjs/core": "12.2.0",
+    "@nestjs/jwt": "12.0.1",
     "@nestjs/platform-express": "12.2.0",
+    "bcryptjs": "3.0.2",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
     "dotenv": "17.2.2",
@@ -34,11 +39,12 @@
     "rxjs": "7.8.2"
   },
   "devDependencies": {
+    "@clothes-shopping-guide/typescript-config": "workspace:*",
     "@mikro-orm/cli": "7.2.5",
     "@nestjs/cli": "12.0.10",
     "@types/node": "26.6.5",
     "@types/pg": "8.16.0",
-    "@clothes-shopping-guide/typescript-config": "workspace:*",
+    "tsx": "^4.23.15",
     "typescript": "7.0.2"
   }
 }
