@@ -1,0 +1,6 @@
+# 自动生成的文件由对应工具维护。
+pnpm-lock.yaml
+node_modules/
+dist/
+build/
+coverage/

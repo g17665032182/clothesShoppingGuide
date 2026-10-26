@@ -1,0 +1,4 @@
+# 应用和共享模块分别管理，内部依赖使用 workspace 协议。
+packages:
+  - 'apps/*'
+  - 'packages/*'
