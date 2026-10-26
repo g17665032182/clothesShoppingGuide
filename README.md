@@ -23,13 +23,15 @@ packages/
 ```bash
 pnpm install --frozen-lockfile
 pnpm check
+pnpm migration:fresh
 pnpm seed
+pnpm seeder:create DatabaseSeeder
 pnpm format
 pnpm --filter @clothes-shopping-guide/shared build
 pnpm --filter @clothes-shopping-guide/api start:dev
 ```
 
-`pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。当前没有业务逻辑和测试用例；新增功能时应在所属包中补充测试及 `test` 脚本，并接入 CI。
+`pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。`pnpm migration:fresh` 内置 `--seed`，会清空本地数据库、重跑迁移并执行默认 Seeder，只应在可重建的本地或 CI 数据库中使用。`pnpm seeder:create DatabaseSeeder` 会在 `apps/api/src/database/seeders/` 生成 Seeder 类。当前没有业务逻辑和测试用例；新增功能时应在所属包中补充测试及 `test` 脚本，并接入 CI。
 
 ## 后端 API
 
@@ -39,11 +41,11 @@ pnpm --filter @clothes-shopping-guide/api start:dev
 cp apps/api/.env.example apps/api/.env
 docker compose -f apps/api/docker-compose.yml up -d
 pnpm --filter @clothes-shopping-guide/api migration:up
-pnpm seed
+pnpm migration:fresh
 pnpm --filter @clothes-shopping-guide/api start:dev
 ```
 
-健康检查地址为 `GET /api/health`。`seed` 会执行 `DatabaseSeeder`；当前没有业务 Entity，因此入口暂时为空，后续可在 `apps/api/src/database/seeders/DatabaseSeeder.ts` 中加入初始化数据。业务资源的 Entity、DTO 和 CRUD 路由需要先按契约文档确认后再增加。
+健康检查地址为 `GET /api/health`。`migration:fresh` 会执行全部迁移并自动运行 `DatabaseSeeder`；单独执行 `pnpm seed` 只运行 Seeder。当前没有业务 Entity，因此入口暂时为空，后续可在 `apps/api/src/database/seeders/DatabaseSeeder.ts` 中加入初始化数据。业务资源的 Entity、DTO 和 CRUD 路由需要先按契约文档确认后再增加。
 
 ## 新增模块
 

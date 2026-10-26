@@ -42,16 +42,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 校验代码
         run: pnpm check
-      - name: 执行数据库迁移
-        run: pnpm --filter @clothes-shopping-guide/api migration:up
-        env:
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_USER: clothes
-          DB_PASSWORD: clothes
-          DB_NAME: clothes_guide
-      - name: 执行数据库 Seeder
-        run: pnpm seed
+      - name: 重建数据库并执行 Seeder
+        run: pnpm migration:fresh
         env:
           DB_HOST: localhost
           DB_PORT: 5432

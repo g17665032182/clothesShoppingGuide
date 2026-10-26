@@ -11,6 +11,8 @@
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "typecheck": "pnpm -r --if-present run typecheck",
+    "migration:fresh": "pnpm --filter @clothes-shopping-guide/api migration:fresh",
+    "seeder:create": "pnpm --filter @clothes-shopping-guide/api seeder:create",
     "seed": "pnpm -r --if-present run seed",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
