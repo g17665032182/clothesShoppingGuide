@@ -1,10 +1,15 @@
 import { computed, reactive } from 'vue';
+import { configureAuthTransport } from '@/api';
 import {
-  apiRequest,
-  configureAuthTransport,
-  type AuthResponse,
-  type User,
-} from './api';
+  getCurrentUser,
+  logout,
+  refreshAccessToken,
+  register,
+  signIn,
+} from '@/api/modules/auth';
+import type { AuthResponse } from '@/api/types/auth';
+import { getCurrentProfile } from '@/api/modules/users';
+import type { User } from '@/api/types/users';
 
 const tokenKey = 'clothes-guide.access-token';
 const state = reactive<{
@@ -24,21 +29,13 @@ export const auth = {
   isAdmin: computed(() => state.user?.role === 'admin'),
 
   async signIn(email: string, password: string) {
-    const response = await apiRequest<AuthResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
+    const response = await signIn(email, password);
     this.setSession(response);
   },
 
   async refreshAccessToken(): Promise<string | null> {
     try {
-      const response = await apiRequest<AuthResponse>(
-        '/auth/refresh',
-        { method: 'POST' },
-        undefined,
-        false,
-      );
+      const response = await refreshAccessToken();
       this.setSession(response);
       return response.accessToken;
     } catch {
@@ -47,10 +44,7 @@ export const auth = {
   },
 
   async register(email: string, password: string, displayName: string) {
-    const response = await apiRequest<AuthResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, displayName }),
-    });
+    const response = await register(email, password, displayName);
     this.setSession(response);
   },
 
@@ -71,7 +65,7 @@ export const auth = {
         return;
       }
       try {
-        state.user = await apiRequest<User>('/auth/me', {}, state.token);
+        state.user = await getCurrentUser(state.token);
       } catch {
         this.signOut();
       } finally {
@@ -86,14 +80,12 @@ export const auth = {
     state.user = null;
     state.ready = true;
     localStorage.removeItem(tokenKey);
-    void apiRequest('/auth/logout', { method: 'POST' }, undefined, false).catch(
-      () => undefined,
-    );
+    void logout().catch(() => undefined);
   },
 
   async refreshUser() {
     if (!state.token) return;
-    state.user = await apiRequest<User>('/users/me', {}, state.token);
+    state.user = await getCurrentProfile(state.token);
   },
 };
 

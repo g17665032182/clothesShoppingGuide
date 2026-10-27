@@ -1,3 +1,12 @@
+<script setup lang="ts">
+import type { User } from '@/api/types/users';
+
+defineProps<{
+  user: User | null;
+  isAdmin: boolean;
+}>();
+</script>
+
 <template>
   <section class="home-hero">
     <div class="hero-copy">
@@ -5,21 +14,15 @@
       <h1>找到更适合自己的穿着选择。</h1>
       <p class="intro">从了解自己的需求开始，逐步探索服装与搭配。</p>
       <div class="hero-actions">
-        <RouterLink
-          v-if="!auth.state.user"
-          class="primary-button"
-          to="/register"
-          >开始使用</RouterLink
-        >
-        <RouterLink v-else class="primary-button" to="/account"
-          >查看个人资料</RouterLink
-        >
-        <RouterLink
-          v-if="auth.isAdmin.value"
-          class="secondary-button"
-          to="/admin/users"
-          >管理用户</RouterLink
-        >
+        <RouterLink v-if="!user" class="primary-button" to="/register">
+          开始使用
+        </RouterLink>
+        <RouterLink v-else class="primary-button" to="/account">
+          查看个人资料
+        </RouterLink>
+        <RouterLink v-if="isAdmin" class="secondary-button" to="/admin/users">
+          管理用户
+        </RouterLink>
       </div>
     </div>
     <aside class="hero-aside">
@@ -29,7 +32,3 @@
     </aside>
   </section>
 </template>
-
-<script setup lang="ts">
-import { auth } from '@/lib/auth';
-</script>

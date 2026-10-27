@@ -1,9 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { auth } from '@/lib/auth';
-import AccountView from '@/views/AccountView.vue';
-import AdminUsersView from '@/views/AdminUsersView.vue';
-import AuthView from '@/views/AuthView.vue';
-import HomeView from '@/views/HomeView.vue';
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -11,30 +7,36 @@ export const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomeView,
+      component: () => import('@/pages/home/index.vue'),
     },
     {
       path: '/login',
       name: 'login',
-      component: AuthView,
+      component: () => import('@/pages/auth/index.vue'),
       meta: { guestOnly: true },
     },
     {
       path: '/register',
       name: 'register',
-      component: AuthView,
+      component: () => import('@/pages/auth/index.vue'),
       meta: { guestOnly: true },
     },
     {
       path: '/account',
       name: 'account',
-      component: AccountView,
+      component: () => import('@/pages/account/index.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/chat',
+      name: 'chat',
+      component: () => import('@/pages/chat/index.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/admin/users',
       name: 'admin-users',
-      component: AdminUsersView,
+      component: () => import('@/pages/admin-users/index.vue'),
       meta: { requiresAuth: true, adminOnly: true },
     },
   ],

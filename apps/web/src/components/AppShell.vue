@@ -19,6 +19,9 @@ function signOut() {
         <span>衣橱指南</span>
       </RouterLink>
       <div class="header-actions">
+        <RouterLink v-if="auth.state.user" class="text-link" to="/chat"
+          >聊天</RouterLink
+        >
         <RouterLink v-if="auth.state.user" class="account-link" to="/account">
           <UserRound :size="16" />
           <span>{{ auth.state.user.displayName }}</span>
@@ -26,6 +29,8 @@ function signOut() {
         <button
           v-if="auth.state.user"
           class="icon-button"
+          aria-label="退出登录"
+          type="button"
           title="退出登录"
           @click="signOut"
         >
