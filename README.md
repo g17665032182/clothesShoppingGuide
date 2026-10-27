@@ -1,6 +1,6 @@
 # clothesShoppingGuide
 
-服装购物指南的 Monorepo 后端仓库，使用 pnpm 原生 Workspace 管理应用和共享模块。
+服装购物指南 Monorepo，使用 pnpm 原生 Workspace 管理前端、后端和共享模块。
 
 ## 环境
 
@@ -10,7 +10,8 @@
 ## 目录
 
 ```text
-apps/                         独立应用，尚未绑定业务框架
+apps/
+  web/                        Vue 3 + Vite + shadcn-vue 前端
   api/                        NestJS + MikroORM + PostgreSQL 后端
 packages/
   shared/                     共享模块骨架，目前没有业务实现
@@ -27,11 +28,16 @@ pnpm migration:fresh
 pnpm seed
 pnpm seeder:create DatabaseSeeder
 pnpm format
+pnpm --filter @clothes-shopping-guide/web dev
 pnpm --filter @clothes-shopping-guide/shared build
 pnpm --filter @clothes-shopping-guide/api start:dev
 ```
 
 `pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。`pnpm migration:fresh` 内置 `--seed`，会清空本地数据库、重跑迁移并执行默认 Seeder，只应在可重建的本地或 CI 数据库中使用。`pnpm seeder:create DatabaseSeeder` 会在 `apps/api/src/database/seeders/` 生成 Seeder 类。当前没有业务逻辑和测试用例；新增功能时应在所属包中补充测试及 `test` 脚本，并接入 CI。
+
+## 前端
+
+前端位于 `apps/web`，使用 Vue 3、Vite、TypeScript、Vue Router、Tailwind CSS 4 和 shadcn-vue。开发服务默认监听 `0.0.0.0`，本地访问地址为 `http://localhost:5173`。shadcn-vue 组件按需通过 CLI 添加，组件源码归前端应用维护。
 
 ## 后端 API
 
