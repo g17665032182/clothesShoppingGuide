@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
 
 import { LlmService } from '../llm/llm.service.js';
 import { ChatContextService } from './chat-context.service.js';
@@ -6,12 +7,13 @@ import type { ChatMessage } from './chat-message.entity.js';
 
 @Injectable()
 export class ChatSummaryService {
-  private readonly logger = new Logger(ChatSummaryService.name);
-
   public constructor(
     private readonly llmService: LlmService,
     private readonly contextService: ChatContextService,
-  ) {}
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(ChatSummaryService.name);
+  }
 
   public async summarize(
     existingSummary: string | null,

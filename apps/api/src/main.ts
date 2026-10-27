@@ -9,11 +9,14 @@ import 'reflect-metadata';
 
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // 先缓存启动日志，待 Pino 完成初始化后统一接管 Nest 日志。
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(Logger));
 
   // 全局开启 DTO 校验，拒绝未知字段并自动转换常见请求参数。
   app.useGlobalPipes(

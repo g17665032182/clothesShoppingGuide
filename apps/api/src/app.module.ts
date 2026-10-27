@@ -8,6 +8,7 @@ import { ChatRecordsModule } from './chat-records/chat-records.module.js';
 import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import { LlmModule } from './llm/llm.module.js';
+import { LoggingModule } from './logging/logging.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -17,6 +18,7 @@ import { UsersModule } from './users/users.module.js';
       cache: true,
       envFilePath: ['.env.dev', '.env'],
     }),
+    LoggingModule,
     MikroOrmModule.forRoot(mikroOrmConfig),
     UsersModule,
     AuthModule,
