@@ -7,6 +7,7 @@ import {
   Body,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorator/current-user.decorator.js';
 import { Roles } from '../authorization/decorator/roles.decorator.js';
@@ -18,6 +19,8 @@ import { UsersService } from './users.service.js';
 import type { UserResponse } from './users.service.js';
 
 @Controller('users')
+@ApiBearerAuth('bearer')
+@ApiTags('用户')
 export class UsersController {
   public constructor(private readonly usersService: UsersService) {}
 

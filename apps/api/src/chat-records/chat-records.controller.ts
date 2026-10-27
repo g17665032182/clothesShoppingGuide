@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Query,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorator/current-user.decorator.js';
 import type { User } from '../users/user.entity.js';
@@ -14,6 +15,8 @@ import { ChatRecordsService } from './chat-records.service.js';
 import { PaginationDto } from './dto/pagination.dto.js';
 
 @Controller('chat/conversations')
+@ApiBearerAuth('bearer')
+@ApiTags('聊天记录')
 export class ChatRecordsController {
   public constructor(private readonly chatRecords: ChatRecordsService) {}
 

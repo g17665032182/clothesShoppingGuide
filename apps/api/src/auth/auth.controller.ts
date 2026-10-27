@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Post,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { AuthService } from './auth.service.js';
 import { CurrentUser } from './decorator/current-user.decorator.js';
@@ -15,6 +16,7 @@ import { RegisterDto } from './dto/register.dto.js';
 import { User } from '../users/user.entity.js';
 
 @Controller('auth')
+@ApiTags('认证')
 export class AuthController {
   public constructor(private readonly authService: AuthService) {}
 
@@ -32,6 +34,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @ApiBearerAuth('bearer')
   public me(@CurrentUser() user: User) {
     return this.authService.getCurrentUser(user);
   }

@@ -8,7 +8,7 @@
 - 需求来源：用户要求“使用 SDD，做一个用户模块，要做好鉴权”。
 - 确认依据：用户需求；项目现有 NestJS 12、MikroORM 7、PostgreSQL 和全局 DTO 校验配置。
 - 涉及模块：`apps/api/src/users`、`apps/api/src/auth`、数据库迁移和 Seeder。
-- 当前框架、ORM、数据库及版本：NestJS 12.2、MikroORM 7.2、PostgreSQL、TypeScript 7。
+- 当前框架、ORM、数据库及版本：NestJS 12.2、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3。
 - 已阅读的相似模块和文档：NestJS JWT Guard 官方示例、MikroORM Entity/Repository 官方文档、项目 `nestjs-mikroorm-crud` 技能契约。
 - 最后更新：2026-10-27
 

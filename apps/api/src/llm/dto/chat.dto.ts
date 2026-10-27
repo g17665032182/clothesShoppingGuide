@@ -1,4 +1,5 @@
 import { Transform, Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -67,9 +68,20 @@ export enum ChatMessageRole {
 }
 
 export class ChatMessageDto {
+  @ApiProperty({
+    description: '消息角色',
+    enum: ChatMessageRole,
+    example: ChatMessageRole.USER,
+  })
   @IsEnum(ChatMessageRole)
   public role!: ChatMessageRole;
 
+  @ApiProperty({
+    description: '消息文本',
+    example: '请推荐适合春季通勤的穿搭。',
+    minLength: 1,
+    maxLength: MAX_CHAT_MESSAGE_LENGTH,
+  })
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
@@ -79,10 +91,21 @@ export class ChatMessageDto {
 }
 
 export class ChatDto {
+  @ApiPropertyOptional({
+    description: '已有会话 ID；不传则创建新会话',
+    format: 'uuid',
+    example: '9c2c6f3b-4d12-4a9e-8c0a-8d6d0a8b8c1e',
+  })
   @IsOptional()
   @IsUUID()
   public conversationId?: string;
 
+  @ApiProperty({
+    description: '本轮聊天消息，最多 20 条',
+    type: () => [ChatMessageDto],
+    minItems: 1,
+    maxItems: MAX_CHAT_MESSAGES,
+  })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_CHAT_MESSAGES)

@@ -6,7 +6,7 @@
 - 关联设计文档：[用户聊天记录模块设计文档](./chat-records-design.md)
 - 关联 CRUD 契约：[用户聊天记录 CRUD 契约](../contracts/chat-records-crud-contract.md)
 - 所属应用：`apps/api`
-- 当前技术栈：NestJS 12、MikroORM 7.2、PostgreSQL、TypeScript 7、LangChain
+- 当前技术栈：NestJS 12、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3、LangChain
 - 最后更新：2026-10-27
 
 ## 实现目标

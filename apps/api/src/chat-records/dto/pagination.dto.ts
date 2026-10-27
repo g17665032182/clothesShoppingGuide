@@ -1,12 +1,26 @@
 import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, Max, Min } from 'class-validator';
 
 export class PaginationDto {
+  @ApiPropertyOptional({
+    description: '页码，从 1 开始',
+    type: Number,
+    default: 1,
+    minimum: 1,
+  })
   @Type(() => Number)
   @IsInt()
   @Min(1)
   public page = 1;
 
+  @ApiPropertyOptional({
+    description: '每页数量，范围 1-100',
+    type: Number,
+    default: 20,
+    minimum: 1,
+    maximum: 100,
+  })
   @Type(() => Number)
   @IsInt()
   @Min(1)

@@ -1,4 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../auth/decorator/current-user.decorator.js';
 import { ChatDto } from '../llm/dto/chat.dto.js';
@@ -9,6 +10,8 @@ import {
 } from './chat-records.service.js';
 
 @Controller('llm')
+@ApiBearerAuth('bearer')
+@ApiTags('大模型聊天')
 export class LlmChatController {
   public constructor(private readonly chatRecords: ChatRecordsService) {}
 

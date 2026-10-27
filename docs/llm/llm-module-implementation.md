@@ -192,7 +192,7 @@ pnpm-lock.yaml
 任务：
 
 - 确认 LangChain、LangGraph、供应商集成包和 `zod` 的兼容版本。
-- 阅读官方文档并确认当前 ESM、TypeScript 7 和 Node.js 22 配置可用。
+- 阅读官方文档并确认当前 ESM、TypeScript 6.0.3 和 Node.js 22 配置可用。
 - 设计 `ChatModel` 工厂。
 - 读取和校验 `LLM_*` 环境变量。
 - 定义 `LLM_CHAT_MODEL` 和 `LLM_GRAPH` 等注入 Token。

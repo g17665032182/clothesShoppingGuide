@@ -6,6 +6,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Roles } from '../authorization/decorator/roles.decorator.js';
 import { RolesGuard } from '../authorization/guard/roles.guard.js';
@@ -17,6 +18,8 @@ import { PaginationDto } from './dto/pagination.dto.js';
 @Controller('admin/chat/conversations')
 @UseGuards(RolesGuard)
 @Roles(UserRole.ADMIN)
+@ApiBearerAuth('bearer')
+@ApiTags('管理员聊天记录')
 export class AdminChatRecordsController {
   public constructor(private readonly chatRecords: ChatRecordsService) {}
 

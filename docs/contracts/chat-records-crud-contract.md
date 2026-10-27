@@ -8,7 +8,7 @@
 - 需求来源：用户明确要求自动保存、管理员查询、分页和标题自动生成。
 - 确认依据：用户回复；现有 `LlmModule`、JWT Guard、RolesGuard 和 MikroORM 约定。
 - 涉及模块：`apps/api/src/chat-records`、`apps/api/src/llm`、数据库迁移。
-- 当前框架：NestJS 12、MikroORM 7.2、PostgreSQL、TypeScript 7。
+- 当前框架：NestJS 12、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3。
 - 最后更新：2026-10-27
 
 ## 范围
