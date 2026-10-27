@@ -5,7 +5,9 @@ import {
   IsArray,
   IsEnum,
   IsNotEmpty,
+  IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
   registerDecorator,
@@ -77,6 +79,10 @@ export class ChatMessageDto {
 }
 
 export class ChatDto {
+  @IsOptional()
+  @IsUUID()
+  public conversationId?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_CHAT_MESSAGES)

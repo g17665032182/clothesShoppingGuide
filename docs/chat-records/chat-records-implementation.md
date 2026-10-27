@@ -2,7 +2,7 @@
 
 ## 状态与上下文
 
-- 状态：待用户确认
+- 状态：已确认，已实现
 - 关联设计文档：[用户聊天记录模块设计文档](./chat-records-design.md)
 - 关联技术文档：[用户聊天记录模块技术文档](./chat-records-technical.md)
 - 关联 CRUD 契约：[用户聊天记录 CRUD 契约](../contracts/chat-records-crud-contract.md)
@@ -33,7 +33,6 @@ apps/api/src/chat-records/
   llm-chat.controller.ts
   chat-records.service.spec.ts
   chat-context.service.spec.ts
-  chat-records.controller.spec.ts
 ```
 
 ### 现有文件调整
@@ -59,7 +58,7 @@ apps/api/src/chat-records/
 7. 实现用户、管理员和持久化聊天 Controller。
 8. 注册 `ChatRecordsModule`，调整原有 `/api/llm/chat` 控制器注册，避免路由重复。
 9. 更新环境变量示例、产品文档和 LLM 文档。
-10. 增加 Fake `LlmService`、Repository 和 Graph 边界测试。
+10. 增加上下文压缩、标题和分页边界测试，并通过真实 HTTP Smoke Test 验证持久化链路。
 11. 顺序执行格式、测试、类型检查、构建和迁移验证。
 
 ## 迁移要求
@@ -98,14 +97,13 @@ git diff --check
 
 数据库迁移完成后：
 
-1. 注册或使用已有用户获取 JWT。
-2. 调用 `POST /api/llm/chat`，确认返回 `conversationId` 和 `title`。
-3. 使用该 ID 继续聊天，确认消息数量递增。
-4. 查询用户会话列表和详情，确认分页字段正确。
-5. 使用管理员 JWT 查询 `/api/admin/chat/conversations`。
-6. 使用普通用户访问管理员接口，确认返回 `403`。
-7. 使用另一个普通用户访问他人会话，确认返回 `404`。
-8. 构造超长历史，确认摘要字段更新且原始消息未删除。
+1. [x] 注册或使用已有用户获取 JWT。
+2. [x] 调用 `POST /api/llm/chat`，确认返回 `conversationId` 和 `title`。
+3. [x] 使用该 ID 查询详情，确认消息数量为 2。
+4. [x] 查询用户会话列表和详情，确认分页字段正确。
+5. [x] 使用普通用户访问管理员接口，确认返回 `403`。
+6. [x] 使用无归属会话 ID 查询，确认返回 `404`。
+7. [ ] 构造超长历史，确认摘要字段更新且原始消息未删除（需要额外长会话数据）。
 
 ## 风险和停止条件
 

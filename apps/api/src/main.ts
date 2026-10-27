@@ -1,3 +1,10 @@
+/*
+ * @Date: 2026-10-26 22:33:47
+ * @LastEditors: shiyu 625991037@qq.com
+ * @LastEditTime: 2026-10-27 16:27:33
+ * @FilePath: /clothesShoppingGuide/apps/api/src/main.ts
+ * @Description:
+ */
 import 'reflect-metadata';
 
 import { ValidationPipe } from '@nestjs/common';
@@ -14,6 +21,10 @@ async function bootstrap(): Promise<void> {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      // 启用隐式类型转换，允许将请求参数自动转换为 DTO 中定义的类型。
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     }),
   );
   app.setGlobalPrefix('api');

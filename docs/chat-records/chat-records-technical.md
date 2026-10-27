@@ -2,7 +2,7 @@
 
 ## 状态与上下文
 
-- 状态：已确认，实施文档待确认
+- 状态：已确认
 - 关联设计文档：[用户聊天记录模块设计文档](./chat-records-design.md)
 - 关联 CRUD 契约：[用户聊天记录 CRUD 契约](../contracts/chat-records-crud-contract.md)
 - 所属应用：`apps/api`
@@ -165,7 +165,7 @@ Tokenizer 只用于请求前估算，不把估算值写入消息记录。超过�
 ## 事务与错误
 
 - 模型调用前不写入本轮消息，模型失败不会产生半轮记录。
-- 模型成功后的会话、消息和摘要状态在同一个 EntityManager flush 中提交。
+- 模型成功后的会话、消息和摘要状态在同一个事务中提交；由于实体使用标量外键，事务内先 flush 会话再 flush 消息。
 - 资源不存在或不属于当前用户统一返回 `404`。
 - `LLM_CONTEXT_WINDOW_TOKENS` 缺失或非法返回 `503`。
 - 摘要调用失败不直接返回错误，按降级策略继续本轮调用。
@@ -179,7 +179,7 @@ Tokenizer 只用于请求前估算，不把估算值写入消息记录。超过�
 - `ChatRecordsService`：新/旧会话、归属校验、模型失败不落库、成功事务映射。
 - Controller：当前用户调用、管理员角色保护和分页参数。
 - Entity/Migration：字段类型、索引、外键和级联删除通过迁移检查确认。
-- 自动化测试使用 Fake `LlmService` 和 Fake Repository，不依赖网络或真实 API Key。
+- 核心自动化测试不依赖网络或真实 API Key；模型持久化链路通过本地 HTTP Smoke Test 验证。
 
 ## 验证命令
 

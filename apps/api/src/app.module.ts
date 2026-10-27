@@ -4,6 +4,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 
 import mikroOrmConfig from './mikro-orm.config.js';
 import { AuthModule } from './auth/auth.module.js';
+import { ChatRecordsModule } from './chat-records/chat-records.module.js';
 import { HealthController } from './health/health.controller.js';
 import { HealthService } from './health/health.service.js';
 import { LlmModule } from './llm/llm.module.js';
@@ -20,6 +21,7 @@ import { UsersModule } from './users/users.module.js';
     UsersModule,
     AuthModule,
     LlmModule,
+    ChatRecordsModule,
   ],
   controllers: [HealthController],
   providers: [HealthService],
