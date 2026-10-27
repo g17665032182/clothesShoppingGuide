@@ -8,9 +8,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
-import { CurrentUser } from '../auth/current-user.decorator.js';
-import { Roles } from '../authorization/roles.decorator.js';
-import { RolesGuard } from '../authorization/roles.guard.js';
+import { CurrentUser } from '../auth/decorator/current-user.decorator.js';
+import { Roles } from '../authorization/decorator/roles.decorator.js';
+import { RolesGuard } from '../authorization/guard/roles.guard.js';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { User, UserRole } from './user.entity.js';

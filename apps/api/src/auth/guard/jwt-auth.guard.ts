@@ -4,8 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import type { IncomingHttpHeaders } from 'node:http';
 
-import { UsersService } from '../users/users.service.js';
-import { IS_PUBLIC_KEY } from './public.decorator.js';
+import { UsersService } from '../../users/users.service.js';
+import { IS_PUBLIC_KEY } from '../decorator/public.decorator.js';
 
 type JwtPayload = {
   sub: string;

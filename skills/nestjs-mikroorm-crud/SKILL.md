@@ -56,9 +56,26 @@ pnpm exec nest g controller <resource>
 - 业务规则和持久化逻辑放在 Service；Controller 只处理 HTTP 参数绑定和调用。
 - 按项目现有 MikroORM 模式注册 Entity Repository。
 - 复用现有认证、公开路由标记、授权、当前用户 Decorator 和输入校验。只有存在明确且可复用的独立需求时才添加 Guard、Decorator 或 Pipe，并在契约中说明原因。
+- 按下述目录规范组织模块内的辅助组件；新增或移动时同步更新所有引用、模块注册和文件内部的相对导入路径。
 - 保持模块高内聚、低耦合。新增代码注释使用简洁中文。
 - Entity 变更要生成并审查迁移，执行前检查 SQL 和兼容性。除非用户明确授权且目标数据库可销毁，否则不得使用会清库的 reset/fresh 命令。
+
+## 模块目录规范
+
+按职责将同类辅助组件放在所属业务模块的子目录中，目录名称使用单数；只有存在对应文件时才创建目录。此规则适用于所有模块，不只适用于认证模块：
+
+- 自定义 Decorator：`decorator/*.decorator.ts`。
+- Guard：`guard/*.guard.ts`。
+- Pipe：`pipe/*.pipe.ts`。
+- Interceptor：`interceptor/*.interceptor.ts`。
+- Exception Filter：`filter/*.filter.ts`。
+- Middleware：`middleware/*.middleware.ts`。
+- 请求 DTO：`dto/*.dto.ts`。
+
+例如 JWT Guard 放在 `auth/guard/`，角色 Guard 放在 `authorization/guard/`；Decorator 分别放在各自模块的 `decorator/`。保留组件的模块归属，不因文件类型相同就合并到全局目录。Controller、Service、Module 等模块入口文件保留在模块根目录；其他类型沿用项目已有结构，不为了分类而无差别地移动所有文件。
 
 ## 验证与汇报
 
 对照已确认的契约检查实现。按需覆盖创建、列表、详情、更新、删除、输入校验、授权、冲突、不存在资源和关联行为。运行仓库现有测试、构建、格式/类型检查和迁移状态检查，并如实报告命令和结果。不得声称未运行的检查已通过。审查最终差异，排除无关改动、密钥和破坏性 SQL。
+
+按模块目录规范检查新增或调整模块中的 Decorator、Guard、Pipe、Interceptor、Filter、Middleware 和 DTO，确认同类文件位于对应子目录，并搜索确认没有遗留旧路径引用。检查模块注册、依赖注入及跨模块调用仍指向移动后的组件。纯目录整理应保持原有行为，不夹带业务逻辑修改。

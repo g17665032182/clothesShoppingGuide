@@ -7,11 +7,11 @@ import {
   Post,
 } from '@nestjs/common';
 
-import { CurrentUser } from './current-user.decorator.js';
 import { AuthService } from './auth.service.js';
+import { CurrentUser } from './decorator/current-user.decorator.js';
+import { Public } from './decorator/public.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
-import { Public } from './public.decorator.js';
 import { User } from '../users/user.entity.js';
 
 @Controller('auth')

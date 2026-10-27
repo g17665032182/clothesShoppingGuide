@@ -6,10 +6,10 @@ import { APP_GUARD } from '@nestjs/core';
 
 import { User } from '../users/user.entity.js';
 import { UsersModule } from '../users/users.module.js';
-import { RolesGuard } from '../authorization/roles.guard.js';
+import { RolesGuard } from '../authorization/guard/roles.guard.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { JwtAuthGuard } from './guard/jwt-auth.guard.js';
 
 @Module({
   imports: [
