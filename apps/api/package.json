@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "tsx --test 'src/**/*.spec.ts'",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -20,6 +21,9 @@
     "seed": "pnpm build && mikro-orm seeder:run --config ./dist/mikro-orm.config.js"
   },
   "dependencies": {
+    "@langchain/core": "^1.3.0",
+    "@langchain/langgraph": "^1.5.2",
+    "@langchain/openai": "^1.7.0",
     "@mikro-orm/core": "7.2.5",
     "@mikro-orm/decorators": "7.2.5",
     "@mikro-orm/migrations": "7.2.5",
@@ -36,7 +40,8 @@
     "class-validator": "0.15.1",
     "dotenv": "17.2.2",
     "reflect-metadata": "0.2.2",
-    "rxjs": "7.8.2"
+    "rxjs": "7.8.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@clothes-shopping-guide/typescript-config": "workspace:*",

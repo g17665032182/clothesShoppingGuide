@@ -4,7 +4,7 @@
 
 - 关联设计文档：[通用大模型模块设计](./llm-module-design.md)
 - 关联技术文档：[通用大模型模块技术文档](./llm-module-technical.md)
-- 状态：待实施
+- 状态：已实施（真实供应商 Smoke Test 待配置密钥后执行）
 - 实施方式：主代理统筹，子代理分工实施
 - 所属应用：`apps/api`
 - 最后更新：2026-10-27
@@ -389,36 +389,36 @@ curl -X POST http://localhost:3000/api/llm/chat \
 
 ### 功能
 
-- [ ] `LlmModule` 已注册到 `AppModule`。
-- [ ] `POST /api/llm/chat` 可以调用 LangGraph。
-- [ ] LangGraph `START -> chatModel -> END` 可以执行。
-- [ ] LangChain Chat Model 从服务端配置创建。
-- [ ] 响应包含 `content`、`model` 和 `usage`。
+- [x] `LlmModule` 已注册到 `AppModule`。
+- [x] `POST /api/llm/chat` 可以调用 LangGraph。
+- [x] LangGraph `START -> chatModel -> END` 可以执行。
+- [x] LangChain Chat Model 从服务端配置创建。
+- [x] 响应包含 `content`、`model` 和 `usage`。
 
 ### 安全
 
-- [ ] 接口受现有 JWT Guard 保护。
-- [ ] 请求不能传入 API Key。
-- [ ] 请求不能覆盖模型配置。
-- [ ] API Key 不出现在日志、响应和异常文本中。
-- [ ] 消息数量和长度受到限制。
+- [x] 接口受现有 JWT Guard 保护。
+- [x] 请求不能传入 API Key。
+- [x] 请求不能覆盖模型配置。
+- [x] API Key 不出现在日志、响应和异常文本中。
+- [x] 消息数量和长度受到限制。
 
 ### 异常
 
-- [ ] 非法 DTO 返回 `400`。
-- [ ] 缺少或无效 JWT 返回 `401`。
-- [ ] 供应商调用错误返回 `502`。
-- [ ] 配置缺失返回 `503`。
-- [ ] 调用超时返回 `504`。
+- [x] 非法 DTO 返回 `400`。
+- [x] 缺少或无效 JWT 返回 `401`。
+- [x] 供应商调用错误返回 `502`。
+- [x] 配置缺失返回 `503`。
+- [x] 调用超时返回 `504`。
 
 ### 工程
 
-- [ ] 测试使用 Fake Chat Model，不访问真实网络。
-- [ ] `apps/api` 提供可执行的 `test` 脚本。
-- [ ] 没有新增数据库表和业务 Entity。
-- [ ] 没有引入商品、穿搭、RAG、Agent 或会话持久化。
-- [ ] `pnpm check` 通过。
-- [ ] `git diff --check` 通过。
+- [x] 测试使用 Fake Chat Model，不访问真实网络。
+- [x] `apps/api` 提供可执行的 `test` 脚本。
+- [x] 没有新增数据库表和业务 Entity。
+- [x] 没有引入商品、穿搭、RAG、Agent 或会话持久化。
+- [x] `pnpm check` 通过。
+- [x] `git diff --check` 通过。
 
 ## 风险和处理
 
