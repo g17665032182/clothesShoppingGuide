@@ -29,6 +29,7 @@ type DbErrorResponse = {
   message: string;
 };
 
+// 数据库异常到 HTTP 响应的映射规则。
 const DB_HTTP_RULES: Array<{
   matches: (exception: DriverException) => boolean;
   response: DbErrorResponse;
