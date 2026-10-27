@@ -1,0 +1,41 @@
+<script setup lang="ts">
+import { LogOut, Shirt, UserRound } from '@lucide/vue';
+import { useRouter } from 'vue-router';
+import { auth } from '@/lib/auth';
+
+const router = useRouter();
+
+function signOut() {
+  auth.signOut();
+  void router.push('/login');
+}
+</script>
+
+<template>
+  <div class="app-shell">
+    <header class="shell-header">
+      <RouterLink class="brand" to="/">
+        <span class="brand-icon"><Shirt :size="18" /></span>
+        <span>衣橱指南</span>
+      </RouterLink>
+      <div class="header-actions">
+        <RouterLink v-if="auth.state.user" class="account-link" to="/account">
+          <UserRound :size="16" />
+          <span>{{ auth.state.user.displayName }}</span>
+        </RouterLink>
+        <button
+          v-if="auth.state.user"
+          class="icon-button"
+          title="退出登录"
+          @click="signOut"
+        >
+          <LogOut :size="17" />
+        </button>
+        <RouterLink v-else class="text-link" to="/login">登录</RouterLink>
+      </div>
+    </header>
+    <main class="shell-main">
+      <RouterView />
+    </main>
+  </div>
+</template>
