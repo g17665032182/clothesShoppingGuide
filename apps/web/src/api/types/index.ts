@@ -1,4 +1,4 @@
-export type { AuthResponse } from './auth';
+export type { AuthResponse, LoginPayload, RegisterPayload } from './auth';
 export type {
   AdminUpdateUserPayload,
   UpdateProfilePayload,

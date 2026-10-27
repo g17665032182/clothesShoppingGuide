@@ -30,11 +30,23 @@ const markdown = '# 今日穿搭\\n\\n```ts\\nconst season = \"autumn\";\\n```';
 
 前端 API 代码统一放在 `src/api/`：
 
-- `src/api/index.ts`：请求底座、错误处理、JWT 请求头和 Refresh Token 重试。
+- `src/api/index.ts`：Axios 实例、错误处理、JWT 请求头和 Refresh Token 重试。
 - `src/api/modules/*.ts`：按资源组织接口，例如认证和用户接口。
 - `src/api/types/*.ts`：接口请求与响应类型。
 
-页面逻辑只通过 API 模块调用接口，不直接使用 `fetch` 或拼接 API 地址。
+页面逻辑只通过 API 模块调用接口，不直接使用 Axios 或拼接 API 地址。
+
+示例：
+
+```ts
+import { signIn } from '@/api/modules/auth';
+
+const response = await signIn({
+  email: 'user@example.com',
+  password: 'ChangeMe123!',
+});
+console.log(response.user, response.accessToken);
+```
 
 shadcn-vue 组件源码放在 `src/components/ui/`，通过项目根目录运行 CLI 添加：
 

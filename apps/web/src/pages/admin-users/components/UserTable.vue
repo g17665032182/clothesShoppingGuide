@@ -1,6 +1,39 @@
 <script setup lang="ts">
-import { Search, ShieldCheck, UserRound, UserRoundX } from '@lucide/vue';
+import {
+  CheckCircle2,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  UserRoundX,
+  UsersRound,
+} from '@lucide/vue';
 import type { User, UserRole } from '@/api/types/users';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
+import { Input } from '@/components/ui/input';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
+import { Spinner } from '@/components/ui/spinner';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 defineProps<{
   currentUserId?: string;
@@ -18,92 +51,134 @@ const emit = defineEmits<{
   (event: 'set-role', user: User, role: UserRole): void;
   (event: 'toggle-status', user: User): void;
 }>();
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString('zh-CN');
+}
+
+function updateRole(user: User, value: unknown) {
+  if (value === 'user' || value === 'admin') {
+    emit('set-role', user, value as UserRole);
+  }
+}
 </script>
 
 <template>
-  <div class="table-toolbar">
-    <label class="search-box">
-      <Search :size="17" aria-hidden="true" />
-      <span class="sr-only">搜索用户</span>
-      <input
-        :value="search"
-        aria-label="搜索用户"
-        placeholder="搜索昵称或邮箱"
-        @input="
-          emit('update:search', ($event.target as HTMLInputElement).value)
-        "
-      />
-    </label>
-    <button class="subtle-button" type="button" @click="emit('refresh')">
-      刷新列表
-    </button>
-  </div>
+  <div class="flex flex-col gap-5 px-6 pb-6">
+    <div
+      class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div class="relative w-full sm:max-w-sm">
+        <Search
+          class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+        />
+        <Input
+          :model-value="search"
+          aria-label="搜索用户"
+          class="pl-8"
+          placeholder="搜索昵称或邮箱"
+          @update:model-value="emit('update:search', String($event))"
+        />
+      </div>
+      <Button
+        :disabled="loading"
+        size="sm"
+        variant="outline"
+        @click="emit('refresh')"
+      >
+        <RefreshCw data-icon="inline-start" />
+        刷新列表
+      </Button>
+    </div>
 
-  <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-  <div class="table-frame">
-    <table class="user-table">
-      <caption class="sr-only">
-        用户管理列表
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">用户</th>
-          <th scope="col">角色</th>
-          <th scope="col">状态</th>
-          <th scope="col">注册时间</th>
-          <th scope="col">操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="loading">
-          <td colspan="5" class="table-message">正在加载用户…</td>
-        </tr>
-        <tr v-else-if="visibleUsers.length === 0">
-          <td colspan="5" class="table-message">没有找到匹配的用户。</td>
-        </tr>
-        <template v-else>
-          <tr v-for="user in visibleUsers" :key="user.id">
-            <td>
-              <div class="table-user">
-                <span class="table-avatar">{{
-                  user.displayName.slice(0, 1)
-                }}</span>
-                <span class="table-user-copy">
-                  <strong>{{ user.displayName }}</strong>
-                  <small>{{ user.email }}</small>
-                </span>
+    <Alert v-if="error" variant="destructive">
+      <AlertDescription role="alert">{{ error }}</AlertDescription>
+    </Alert>
+
+    <div class="overflow-x-auto rounded-lg border">
+      <Table class="min-w-[760px]">
+        <TableCaption class="sr-only">用户管理列表</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>用户</TableHead>
+            <TableHead>角色</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead>注册时间</TableHead>
+            <TableHead class="text-right">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-if="loading">
+            <TableCell :colspan="5">
+              <div
+                class="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"
+              >
+                <Spinner />
+                正在加载用户
               </div>
-            </td>
-            <td>
-              <label class="sr-only" :for="`role-${user.id}`">
-                设置 {{ user.displayName }} 的角色
-              </label>
-              <select
-                :id="`role-${user.id}`"
+            </TableCell>
+          </TableRow>
+          <TableRow v-else-if="visibleUsers.length === 0">
+            <TableCell :colspan="5">
+              <Empty class="border-0 py-8">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon"><UsersRound /></EmptyMedia>
+                  <EmptyTitle>没有找到匹配的用户</EmptyTitle>
+                  <EmptyDescription
+                    >尝试调整搜索条件，或刷新列表。</EmptyDescription
+                  >
+                </EmptyHeader>
+              </Empty>
+            </TableCell>
+          </TableRow>
+          <TableRow v-for="user in visibleUsers" v-else :key="user.id">
+            <TableCell>
+              <div class="flex items-center gap-3">
+                <Avatar>
+                  <AvatarFallback>{{
+                    user.displayName.slice(0, 1)
+                  }}</AvatarFallback>
+                </Avatar>
+                <div class="flex min-w-0 flex-col gap-1">
+                  <span class="truncate font-medium">{{
+                    user.displayName
+                  }}</span>
+                  <span class="truncate text-xs text-muted-foreground">{{
+                    user.email
+                  }}</span>
+                </div>
+              </div>
+            </TableCell>
+            <TableCell>
+              <NativeSelect
                 :disabled="updatingUserId === user.id"
-                :value="user.role"
-                class="compact-select"
-                @change="
-                  emit(
-                    'set-role',
-                    user,
-                    ($event.target as HTMLSelectElement).value as UserRole,
-                  )
+                :model-value="user.role"
+                size="sm"
+                :aria-label="`设置 ${user.displayName} 的角色`"
+                @update:model-value="updateRole(user, $event)"
+              >
+                <NativeSelectOption value="user">用户</NativeSelectOption>
+                <NativeSelectOption value="admin">管理员</NativeSelectOption>
+              </NativeSelect>
+            </TableCell>
+            <TableCell>
+              <Badge
+                :variant="
+                  user.status === 'active' ? 'secondary' : 'destructive'
                 "
               >
-                <option value="user">用户</option>
-                <option value="admin">管理员</option>
-              </select>
-            </td>
-            <td>
-              <span class="status-label" :class="user.status">
+                <CheckCircle2
+                  v-if="user.status === 'active'"
+                  data-icon="inline-start"
+                />
                 {{ user.status === 'active' ? '正常' : '已禁用' }}
-              </span>
-            </td>
-            <td>{{ new Date(user.createdAt).toLocaleDateString('zh-CN') }}</td>
-            <td>
-              <button
-                class="table-action"
+              </Badge>
+            </TableCell>
+            <TableCell class="text-muted-foreground">{{
+              formatDate(user.createdAt)
+            }}</TableCell>
+            <TableCell class="text-right">
+              <Button
                 :disabled="
                   updatingUserId === user.id || user.id === currentUserId
                 "
@@ -114,24 +189,26 @@ const emit = defineEmits<{
                       ? '禁用账户'
                       : '恢复账户'
                 "
-                type="button"
+                size="sm"
+                variant="ghost"
                 @click="emit('toggle-status', user)"
               >
-                <component
-                  :is="user.status === 'active' ? UserRoundX : ShieldCheck"
-                  :size="16"
-                  aria-hidden="true"
+                <UserRoundX
+                  v-if="user.status === 'active'"
+                  data-icon="inline-start"
                 />
+                <ShieldCheck v-else data-icon="inline-start" />
                 {{ user.status === 'active' ? '禁用' : '恢复' }}
-              </button>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-  </div>
-  <div class="list-summary">
-    <UserRound :size="16" aria-hidden="true" />
-    显示 {{ visibleUsers.length }} / {{ users.length }} 个账户
+              </Button>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </div>
+
+    <div class="flex items-center gap-2 text-sm text-muted-foreground">
+      <UsersRound class="size-4" />
+      显示 {{ visibleUsers.length }} / {{ users.length }} 个账户
+    </div>
   </div>
 </template>

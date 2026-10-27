@@ -29,7 +29,7 @@ export const auth = {
   isAdmin: computed(() => state.user?.role === 'admin'),
 
   async signIn(email: string, password: string) {
-    const response = await signIn(email, password);
+    const response = await signIn({ email, password });
     this.setSession(response);
   },
 
@@ -44,7 +44,7 @@ export const auth = {
   },
 
   async register(email: string, password: string, displayName: string) {
-    const response = await register(email, password, displayName);
+    const response = await register({ email, password, displayName });
     this.setSession(response);
   },
 

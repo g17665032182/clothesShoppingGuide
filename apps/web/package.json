@@ -13,6 +13,7 @@
     "@crazydos/vue-markdown": "^1.1.4",
     "@lucide/vue": "^1.61.0",
     "@vueuse/core": "^15.0.0",
+    "axios": "^1.20.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.5.0",

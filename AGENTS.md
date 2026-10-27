@@ -29,7 +29,7 @@
 
 5. 页面私有组件放在当前页面的 `components/` 中；被两个及以上页面复用的业务组件放在 `src/components/shared/`；基础 UI 组件放在 `src/components/ui/`。
 6. shadcn-vue 组件统一维护在 `src/components/ui/`，优先通过 shadcn-vue CLI 添加，不在页面目录中复制基础组件实现。
-7. 接口请求统一封装在 `src/api/` 中：`src/api/index.ts` 负责请求底座和认证重试，`src/api/modules/*.ts` 负责按资源组织接口；页面不得重复拼接 API 地址、直接散落调用 `fetch` 或处理底层认证细节。
+7. 接口请求统一使用 Axios 并封装在 `src/api/` 中：`src/api/index.ts` 负责 Axios 实例、请求底座和认证重试，`src/api/modules/*.ts` 负责按资源组织接口；页面不得重复拼接 API 地址、直接散落调用 Axios 或处理底层认证细节。
 8. 业务模块按领域组织，类型和接口适配器应与页面解耦：
 
    ```text
