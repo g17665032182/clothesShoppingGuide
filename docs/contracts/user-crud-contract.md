@@ -14,8 +14,8 @@
 
 ## 范围
 
-- 包含的操作：注册、登录、查询当前用户、更新当前用户、管理员查询/更新/禁用用户。
-- 明确不包含：邮箱验证、密码找回、多因素认证、刷新 Token、第三方登录。
+- 包含的操作：注册、登录、刷新 Token、退出登录、查询当前用户、更新当前用户、管理员查询/更新/禁用用户。
+- 明确不包含：邮箱验证、密码找回、多因素认证、第三方登录。
 - 路由前缀或版本约定：全局前缀为 `/api`；认证路由为 `/api/auth`，用户路由为 `/api/users`。
 
 ## 字段契约
@@ -39,6 +39,8 @@
 | ------------ | ------------------------- | -------------------- | ----------------------- | ---------- | -------------------------------------- |
 | 注册         | `POST /api/auth/register` | `RegisterDto`        | `{ accessToken, user }` | 公开       | `201`；邮箱重复返回 `409`              |
 | 登录         | `POST /api/auth/login`    | `LoginDto`           | `{ accessToken, user }` | 公开       | `200`；凭据错误返回 `401`              |
+| 刷新 Token   | `POST /api/auth/refresh`  | HttpOnly Cookie      | `{ accessToken, user }` | 公开       | `200`；Cookie 无效或过期返回 `401`     |
+| 退出登录     | `POST /api/auth/logout`   | HttpOnly Cookie      | 无                      | 公开       | `204`；撤销当前 Refresh Token          |
 | 当前用户     | `GET /api/auth/me`        | 无                   | `UserResponse`          | Bearer JWT | `200`；缺失/无效/禁用 Token 返回 `401` |
 | 当前资料     | `GET /api/users/me`       | 无                   | `UserResponse`          | Bearer JWT | `200`；未认证返回 `401`                |
 | 更新当前资料 | `PATCH /api/users/me`     | `UpdateProfileDto`   | `UserResponse`          | Bearer JWT | `200`；非法输入返回 `400`              |
@@ -73,7 +75,7 @@
 
 ## 待确认问题与决策记录
 
-无。未覆盖的高级认证能力（刷新 Token、邮箱验证、找回密码）明确留在后续范围。
+无。未覆盖的高级认证能力（邮箱验证、找回密码）明确留在后续范围。
 
 ## 验收清单
 

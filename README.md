@@ -60,6 +60,8 @@ pnpm --filter @clothes-shopping-guide/api start:dev
 ```text
 POST  /api/auth/register  注册并返回 JWT
 POST  /api/auth/login     登录并返回 JWT
+POST  /api/auth/refresh   使用 HttpOnly Cookie 刷新 JWT
+POST  /api/auth/logout    撤销当前 Refresh Token
 GET   /api/auth/me        获取当前用户
 GET   /api/users/me       获取当前资料
 PATCH /api/users/me       修改昵称或密码

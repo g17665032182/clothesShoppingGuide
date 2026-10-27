@@ -34,7 +34,8 @@ async function bootstrap(): Promise<void> {
     }),
   );
   app.setGlobalPrefix('api');
-  app.enableCors();
+  // 前端通过 HttpOnly Cookie 携带 Refresh Token，跨源开发请求需要允许凭证。
+  app.enableCors({ origin: true, credentials: true });
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()

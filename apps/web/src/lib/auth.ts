@@ -1,5 +1,10 @@
 import { computed, reactive } from 'vue';
-import { apiRequest, type AuthResponse, type User } from './api';
+import {
+  apiRequest,
+  configureAuthTransport,
+  type AuthResponse,
+  type User,
+} from './api';
 
 const tokenKey = 'clothes-guide.access-token';
 const state = reactive<{
@@ -24,6 +29,21 @@ export const auth = {
       body: JSON.stringify({ email, password }),
     });
     this.setSession(response);
+  },
+
+  async refreshAccessToken(): Promise<string | null> {
+    try {
+      const response = await apiRequest<AuthResponse>(
+        '/auth/refresh',
+        { method: 'POST' },
+        undefined,
+        false,
+      );
+      this.setSession(response);
+      return response.accessToken;
+    } catch {
+      return null;
+    }
   },
 
   async register(email: string, password: string, displayName: string) {
@@ -66,6 +86,9 @@ export const auth = {
     state.user = null;
     state.ready = true;
     localStorage.removeItem(tokenKey);
+    void apiRequest('/auth/logout', { method: 'POST' }, undefined, false).catch(
+      () => undefined,
+    );
   },
 
   async refreshUser() {
@@ -73,3 +96,8 @@ export const auth = {
     state.user = await apiRequest<User>('/users/me', {}, state.token);
   },
 };
+
+configureAuthTransport({
+  refresh: () => auth.refreshAccessToken(),
+  onUnauthorized: () => auth.signOut(),
+});
