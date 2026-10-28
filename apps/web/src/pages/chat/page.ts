@@ -54,7 +54,7 @@ function toMessage(message: ChatApiMessage): ChatMessage {
     id: message.id,
     role: message.role,
     content: message.content,
-    time: formatChatTime(new Date(message.createdAt)),
+    createdAt: message.createdAt,
   };
 }
 
@@ -215,7 +215,7 @@ export function useChatPage() {
           id: assistantMessageId.value,
           role: 'assistant',
           content: event.content,
-          time: formatChatTime(new Date()),
+          createdAt: new Date().toISOString(),
           ...(streamStartedAt !== null
             ? { duration: formatElapsedTime(streamStartedAt) }
             : {}),
@@ -283,7 +283,7 @@ export function useChatPage() {
       id: `pending-user-${version}`,
       role: 'user',
       content,
-      time: formatChatTime(new Date()),
+      createdAt: new Date().toISOString(),
     });
     draft.value = '';
     errorMessage.value = '';
@@ -330,9 +330,7 @@ export function useChatPage() {
           );
           messages.value = detail.messages.items.map((message, index) => ({
             ...toMessage(message),
-            ...(index === lastAssistantIndex && duration
-              ? { duration }
-              : {}),
+            ...(index === lastAssistantIndex && duration ? { duration } : {}),
           }));
           status.value = 'success';
         }

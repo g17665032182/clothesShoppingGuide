@@ -4,7 +4,7 @@ export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
-  time: string;
+  createdAt: string;
   /** AI 回复生成耗时，仅前端当前会话展示。 */
   duration?: string;
 }

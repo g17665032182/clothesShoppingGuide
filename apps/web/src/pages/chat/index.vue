@@ -40,7 +40,7 @@ const {
     />
 
     <main class="chat-workspace flex min-h-0 min-w-0 flex-1 flex-col">
-      <div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
+      <div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
         <template v-if="hasActiveConversation">
           <ChatHeader
             :title="activeConversation?.title ?? '新对话'"
