@@ -30,7 +30,7 @@ const {
 
 <template>
   <section
-    class="chat-page flex min-h-[calc(100vh-2px)] w-full flex-col overflow-hidden bg-background text-foreground sm:flex-row"
+    class="chat-page flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground sm:flex-row"
   >
     <ConversationSidebar
       :active-conversation-id="activeConversationId"
@@ -39,9 +39,7 @@ const {
       @select="selectConversation"
     />
 
-    <main
-      class="chat-workspace flex min-h-[55vh] min-w-0 flex-1 flex-col sm:min-h-0"
-    >
+    <main class="chat-workspace flex min-h-0 min-w-0 flex-1 flex-col">
       <div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
         <template v-if="hasActiveConversation">
           <ChatHeader
@@ -49,7 +47,7 @@ const {
             @new="startNewConversation"
           />
           <Separator />
-          <div class="min-h-0 flex-1">
+          <div class="min-h-0 flex-1 overflow-hidden">
             <ChatMessageList
               :is-sending="isSending"
               :messages="messages"
@@ -58,7 +56,7 @@ const {
           </div>
           <div
             v-if="errorMessage"
-            class="border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
+            class="shrink-0 border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
             role="alert"
           >
             {{ errorMessage }}
@@ -71,7 +69,7 @@ const {
               刷新核实
             </button>
           </div>
-          <div class="border-t border-border/70 p-4 sm:p-6">
+          <div class="shrink-0 border-t border-border/70 p-4 sm:p-6">
             <ChatComposer
               :can-send="canSend"
               :draft="draft"
@@ -86,7 +84,7 @@ const {
 
         <template v-else>
           <div
-            class="flex flex-1 flex-col items-center justify-center gap-4 px-6 pb-28 text-center"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-hidden px-6 pb-28 text-center"
           >
             <div
               class="flex size-14 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground"
@@ -104,7 +102,7 @@ const {
           </div>
           <div
             v-if="errorMessage"
-            class="border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
+            class="shrink-0 border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
             role="alert"
           >
             {{ errorMessage }}
@@ -117,7 +115,7 @@ const {
               刷新核实
             </button>
           </div>
-          <div class="border-t border-border/70 p-4 sm:p-6">
+          <div class="shrink-0 border-t border-border/70 p-4 sm:p-6">
             <ChatComposer
               :can-send="canSend"
               :draft="draft"

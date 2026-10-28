@@ -161,7 +161,16 @@ a {
 
 .shell-main-chat {
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell-chat {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .form-error,

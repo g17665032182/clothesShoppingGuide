@@ -15,7 +15,7 @@ function signOut() {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div :class="['app-shell', isChatPage && 'app-shell-chat']">
     <header v-if="!isChatPage" class="shell-header">
       <RouterLink class="brand" to="/">
         <span class="brand-icon"><Shirt :size="18" /></span>
