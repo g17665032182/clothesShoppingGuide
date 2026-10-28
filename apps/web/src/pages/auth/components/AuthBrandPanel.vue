@@ -5,7 +5,7 @@ import { Separator } from '@/components/ui/separator';
 
 <template>
   <aside
-    class="flex flex-col justify-between gap-10 rounded-2xl bg-muted/50 p-6 sm:p-10 lg:min-h-[620px] lg:p-12"
+    class="flex flex-col justify-between gap-10 rounded-2xl bg-muted/50 p-6 sm:p-10 lg:min-h-155 lg:p-12"
   >
     <div class="flex flex-col gap-8">
       <div class="flex items-center gap-3">

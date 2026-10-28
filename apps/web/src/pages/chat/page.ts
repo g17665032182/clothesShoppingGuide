@@ -7,25 +7,37 @@ import {
 import type { ChatMessage } from '@/api/types/chat';
 
 export function useChatPage() {
-  const activeConversationId = ref(1);
+  const activeConversationId = ref<number | null>(null);
   const draft = ref('');
   const isSending = ref(false);
-  const messages = ref<ChatMessage[]>(createConversationMessages(1));
+  const messages = ref<ChatMessage[]>([]);
   const nextMessageId = ref(4);
   let responseTimer: number | undefined;
 
-  const activeConversation = computed(() =>
-    conversations.find(
+  const activeConversation = computed(() => {
+    if (activeConversationId.value === 0) {
+      return {
+        id: 0,
+        title: '新对话',
+        preview: '',
+        updatedAt: '刚刚',
+      };
+    }
+
+    return conversations.find(
       (conversation) => conversation.id === activeConversationId.value,
-    ),
+    );
+  });
+  const hasActiveConversation = computed(
+    () => activeConversationId.value !== null,
   );
   const canSend = computed(
     () => draft.value.trim().length > 0 && !isSending.value,
   );
 
   function startNewConversation() {
-    activeConversationId.value = 0;
-    messages.value = createConversationMessages(0);
+    activeConversationId.value = null;
+    messages.value = [];
     draft.value = '';
   }
 
@@ -39,6 +51,8 @@ export function useChatPage() {
     const content = draft.value.trim();
     if (!content || isSending.value) return;
 
+    // 第一次发送时才创建会话，空状态可以保持干净。
+    activeConversationId.value ??= 0;
     messages.value.push({
       id: nextMessageId.value++,
       role: 'user',
@@ -81,6 +95,7 @@ export function useChatPage() {
     canSend,
     conversations,
     draft,
+    hasActiveConversation,
     handleKeydown,
     isSending,
     messages,

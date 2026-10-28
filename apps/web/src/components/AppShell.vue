@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { LogOut, Shirt, UserRound } from '@lucide/vue';
-import { useRouter } from 'vue-router';
+import { computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { auth } from '@/lib/auth';
 
+const route = useRoute();
 const router = useRouter();
+const isChatPage = computed(() => route.name === 'chat');
 
 function signOut() {
   auth.signOut();
@@ -13,7 +16,7 @@ function signOut() {
 
 <template>
   <div class="app-shell">
-    <header class="shell-header">
+    <header v-if="!isChatPage" class="shell-header">
       <RouterLink class="brand" to="/">
         <span class="brand-icon"><Shirt :size="18" /></span>
         <span>衣橱指南</span>
@@ -39,7 +42,7 @@ function signOut() {
         <RouterLink v-else class="text-link" to="/login">登录</RouterLink>
       </div>
     </header>
-    <main class="shell-main">
+    <main :class="isChatPage ? 'shell-main-chat' : 'shell-main'">
       <RouterView />
     </main>
   </div>

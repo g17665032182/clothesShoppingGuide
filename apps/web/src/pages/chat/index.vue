@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Sparkles } from '@lucide/vue';
 import { Separator } from '@/components/ui/separator';
 import ChatComposer from './components/ChatComposer.vue';
 import ChatHeader from './components/ChatHeader.vue';
@@ -13,6 +13,7 @@ const {
   canSend,
   conversations,
   draft,
+  hasActiveConversation,
   handleKeydown,
   isSending,
   messages,
@@ -23,44 +24,69 @@ const {
 </script>
 
 <template>
-  <section class="chat-page">
-    <div class="chat-heading">
-      <div>
-        <p class="eyebrow">穿搭顾问</p>
-        <h1>聊聊你的下一套穿搭。</h1>
-      </div>
-      <p class="chat-heading-copy">
-        从一个场合或一件单品开始，逐步找到适合你的选择。
-      </p>
-    </div>
+  <section
+    class="chat-page flex min-h-[calc(100vh-2px)] w-full flex-col overflow-hidden bg-background text-foreground sm:flex-row"
+  >
+    <ConversationSidebar
+      :active-conversation-id="activeConversationId"
+      :conversations="conversations"
+      @new="startNewConversation"
+      @select="selectConversation"
+    />
 
-    <div class="chat-layout">
-      <ConversationSidebar
-        :active-conversation-id="activeConversationId"
-        :conversations="conversations"
-        @new="startNewConversation"
-        @select="selectConversation"
-      />
-
-      <Card class="chat-panel">
-        <ChatHeader
-          :title="activeConversation?.title ?? '新对话'"
-          @new="startNewConversation"
-        />
-        <Separator />
-        <CardContent class="chat-panel-content">
-          <ChatMessageList :is-sending="isSending" :messages="messages" />
-        </CardContent>
-        <CardFooter class="chat-composer">
-          <ChatComposer
-            :can-send="canSend"
-            :draft="draft"
-            @keydown="handleKeydown"
-            @submit="sendMessage"
-            @update:draft="draft = $event"
+    <main
+      class="chat-workspace flex min-h-[55vh] min-w-0 flex-1 flex-col sm:min-h-0"
+    >
+      <div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
+        <template v-if="hasActiveConversation">
+          <ChatHeader
+            :title="activeConversation?.title ?? '新对话'"
+            @new="startNewConversation"
           />
-        </CardFooter>
-      </Card>
-    </div>
+          <Separator />
+          <div class="min-h-0 flex-1">
+            <ChatMessageList :is-sending="isSending" :messages="messages" />
+          </div>
+          <div class="border-t border-border/70 p-4 sm:p-6">
+            <ChatComposer
+              :can-send="canSend"
+              :draft="draft"
+              @keydown="handleKeydown"
+              @submit="sendMessage"
+              @update:draft="draft = $event"
+            />
+          </div>
+        </template>
+
+        <template v-else>
+          <div
+            class="flex flex-1 flex-col items-center justify-center gap-4 px-6 pb-28 text-center"
+          >
+            <div
+              class="flex size-14 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground"
+            >
+              <Sparkles aria-hidden="true" />
+            </div>
+            <div class="flex flex-col gap-2">
+              <h1 class="text-2xl font-medium tracking-tight sm:text-3xl">
+                我们要构建什么？
+              </h1>
+              <p class="max-w-md text-sm text-muted-foreground">
+                告诉我你的场合、天气和偏好，开始一段新的穿搭讨论。
+              </p>
+            </div>
+          </div>
+          <div class="border-t border-border/70 p-4 sm:p-6">
+            <ChatComposer
+              :can-send="canSend"
+              :draft="draft"
+              @keydown="handleKeydown"
+              @submit="sendMessage"
+              @update:draft="draft = $event"
+            />
+          </div>
+        </template>
+      </div>
+    </main>
   </section>
 </template>

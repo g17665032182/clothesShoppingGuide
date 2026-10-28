@@ -32,8 +32,11 @@ watch(
 </script>
 
 <template>
-  <ScrollArea class="chat-scroll-area">
-    <div ref="messageList" class="flex flex-col gap-6 p-4 sm:p-6">
+  <ScrollArea class="h-full">
+    <div
+      ref="messageList"
+      class="mx-auto flex w-full max-w-4xl flex-col gap-6 p-4 sm:p-8"
+    >
       <div
         v-for="message in messages"
         :key="message.id"

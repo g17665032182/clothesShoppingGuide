@@ -2,12 +2,7 @@
 import { Plus, Sparkles } from '@lucide/vue';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import {
-  CardAction,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { CardDescription, CardTitle } from '@/components/ui/card';
 
 defineProps<{
   title: string;
@@ -19,7 +14,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <CardHeader class="chat-panel-header">
+  <header class="flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
     <div class="flex items-center gap-3">
       <Avatar size="lg">
         <AvatarFallback>
@@ -37,17 +32,15 @@ const emit = defineEmits<{
         </CardDescription>
       </div>
     </div>
-    <CardAction>
-      <Button
-        aria-label="开始新对话"
-        size="sm"
-        type="button"
-        variant="outline"
-        @click="emit('new')"
-      >
-        <Plus aria-hidden="true" data-icon="inline-start" />
-        新对话
-      </Button>
-    </CardAction>
-  </CardHeader>
+    <Button
+      aria-label="开始新对话"
+      size="sm"
+      type="button"
+      variant="outline"
+      @click="emit('new')"
+    >
+      <Plus aria-hidden="true" data-icon="inline-start" />
+      新对话
+    </Button>
+  </header>
 </template>

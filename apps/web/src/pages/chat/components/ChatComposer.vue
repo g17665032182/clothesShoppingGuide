@@ -16,11 +16,14 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <form class="flex w-full items-end gap-3" @submit.prevent="emit('submit')">
+  <form
+    class="flex w-full items-end gap-3 rounded-xl border border-border bg-card px-3 py-3"
+    @submit.prevent="emit('submit')"
+  >
     <Textarea
       :model-value="draft"
       aria-label="输入消息"
-      class="min-h-16 resize-none"
+      class="min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
       maxlength="2000"
       placeholder="描述你的场合、天气或已有单品…"
       rows="2"
@@ -30,7 +33,8 @@ const emit = defineEmits<{
     <Button
       :disabled="!canSend"
       aria-label="发送消息"
-      size="icon-lg"
+      class="shrink-0 rounded-full"
+      size="icon"
       title="发送消息"
       type="submit"
     >
