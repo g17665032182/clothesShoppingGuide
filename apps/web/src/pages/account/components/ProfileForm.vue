@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Save } from '@lucide/vue';
 import type { User } from '@/api/types/users';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -7,7 +6,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -19,14 +17,11 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 
 defineProps<{
   displayName: string;
   error: string;
   password: string;
-  pending: boolean;
   status: 'idle' | 'loading' | 'success' | 'error';
   user: User;
 }>();
@@ -63,7 +58,7 @@ function updatePassword(value: string | number) {
       </div>
       <CardDescription>更新昵称或设置新的登录密码。</CardDescription>
     </CardHeader>
-    <form @submit.prevent="emit('submit')">
+    <form id="account-profile-form" @submit.prevent="emit('submit')">
       <CardContent>
         <FieldGroup>
           <Field>
@@ -101,13 +96,6 @@ function updatePassword(value: string | number) {
           <AlertDescription role="alert">{{ error }}</AlertDescription>
         </Alert>
       </CardContent>
-      <CardFooter class="justify-end">
-        <Button :disabled="pending" type="submit">
-          <Spinner v-if="pending" data-icon="inline-start" />
-          <Save v-else data-icon="inline-start" />
-          {{ pending ? '保存中' : '保存更改' }}
-        </Button>
-      </CardFooter>
     </form>
   </Card>
 </template>

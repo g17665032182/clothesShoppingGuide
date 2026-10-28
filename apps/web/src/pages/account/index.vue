@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ArrowLeft, ShieldCheck } from '@lucide/vue';
+import { ArrowLeft, Save, ShieldCheck } from '@lucide/vue';
 import ProfileForm from './components/ProfileForm.vue';
 import { useAccountPage } from './page';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Card,
   CardContent,
@@ -25,12 +26,6 @@ const { displayName, error, password, pending, saveProfile, status, user } =
         </h1>
         <p class="text-muted-foreground">管理你的账户信息和登录凭据。</p>
       </div>
-      <Button as-child variant="ghost">
-        <RouterLink to="/">
-          <ArrowLeft data-icon="inline-start" />
-          返回首页
-        </RouterLink>
-      </Button>
     </div>
 
     <div
@@ -41,7 +36,6 @@ const { displayName, error, password, pending, saveProfile, status, user } =
         :display-name="displayName"
         :error="error"
         :password="password"
-        :pending="pending"
         :status="status"
         :user="user"
         @submit="saveProfile"
@@ -85,6 +79,19 @@ const { displayName, error, password, pending, saveProfile, status, user } =
           </Button>
         </CardContent>
       </Card>
+    </div>
+    <div v-if="user" class="flex justify-center gap-3 pt-2">
+      <Button as-child variant="outline">
+        <RouterLink to="/">
+          <ArrowLeft data-icon="inline-start" />
+          返回首页
+        </RouterLink>
+      </Button>
+      <Button :disabled="pending" form="account-profile-form" type="submit">
+        <Spinner v-if="pending" data-icon="inline-start" />
+        <Save v-else data-icon="inline-start" />
+        {{ pending ? '保存中' : '保存更改' }}
+      </Button>
     </div>
   </section>
 </template>

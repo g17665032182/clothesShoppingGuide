@@ -222,10 +222,6 @@ export function useChatPage() {
       (item) => item.id === conversationId,
     );
     if (!conversation) return;
-    const confirmed = window.confirm(
-      `确定删除“${conversation.title}”及其聊天记录吗？`,
-    );
-    if (!confirmed) return;
 
     deletingConversationId.value = conversationId;
     conversationListError.value = '';

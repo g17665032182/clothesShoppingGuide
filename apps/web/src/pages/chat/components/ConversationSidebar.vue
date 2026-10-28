@@ -12,6 +12,16 @@ import { useRouter } from 'vue-router';
 import { ref } from 'vue';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { auth } from '@/lib/auth';
@@ -38,6 +48,19 @@ const emit = defineEmits<{
 
 const router = useRouter();
 const isCollapsed = ref(false);
+const isDeleteDialogOpen = ref(false);
+const conversationPendingDelete = ref<Conversation | null>(null);
+
+function openDeleteDialog(conversation: Conversation) {
+  conversationPendingDelete.value = conversation;
+  isDeleteDialogOpen.value = true;
+}
+
+function confirmDelete() {
+  if (!conversationPendingDelete.value) return;
+  emit('delete', conversationPendingDelete.value.id);
+  conversationPendingDelete.value = null;
+}
 
 function signOut() {
   auth.signOut();
@@ -167,7 +190,7 @@ function toggleCollapsed() {
             size="icon"
             type="button"
             variant="ghost"
-            @click="emit('delete', conversation.id)"
+            @click="openDeleteDialog(conversation)"
           >
             <Trash2 aria-hidden="true" />
           </Button>
@@ -271,5 +294,28 @@ function toggleCollapsed() {
         <span v-if="!isCollapsed">退出登录</span>
       </Button>
     </div>
+
+    <AlertDialog v-model:open="isDeleteDialogOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>删除这段对话？</AlertDialogTitle>
+          <AlertDialogDescription class="break-words">
+            确定删除“{{
+              conversationPendingDelete?.title
+            }}”及其聊天记录吗？此操作无法撤销。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            :disabled="!canDeleteConversations"
+            variant="destructive"
+            @click="confirmDelete"
+          >
+            确认删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </aside>
 </template>
