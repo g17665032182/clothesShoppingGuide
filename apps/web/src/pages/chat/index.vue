@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Sparkles } from '@lucide/vue';
-import { Separator } from '@/components/ui/separator';
 import ChatComposer from './components/ChatComposer.vue';
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessageList from './components/ChatMessageList.vue';
@@ -40,13 +39,12 @@ const {
     />
 
     <main class="chat-workspace flex min-h-0 min-w-0 flex-1 flex-col">
-      <div class="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
+      <div class="flex min-h-0 w-full flex-1 flex-col">
         <template v-if="hasActiveConversation">
           <ChatHeader
             :title="activeConversation?.title ?? '新对话'"
             @new="startNewConversation"
           />
-          <Separator />
           <div class="min-h-0 flex-1 overflow-hidden">
             <ChatMessageList
               :is-sending="isSending"
@@ -56,7 +54,7 @@ const {
           </div>
           <div
             v-if="errorMessage"
-            class="shrink-0 border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
+            class="mx-auto w-full max-w-3xl shrink-0 px-4 py-2 text-sm text-destructive sm:px-6"
             role="alert"
           >
             {{ errorMessage }}
@@ -69,7 +67,7 @@ const {
               刷新核实
             </button>
           </div>
-          <div class="shrink-0 border-t border-border/70 p-4 sm:p-6">
+          <div class="shrink-0 px-4 pb-4 sm:px-6 sm:pb-6">
             <ChatComposer
               :can-send="canSend"
               :draft="draft"
@@ -102,7 +100,7 @@ const {
           </div>
           <div
             v-if="errorMessage"
-            class="shrink-0 border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
+            class="mx-auto w-full max-w-3xl shrink-0 px-4 py-2 text-sm text-destructive sm:px-6"
             role="alert"
           >
             {{ errorMessage }}
@@ -115,7 +113,7 @@ const {
               刷新核实
             </button>
           </div>
-          <div class="shrink-0 border-t border-border/70 p-4 sm:p-6">
+          <div class="shrink-0 px-4 pb-4 sm:px-6 sm:pb-6">
             <ChatComposer
               :can-send="canSend"
               :draft="draft"

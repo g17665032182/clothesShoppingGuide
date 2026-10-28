@@ -14,7 +14,9 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <header class="flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
+  <header
+    class="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-3 sm:px-6"
+  >
     <div class="flex items-center gap-3">
       <Avatar size="lg">
         <AvatarFallback>

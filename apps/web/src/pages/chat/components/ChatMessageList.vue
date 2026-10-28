@@ -71,19 +71,20 @@ watch(
   <ScrollArea class="h-full">
     <div
       ref="messageList"
-      class="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 sm:p-8"
+      class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-0 py-5 sm:py-6"
     >
       <div v-for="message in messagesWithSessionTime" :key="message.id">
         <div
           v-if="message.showSessionTime"
-          class="flex items-center gap-3 py-1 text-xs text-muted-foreground"
+          class="flex justify-center py-1 text-xs text-muted-foreground"
           role="separator"
         >
-          <span class="h-px flex-1 bg-border/70" aria-hidden="true"></span>
-          <time :datetime="message.createdAt">
+          <time
+            class="rounded-full bg-muted/70 px-2.5 py-1"
+            :datetime="message.createdAt"
+          >
             {{ formatSessionTime(message.createdAt) }}
           </time>
-          <span class="h-px flex-1 bg-border/70" aria-hidden="true"></span>
         </div>
         <div
           :class="
@@ -105,7 +106,7 @@ watch(
           >
             <p
               v-if="message.role === 'assistant' && message.duration"
-              class="flex items-center gap-1 border-b border-border/70 px-1 pb-2 text-xs text-muted-foreground"
+              class="flex items-center gap-1 px-1 text-xs text-muted-foreground"
               aria-live="polite"
             >
               {{ message.duration }}
@@ -114,10 +115,10 @@ watch(
             <div
               :class="
                 cn(
-                  'min-w-0 rounded-xl border px-4 py-3',
+                  'min-w-0 px-1 py-1',
                   message.role === 'user'
-                    ? 'bg-secondary text-secondary-foreground'
-                    : 'w-full bg-background',
+                    ? 'rounded-xl bg-muted px-4 py-3 text-foreground'
+                    : 'w-full text-foreground',
                 )
               "
             >
@@ -134,15 +135,13 @@ watch(
         <div class="flex w-full flex-col gap-1">
           <p
             v-if="streamDuration"
-            class="flex items-center gap-1 border-b border-border/70 px-1 pb-2 text-xs text-muted-foreground"
+            class="flex items-center gap-1 px-1 text-xs text-muted-foreground"
             aria-live="polite"
           >
             {{ streamDuration }}
             <ChevronRight aria-hidden="true" />
           </p>
-          <div
-            class="rounded-xl border bg-background px-4 py-3 text-sm text-muted-foreground"
-          >
+          <div class="px-1 py-1 text-sm text-muted-foreground">
             正在整理建议…
           </div>
         </div>
