@@ -1,6 +1,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ApiError } from '@/api';
 import {
+  deleteConversation as deleteConversationRequest,
   getConversation,
   listConversations,
   streamChat,
@@ -16,6 +17,7 @@ import { auth } from '@/lib/auth';
 
 type ChatPageStatus =
   'idle' | 'loading' | 'streaming' | 'success' | 'error' | 'unknown';
+type ConversationListStatus = 'loading' | 'success' | 'empty' | 'error';
 
 function formatChatTime(date: Date): string {
   return date.toLocaleTimeString('zh-CN', {
@@ -61,6 +63,12 @@ function toMessage(message: ChatApiMessage): ChatMessage {
 export function useChatPage() {
   const activeConversationId = ref<string | null>(null);
   const conversations = ref<Conversation[]>([]);
+  const conversationListStatus = ref<ConversationListStatus>('loading');
+  const conversationListError = ref('');
+  const isLoadingMoreConversations = ref(false);
+  const deletingConversationId = ref<string | null>(null);
+  const hasMoreConversations = ref(false);
+  const conversationPage = ref(1);
   const draft = ref('');
   const messages = ref<ChatMessage[]>([]);
   const status = ref<ChatPageStatus>('idle');
@@ -72,6 +80,7 @@ export function useChatPage() {
   let streamStartedAt: number | null = null;
   let streamTimer: number | undefined;
   let streamingAssistantMessageId: string | null = null;
+  let conversationListRequestVersion = 0;
 
   const activeConversation = computed(() =>
     activeConversationId.value
@@ -90,6 +99,13 @@ export function useChatPage() {
       !isSending.value &&
       status.value !== 'loading' &&
       status.value !== 'unknown',
+  );
+  const canDeleteConversations = computed(
+    () =>
+      !isSending.value &&
+      status.value !== 'loading' &&
+      status.value !== 'unknown' &&
+      deletingConversationId.value === null,
   );
 
   // 将生成耗时同步到当前助手消息，并在流结束或取消后保留最终值。
@@ -131,6 +147,7 @@ export function useChatPage() {
   }
 
   function upsertConversation(conversation: Conversation) {
+    conversationListStatus.value = 'success';
     const index = conversations.value.findIndex(
       (item) => item.id === conversation.id,
     );
@@ -144,17 +161,88 @@ export function useChatPage() {
     };
   }
 
-  async function loadConversations() {
+  async function loadConversations(page = 1, append = false) {
     if (!auth.state.token) return;
-    status.value = 'loading';
+    if (append) {
+      if (isLoadingMoreConversations.value || !hasMoreConversations.value)
+        return;
+      isLoadingMoreConversations.value = true;
+    } else {
+      isLoadingMoreConversations.value = false;
+      conversationListStatus.value = 'loading';
+    }
+    const version = ++conversationListRequestVersion;
+    conversationListError.value = '';
     try {
-      const response = await listConversations(auth.state.token);
-      conversations.value = response.items.map(toConversation);
-      status.value = conversations.value.length > 0 ? 'success' : 'idle';
+      const response = await listConversations(auth.state.token, page);
+      if (version !== conversationListRequestVersion) return;
+      const received = response.items.map(toConversation);
+      if (append) {
+        const existingIds = new Set(conversations.value.map((item) => item.id));
+        conversations.value.push(
+          ...received.filter((item) => !existingIds.has(item.id)),
+        );
+      } else {
+        conversations.value = received;
+      }
+      conversationPage.value = page;
+      hasMoreConversations.value = response.page < response.totalPages;
+      conversationListStatus.value =
+        conversations.value.length > 0 ? 'success' : 'empty';
     } catch (error) {
-      status.value = 'error';
-      errorMessage.value =
+      if (version !== conversationListRequestVersion) return;
+      conversationListStatus.value = 'error';
+      conversationListError.value =
         error instanceof Error ? error.message : '会话列表加载失败';
+    } finally {
+      if (version === conversationListRequestVersion) {
+        isLoadingMoreConversations.value = false;
+      }
+    }
+  }
+
+  function loadMoreConversations() {
+    if (!hasMoreConversations.value || isLoadingMoreConversations.value) return;
+    void loadConversations(conversationPage.value + 1, true);
+  }
+
+  async function removeConversation(conversationId: string) {
+    const token = auth.state.token;
+    if (
+      !token ||
+      deletingConversationId.value ||
+      isSending.value ||
+      status.value === 'loading' ||
+      status.value === 'unknown'
+    ) {
+      return;
+    }
+
+    const conversation = conversations.value.find(
+      (item) => item.id === conversationId,
+    );
+    if (!conversation) return;
+    const confirmed = window.confirm(
+      `确定删除“${conversation.title}”及其聊天记录吗？`,
+    );
+    if (!confirmed) return;
+
+    deletingConversationId.value = conversationId;
+    conversationListError.value = '';
+    try {
+      await deleteConversationRequest(token, conversationId);
+      conversations.value = conversations.value.filter(
+        (item) => item.id !== conversationId,
+      );
+      if (activeConversationId.value === conversationId) {
+        startNewConversation();
+      }
+      await loadConversations();
+    } catch (error) {
+      conversationListError.value =
+        error instanceof Error ? error.message : '删除会话失败';
+    } finally {
+      deletingConversationId.value = null;
     }
   }
 
@@ -393,13 +481,22 @@ export function useChatPage() {
     activeConversation,
     activeConversationId,
     canSend,
+    canDeleteConversations,
     conversations,
+    conversationListError,
+    conversationListStatus,
     draft,
     errorMessage,
+    hasMoreConversations,
     handleKeydown,
     hasActiveConversation,
+    isLoadingMoreConversations,
     isSending,
     messages,
+    deletingConversationId,
+    loadConversations,
+    loadMoreConversations,
+    removeConversation,
     refreshUncertainTurn,
     selectConversation,
     sendMessage,

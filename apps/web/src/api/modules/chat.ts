@@ -7,13 +7,15 @@ import type {
   PageResponse,
 } from '@/api/types/chat';
 
-const pageSize = 100;
+const conversationPageSize = 20;
+const messagePageSize = 100;
 
 export function listConversations(
   token: string,
+  page = 1,
 ): Promise<PageResponse<ChatApiConversation>> {
   return apiRequest<PageResponse<ChatApiConversation>>(
-    `/chat/conversations?page=1&pageSize=${pageSize}`,
+    `/chat/conversations?page=${page}&pageSize=${conversationPageSize}`,
     { token },
   );
 }
@@ -23,7 +25,7 @@ export function getConversation(
   conversationId: string,
 ): Promise<ChatConversationDetail> {
   return apiRequest<ChatConversationDetail>(
-    `/chat/conversations/${conversationId}?page=1&pageSize=${pageSize}`,
+    `/chat/conversations/${conversationId}?page=1&pageSize=${messagePageSize}`,
     { token },
   );
 }

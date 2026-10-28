@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Shirt,
   SquarePen,
+  Trash2,
 } from '@lucide/vue';
 import { useRouter } from 'vue-router';
 import { ref } from 'vue';
@@ -19,11 +20,20 @@ import type { Conversation } from '@/api/types/chat';
 defineProps<{
   activeConversationId: string | null;
   conversations: Conversation[];
+  conversationListError: string;
+  conversationListStatus: 'loading' | 'success' | 'empty' | 'error';
+  hasMoreConversations: boolean;
+  isLoadingMoreConversations: boolean;
+  deletingConversationId: string | null;
+  canDeleteConversations: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: 'new'): void;
   (event: 'select', conversationId: string): void;
+  (event: 'delete', conversationId: string): void;
+  (event: 'load-more'): void;
+  (event: 'retry'): void;
 }>();
 
 const router = useRouter();
@@ -113,31 +123,106 @@ function toggleCollapsed() {
         >
           最近
         </p>
-        <button
+        <div
           v-for="conversation in conversations"
           :key="conversation.id"
-          :aria-label="conversation.title"
-          :aria-current="
-            conversation.id === activeConversationId ? 'page' : undefined
-          "
-          :title="conversation.title"
-          :class="
-            cn(
-              'flex w-full items-center gap-2 rounded-md py-2 text-left text-sm transition-colors',
-              isCollapsed ? 'justify-center px-0' : 'px-2',
-              conversation.id === activeConversationId
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
-            )
-          "
-          type="button"
-          @click="emit('select', conversation.id)"
+          class="group flex min-w-0 items-center gap-1"
         >
-          <MessageSquare aria-hidden="true" class="shrink-0" />
-          <span v-if="!isCollapsed" class="truncate">{{
-            conversation.title
-          }}</span>
-        </button>
+          <button
+            :aria-label="conversation.title"
+            :aria-current="
+              conversation.id === activeConversationId ? 'page' : undefined
+            "
+            :title="conversation.title"
+            :class="
+              cn(
+                'flex min-w-0 flex-1 items-center gap-2 rounded-md py-2 text-left text-sm transition-colors',
+                isCollapsed ? 'justify-center px-0' : 'px-2',
+                conversation.id === activeConversationId
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+              )
+            "
+            type="button"
+            @click="emit('select', conversation.id)"
+          >
+            <MessageSquare aria-hidden="true" class="shrink-0" />
+            <span v-if="!isCollapsed" class="truncate">{{
+              conversation.title
+            }}</span>
+          </button>
+          <Button
+            v-if="!isCollapsed"
+            :aria-label="`删除会话：${conversation.title}`"
+            :disabled="
+              !canDeleteConversations ||
+              deletingConversationId === conversation.id
+            "
+            :title="
+              deletingConversationId === conversation.id
+                ? '正在删除'
+                : '删除会话'
+            "
+            class="size-8 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+            size="icon"
+            type="button"
+            variant="ghost"
+            @click="emit('delete', conversation.id)"
+          >
+            <Trash2 aria-hidden="true" />
+          </Button>
+        </div>
+        <p
+          v-if="!isCollapsed && conversationListStatus === 'loading'"
+          class="px-2 py-2 text-xs text-muted-foreground"
+          role="status"
+        >
+          正在加载会话…
+        </p>
+        <div
+          v-if="!isCollapsed && conversationListStatus === 'empty'"
+          class="px-2 py-2 text-xs text-muted-foreground"
+        >
+          暂无历史会话
+        </div>
+        <div
+          v-if="!isCollapsed && conversationListStatus === 'error'"
+          class="flex flex-col items-start gap-2 px-2 py-2 text-xs text-destructive"
+          role="alert"
+        >
+          <span>{{ conversationListError }}</span>
+          <Button
+            class="h-7 px-2"
+            size="sm"
+            type="button"
+            variant="outline"
+            @click="emit('retry')"
+          >
+            重试
+          </Button>
+        </div>
+        <p
+          v-if="
+            !isCollapsed &&
+            conversationListError &&
+            conversationListStatus !== 'error'
+          "
+          class="px-2 py-2 text-xs text-destructive"
+          role="alert"
+        >
+          {{ conversationListError }}
+        </p>
+        <Button
+          v-if="!isCollapsed && hasMoreConversations"
+          class="w-full justify-start px-2 text-muted-foreground"
+          :disabled="isLoadingMoreConversations"
+          size="sm"
+          type="button"
+          variant="ghost"
+          @click="emit('load-more')"
+        >
+          {{ isLoadingMoreConversations ? '正在加载…' : '加载更多' }}
+        </Button>
       </div>
     </ScrollArea>
 

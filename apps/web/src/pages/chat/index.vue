@@ -9,11 +9,17 @@ import { useChatPage } from './page';
 const {
   activeConversation,
   activeConversationId,
+  canDeleteConversations,
   canSend,
   conversations,
+  conversationListError,
+  conversationListStatus,
+  deletingConversationId,
   draft,
+  hasMoreConversations,
   hasActiveConversation,
   handleKeydown,
+  isLoadingMoreConversations,
   isSending,
   messages,
   streamDuration,
@@ -24,6 +30,9 @@ const {
   startNewConversation,
   status,
   stopGeneration,
+  loadConversations,
+  loadMoreConversations,
+  removeConversation,
 } = useChatPage();
 </script>
 
@@ -33,8 +42,17 @@ const {
   >
     <ConversationSidebar
       :active-conversation-id="activeConversationId"
+      :can-delete-conversations="canDeleteConversations"
       :conversations="conversations"
+      :conversation-list-error="conversationListError"
+      :conversation-list-status="conversationListStatus"
+      :deleting-conversation-id="deletingConversationId"
+      :has-more-conversations="hasMoreConversations"
+      :is-loading-more-conversations="isLoadingMoreConversations"
+      @delete="removeConversation"
+      @load-more="loadMoreConversations"
       @new="startNewConversation"
+      @retry="loadConversations()"
       @select="selectConversation"
     />
 
