@@ -483,7 +483,6 @@ export function useChatPage() {
     conversationListStatus,
     draft,
     errorMessage,
-    hasMoreConversations,
     handleKeydown,
     hasActiveConversation,
     isLoadingMoreConversations,

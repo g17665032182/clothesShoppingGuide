@@ -53,10 +53,16 @@ defineProps<{
             <ArrowRight data-icon="inline-end" />
           </RouterLink>
         </Button>
-        <Button v-else as-child size="lg">
+        <Button
+          v-else
+          as-child
+          class="h-10 rounded-md bg-[#315c48] px-4 text-white shadow-sm transition-colors hover:bg-[#284d3b] hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#315c48]/40"
+          size="lg"
+        >
           <RouterLink to="/chat">
+            <MessageCircle data-icon="inline-start" />
             开始聊天
-            <MessageCircle data-icon="inline-end" />
+            <ArrowRight data-icon="inline-end" />
           </RouterLink>
         </Button>
         <Button v-if="user" as-child size="lg" variant="outline">

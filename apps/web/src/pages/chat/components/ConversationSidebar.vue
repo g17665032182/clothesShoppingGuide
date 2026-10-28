@@ -32,7 +32,6 @@ defineProps<{
   conversations: Conversation[];
   conversationListError: string;
   conversationListStatus: 'loading' | 'success' | 'empty' | 'error';
-  hasMoreConversations: boolean;
   isLoadingMoreConversations: boolean;
   deletingConversationId: string | null;
   canDeleteConversations: boolean;
@@ -70,33 +69,51 @@ function signOut() {
 function toggleCollapsed() {
   isCollapsed.value = !isCollapsed.value;
 }
+
+function getConversationMark(title: string): string {
+  return Array.from(title.trim()).slice(0, 2).join('') || '聊';
+}
+
+// 只在列表可滚动且接近底部时请求下一页，避免短列表自动连续加载。
+function handleConversationScroll(event: Event) {
+  const viewport = event.currentTarget;
+  if (!(viewport instanceof HTMLElement)) return;
+
+  const remainingScroll =
+    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+  if (viewport.scrollHeight <= viewport.clientHeight || remainingScroll > 80) {
+    return;
+  }
+
+  emit('load-more');
+}
 </script>
 
 <template>
   <aside
     :class="
       cn(
-        'flex max-h-[45vh] w-full shrink-0 flex-col border-b border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] sm:h-auto sm:max-h-none sm:border-b-0 sm:border-r',
-        isCollapsed ? 'sm:w-16' : 'sm:w-72',
+        'flex max-h-[45vh] w-full shrink-0 flex-col border-b border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] sm:h-full sm:max-h-none sm:border-b-0 sm:border-r',
+        isCollapsed ? 'sm:w-16' : 'sm:w-80',
       )
     "
   >
     <div
       :class="
         cn(
-          'flex items-center px-3 py-3',
+          'flex min-h-16 items-center px-4 py-3',
           isCollapsed ? 'justify-center' : 'justify-between',
         )
       "
     >
       <RouterLink
         v-if="!isCollapsed"
-        class="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition-colors hover:bg-sidebar-accent"
+        class="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-semibold transition-colors hover:bg-sidebar-accent"
         to="/chat"
         title="衣橱指南"
       >
         <span
-          class="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground"
+          class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
         >
           <Shirt aria-hidden="true" />
         </span>
@@ -106,6 +123,7 @@ function toggleCollapsed() {
         <Button
           :aria-label="isCollapsed ? '展开侧边栏' : '折叠侧边栏'"
           :title="isCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+          class="size-8"
           size="icon"
           type="button"
           variant="ghost"
@@ -117,11 +135,15 @@ function toggleCollapsed() {
       </div>
     </div>
 
-    <div :class="cn('px-3 pb-3', isCollapsed && 'flex justify-center px-2')">
+    <div :class="cn('px-4 pb-4', isCollapsed && 'flex justify-center px-2')">
       <Button
         :aria-label="isCollapsed ? '新聊天' : undefined"
         :title="isCollapsed ? '新聊天' : undefined"
-        :class="isCollapsed ? 'size-10 px-0' : 'w-full justify-start gap-2'"
+        :class="
+          isCollapsed
+            ? 'size-10 rounded-lg px-0'
+            : 'h-10 w-full justify-start gap-2 rounded-lg text-xs'
+        "
         type="button"
         variant="secondary"
         @click="emit('new')"
@@ -137,12 +159,13 @@ function toggleCollapsed() {
     <Separator class="bg-sidebar-border" />
 
     <ScrollArea
-      :class="cn('min-h-0 flex-1 py-4', isCollapsed ? 'px-2' : 'px-3')"
+      :class="cn('min-h-0 flex-1 py-4', isCollapsed ? 'px-2' : 'px-4')"
+      @scroll="handleConversationScroll"
     >
-      <div class="flex flex-col gap-2">
+      <div class="flex flex-col gap-1.5">
         <p
           v-if="!isCollapsed"
-          class="px-2 text-xs font-medium text-muted-foreground"
+          class="px-2 pb-2 text-xs font-medium text-muted-foreground"
         >
           最近
         </p>
@@ -159,7 +182,7 @@ function toggleCollapsed() {
             :title="conversation.title"
             :class="
               cn(
-                'flex min-w-0 flex-1 items-center gap-2 rounded-md py-2 text-left text-sm transition-colors',
+                'flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg px-2.5 py-2 text-left text-[11px] transition-colors',
                 isCollapsed ? 'justify-center px-0' : 'px-2',
                 conversation.id === activeConversationId
                   ? 'bg-sidebar-accent text-sidebar-accent-foreground'
@@ -169,7 +192,18 @@ function toggleCollapsed() {
             type="button"
             @click="emit('select', conversation.id)"
           >
-            <MessageSquare aria-hidden="true" class="shrink-0" />
+            <MessageSquare
+              v-if="!isCollapsed"
+              aria-hidden="true"
+              class="size-[18px] shrink-0"
+            />
+            <span
+              v-else
+              aria-hidden="true"
+              class="flex size-8 shrink-0 items-center justify-center rounded-lg border border-current/15 bg-background/70 text-[10px] font-semibold leading-none"
+            >
+              {{ getConversationMark(conversation.title) }}
+            </span>
             <span v-if="!isCollapsed" class="truncate">{{
               conversation.title
             }}</span>
@@ -186,7 +220,14 @@ function toggleCollapsed() {
                 ? '正在删除'
                 : '删除会话'
             "
-            class="size-8 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+            :class="
+              cn(
+                'size-8 shrink-0 rounded-lg text-muted-foreground transition-opacity focus-visible:opacity-100',
+                conversation.id === activeConversationId
+                  ? 'opacity-100'
+                  : 'opacity-0 group-hover:opacity-100',
+              )
+            "
             size="icon"
             type="button"
             variant="ghost"
@@ -235,38 +276,34 @@ function toggleCollapsed() {
         >
           {{ conversationListError }}
         </p>
-        <Button
-          v-if="!isCollapsed && hasMoreConversations"
-          class="w-full justify-start px-2 text-muted-foreground"
-          :disabled="isLoadingMoreConversations"
-          size="sm"
-          type="button"
-          variant="ghost"
-          @click="emit('load-more')"
+        <p
+          v-if="!isCollapsed && isLoadingMoreConversations"
+          class="px-2 py-2 text-xs text-muted-foreground"
+          role="status"
         >
-          {{ isLoadingMoreConversations ? '正在加载…' : '加载更多' }}
-        </Button>
+          正在加载更多…
+        </p>
       </div>
     </ScrollArea>
 
     <Separator class="bg-sidebar-border" />
 
     <div
-      :class="cn('flex flex-col gap-1 p-3', isCollapsed && 'items-center px-2')"
+      :class="cn('flex flex-col gap-1 p-4', isCollapsed && 'items-center px-2')"
     >
       <RouterLink
         :aria-label="auth.state.user?.displayName ?? '我的账户'"
         :title="auth.state.user?.displayName ?? '我的账户'"
         :class="
           cn(
-            'flex items-center gap-2 rounded-md py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+            'flex items-center gap-3 rounded-lg px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
             isCollapsed ? 'justify-center px-0' : 'px-2',
           )
         "
         to="/account"
       >
         <span
-          class="flex size-6 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground"
+          class="flex size-7 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground"
         >
           {{ auth.state.user?.displayName?.slice(0, 1) ?? '我' }}
         </span>
@@ -280,7 +317,9 @@ function toggleCollapsed() {
         :class="
           cn(
             'text-muted-foreground',
-            isCollapsed ? 'size-10 px-0' : 'w-full justify-start gap-2',
+            isCollapsed
+              ? 'size-10 rounded-lg px-0'
+              : 'h-10 w-full justify-start gap-3 rounded-lg px-2 text-xs',
           )
         "
         type="button"

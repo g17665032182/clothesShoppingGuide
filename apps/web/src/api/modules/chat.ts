@@ -7,7 +7,7 @@ import type {
   PageResponse,
 } from '@/api/types/chat';
 
-const conversationPageSize = 20;
+const conversationPageSize = 10;
 const messagePageSize = 100;
 
 export function listConversations(
