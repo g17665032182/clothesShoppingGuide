@@ -59,7 +59,7 @@ const { displayName, error, password, pending, saveProfile, status, user } =
         <CardContent class="flex flex-col gap-4 text-sm">
           <div class="flex items-center justify-between gap-4">
             <span class="text-muted-foreground">邮箱</span>
-            <span class="max-w-[15rem] truncate text-right font-medium">{{
+            <span class="max-w-60 truncate text-right font-medium">{{
               user.email
             }}</span>
           </div>
