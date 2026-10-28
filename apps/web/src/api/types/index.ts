@@ -6,4 +6,15 @@ export type {
   UserRole,
   UserStatus,
 } from './users';
-export type { ChatMessage, Conversation, MessageRole } from './chat';
+export type {
+  ChatApiConversation,
+  ChatApiMessage,
+  ChatConversationDetail,
+  ChatMessage,
+  ChatRequest,
+  ChatRequestMessage,
+  ChatStreamEvent,
+  Conversation,
+  MessageRole,
+  PageResponse,
+} from './chat';

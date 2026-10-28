@@ -78,15 +78,27 @@
 
 ## 验收标准
 
-- 后端按序发送 delta，且只有事务保存成功后才发送 done。
-- 事务开始前的失败、取消、断连和持久化异常不会保存半轮记录；事务开始后的断连允许结果未知，能够通过会话 ID核实。
-- 前端使用 Axios Fetch adapter 增量读取 SSE，继续复用访问令牌刷新逻辑。
-- 原 `/api/llm/chat` JSON 接口行为保持不变，新流式接口独立可用。
-- 会话列表、历史详情、继续会话、新会话标题和记录持久化可真实联调。
-- 页面切换或卸载后的旧流不会覆盖当前会话状态。
-- 普通用户会话归属校验和管理员接口保持原行为。
-- 无数据库迁移或无关 UI 改动。
-- `/api/docs-json` 包含流式路由和响应说明。
+- [x] 后端按序发送 delta，且只有事务保存成功后才发送 done。
+- [x] 单元测试覆盖事务保存前不写入消息、事务失败不发送 done。
+- [x] 本地真实 API Smoke Test 验证取消后新会话未落库；事务开始后的断连竞速仍按状态未知处理。
+- [x] 前端使用 Axios Fetch adapter 增量读取 SSE，继续复用访问令牌刷新逻辑；代码已完成并通过类型检查/构建。
+- [x] 原 `/api/llm/chat` JSON 路由保留，新流式路由在 `/api/docs-json` 可见。
+- [x] 本地真实 API Smoke Test 验证注册、流式事件、`done` 后历史详情包含 user/assistant 两条消息。
+- [ ] 浏览器端会话侧栏交互、Axios 401 Refresh Token 重试及页面切换/卸载隔离尚未做实机验证。
+- [x] 普通用户归属查询继续使用原有 `userId` 过滤，管理员接口实现未改。
+- [x] 未新增数据库迁移。
+- [x] `/api/docs-json` 包含流式路由和 `text/event-stream` 响应说明。
+
+## 本次验证记录
+
+- `pnpm check`：通过，包含格式检查、API/Web 类型检查和工作区构建。
+- `pnpm --filter @clothes-shopping-guide/api test`：通过，31 项测试。
+- `git diff --check`：通过。
+- `GET /api/health`：HTTP 200。
+- `GET /api/docs-json`：HTTP 200；存在 `/api/llm/chat/stream`，成功响应类型为 `text/event-stream`。
+- 本地真实流式请求：注册 HTTP 201，流式 HTTP 200，事件为 `start`、多个 `delta`、`done`；随后读取历史 HTTP 200，记录角色为 `user,assistant`。
+- 本地取消请求：收到 `start` 后中止，新会话历史查询 HTTP 404。
+- 未验证：浏览器页面交互、Axios 流式请求的 401 Refresh Token 重试、真实模型失败路径及现有会话继续对话。Smoke Test 创建的 3 个临时账号及关联会话已清理。
 - 不安装未经确认的前端测试依赖；对所有未运行的测试、Smoke Test 或检查如实说明，不把文档验收项误报为已通过。
 
 ## 验证命令

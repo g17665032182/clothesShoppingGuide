@@ -53,6 +53,33 @@ export type PersistedChatOutput = ChatOutput & {
   title: string;
 };
 
+export type ChatStreamEvent =
+  | {
+      type: 'start';
+      conversationId: string;
+      title: string;
+    }
+  | {
+      type: 'delta';
+      content: string;
+    }
+  | {
+      type: 'done';
+      conversationId: string;
+      title: string;
+      model: string;
+      usage: ChatOutput['usage'];
+    };
+
+type PreparedChat = {
+  conversation: ChatConversation | null;
+  persistedConversation: ChatConversation;
+  currentUserMessage: string;
+  plan: ReturnType<ChatContextService['prepare']>;
+  nextContextSummary: string | null | undefined;
+  nextSummaryThroughMessageId: string | null | undefined;
+};
+
 @Injectable()
 export class ChatRecordsService {
   public constructor(
@@ -66,92 +93,68 @@ export class ChatRecordsService {
   ) {}
 
   public async chat(user: User, dto: ChatDto): Promise<PersistedChatOutput> {
-    const currentUserMessage = [...dto.messages]
-      .reverse()
-      .find((message) => message.role === ChatMessageRole.USER);
-    if (!currentUserMessage) {
-      throw new BadRequestException('聊天请求至少需要一条 user 消息');
-    }
-
-    const conversation = dto.conversationId
-      ? await this.getOwnedConversation(user.id, dto.conversationId)
-      : null;
-    const history = conversation
-      ? await this.messages.find(
-          { conversationId: conversation.id },
-          { orderBy: { createdAt: 'asc' } },
-        )
-      : [];
-    const systemMessages = dto.messages
-      .filter((message) => message.role === ChatMessageRole.SYSTEM)
-      .map((message) => ({
-        role: message.role,
-        content: message.content,
-      }));
-
-    let plan = this.contextService.prepare({
-      history,
-      currentUserMessage: currentUserMessage.content,
-      systemMessages,
-      contextSummary: conversation?.contextSummary,
-      summaryThroughMessageId: conversation?.summaryThroughMessageId,
+    const prepared = await this.prepareChat(user, dto);
+    const result = await this.llmService.chat({
+      messages: prepared.plan.messages,
     });
-
-    if (plan.needsSummary) {
-      const summary = await this.summaryService.summarize(
-        conversation?.contextSummary ?? null,
-        plan.summarySource,
-      );
-      if (summary && conversation) {
-        conversation.contextSummary = summary;
-        conversation.summaryThroughMessageId = plan.lastIncludedMessageId;
-        plan = this.contextService.prepare({
-          history,
-          currentUserMessage: currentUserMessage.content,
-          systemMessages,
-          contextSummary: summary,
-          summaryThroughMessageId: plan.lastIncludedMessageId,
-        });
-      }
-    }
-
-    const result = await this.llmService.chat({ messages: plan.messages });
-    const persistedConversation =
-      conversation ??
-      Object.assign(new ChatConversation(), {
-        userId: user.id,
-        title: this.generateConversationTitle(currentUserMessage.content),
-      });
-    persistedConversation.updatedAt = new Date();
-
-    const userMessage = Object.assign(new ChatMessage(), {
-      conversationId: persistedConversation.id,
-      role: ChatRecordMessageRole.USER,
-      content: currentUserMessage.content,
-    });
-    const assistantMessage = Object.assign(new ChatMessage(), {
-      conversationId: persistedConversation.id,
-      role: ChatRecordMessageRole.ASSISTANT,
-      content: result.content,
-      model: result.model,
-      inputTokens: result.usage?.inputTokens ?? null,
-      outputTokens: result.usage?.outputTokens ?? null,
-      totalTokens: result.usage?.totalTokens ?? null,
-    });
-
-    const entityManager = this.conversations.getEntityManager();
-    await entityManager.transactional(async (transactionalEntityManager) => {
-      // 标量外键不会让 MikroORM 自动推断插入顺序，因此先提交会话再提交消息。
-      transactionalEntityManager.persist(persistedConversation);
-      await transactionalEntityManager.flush();
-      transactionalEntityManager.persist([userMessage, assistantMessage]);
-      await transactionalEntityManager.flush();
-    });
+    await this.persistChat(prepared, result);
 
     return {
       ...result,
-      conversationId: persistedConversation.id,
-      title: persistedConversation.title,
+      conversationId: prepared.persistedConversation.id,
+      title: prepared.persistedConversation.title,
+    };
+  }
+
+  public async prepareStream(
+    user: User,
+    dto: ChatDto,
+    signal?: AbortSignal,
+  ): Promise<AsyncIterable<ChatStreamEvent>> {
+    const prepared = await this.prepareChat(user, dto);
+    return this.streamPrepared(prepared, signal);
+  }
+
+  private async *streamPrepared(
+    prepared: PreparedChat,
+    signal?: AbortSignal,
+  ): AsyncGenerator<ChatStreamEvent> {
+    yield {
+      type: 'start',
+      conversationId: prepared.persistedConversation.id,
+      title: prepared.persistedConversation.title,
+    };
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted', 'AbortError');
+    }
+
+    const resultIterator = this.llmService.stream(
+      { messages: prepared.plan.messages },
+      signal,
+    );
+    let result: ChatOutput | undefined;
+    while (true) {
+      const next = await resultIterator.next();
+      if (next.done) {
+        result = next.value;
+        break;
+      }
+      if (next.value) {
+        yield { type: 'delta', content: next.value };
+      }
+    }
+
+    if (!result || signal?.aborted) {
+      throw new DOMException('The operation was aborted', 'AbortError');
+    }
+
+    await this.persistChat(prepared, result);
+    yield {
+      type: 'done',
+      conversationId: prepared.persistedConversation.id,
+      title: prepared.persistedConversation.title,
+      model: result.model,
+      usage: result.usage,
     };
   }
 
@@ -196,6 +199,112 @@ export class ChatRecordsService {
     return characters.length > 30
       ? `${characters.slice(0, 30).join('')}...`
       : characters.join('');
+  }
+
+  private async prepareChat(user: User, dto: ChatDto): Promise<PreparedChat> {
+    this.llmService.assertConfigured();
+    const currentUserMessage = [...dto.messages]
+      .reverse()
+      .find((message) => message.role === ChatMessageRole.USER);
+    if (!currentUserMessage) {
+      throw new BadRequestException('聊天请求至少需要一条 user 消息');
+    }
+
+    const conversation = dto.conversationId
+      ? await this.getOwnedConversation(user.id, dto.conversationId)
+      : null;
+    const history = conversation
+      ? await this.messages.find(
+          { conversationId: conversation.id },
+          { orderBy: { createdAt: 'asc' } },
+        )
+      : [];
+    const systemMessages = dto.messages
+      .filter((message) => message.role === ChatMessageRole.SYSTEM)
+      .map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+
+    let plan = this.contextService.prepare({
+      history,
+      currentUserMessage: currentUserMessage.content,
+      systemMessages,
+      contextSummary: conversation?.contextSummary,
+      summaryThroughMessageId: conversation?.summaryThroughMessageId,
+    });
+
+    let nextContextSummary: string | null | undefined;
+    let nextSummaryThroughMessageId: string | null | undefined;
+    if (plan.needsSummary) {
+      const summary = await this.summaryService.summarize(
+        conversation?.contextSummary ?? null,
+        plan.summarySource,
+      );
+      if (summary && conversation) {
+        nextContextSummary = summary;
+        nextSummaryThroughMessageId = plan.lastIncludedMessageId;
+        plan = this.contextService.prepare({
+          history,
+          currentUserMessage: currentUserMessage.content,
+          systemMessages,
+          contextSummary: summary,
+          summaryThroughMessageId: plan.lastIncludedMessageId,
+        });
+      }
+    }
+
+    const persistedConversation =
+      conversation ??
+      Object.assign(new ChatConversation(), {
+        userId: user.id,
+        title: this.generateConversationTitle(currentUserMessage.content),
+      });
+
+    return {
+      conversation,
+      persistedConversation,
+      currentUserMessage: currentUserMessage.content,
+      plan,
+      nextContextSummary,
+      nextSummaryThroughMessageId,
+    };
+  }
+
+  private async persistChat(
+    prepared: PreparedChat,
+    result: ChatOutput,
+  ): Promise<void> {
+    const persistedConversation = prepared.persistedConversation;
+    persistedConversation.updatedAt = new Date();
+    const userMessage = Object.assign(new ChatMessage(), {
+      conversationId: persistedConversation.id,
+      role: ChatRecordMessageRole.USER,
+      content: prepared.currentUserMessage,
+    });
+    const assistantMessage = Object.assign(new ChatMessage(), {
+      conversationId: persistedConversation.id,
+      role: ChatRecordMessageRole.ASSISTANT,
+      content: result.content,
+      model: result.model,
+      inputTokens: result.usage?.inputTokens ?? null,
+      outputTokens: result.usage?.outputTokens ?? null,
+      totalTokens: result.usage?.totalTokens ?? null,
+    });
+
+    const entityManager = this.conversations.getEntityManager();
+    await entityManager.transactional(async (transactionalEntityManager) => {
+      // 标量外键不会让 MikroORM 自动推断插入顺序，因此先提交会话再提交消息。
+      if (prepared.nextContextSummary !== undefined) {
+        persistedConversation.contextSummary = prepared.nextContextSummary;
+        persistedConversation.summaryThroughMessageId =
+          prepared.nextSummaryThroughMessageId ?? null;
+      }
+      transactionalEntityManager.persist(persistedConversation);
+      await transactionalEntityManager.flush();
+      transactionalEntityManager.persist([userMessage, assistantMessage]);
+      await transactionalEntityManager.flush();
+    });
   }
 
   private async list(

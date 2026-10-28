@@ -1,8 +1,71 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { ChatOutput, LlmService } from '../llm/llm.service.js';
 import { ChatRecordsService } from './chat-records.service.js';
+import { ChatContextService } from './chat-context.service.js';
+import { ChatConversation } from './chat-conversation.entity.js';
+import { ChatMessage } from './chat-message.entity.js';
 import { PaginationDto } from './dto/pagination.dto.js';
+
+function createService(options: { failFlush?: boolean } = {}) {
+  const persisted: unknown[] = [];
+  let flushCount = 0;
+  const manager = {
+    persist(value: unknown) {
+      persisted.push(value);
+    },
+    async flush() {
+      flushCount += 1;
+      if (options.failFlush && flushCount === 2) {
+        throw new Error('database failure');
+      }
+    },
+    async transactional<T>(
+      callback: (transactionalManager: unknown) => Promise<T>,
+    ) {
+      return callback(manager);
+    },
+  };
+  const conversationRepository = {
+    findOne: async () => null,
+    getEntityManager: () => manager,
+  };
+  const messageRepository = {
+    find: async () => [],
+  };
+  const llmService = {
+    assertConfigured: () => 'fake-model',
+    async *stream(): AsyncGenerator<string, ChatOutput> {
+      yield '第一段';
+      yield '第二段';
+      return {
+        content: '第一段第二段',
+        model: 'fake-model',
+        usage: null,
+      };
+    },
+  };
+  const contextService = {
+    prepare: () => ({
+      messages: [{ role: 'user' as const, content: '你好' }],
+      needsSummary: false,
+      summarySource: [],
+      lastIncludedMessageId: null,
+      hardLimit: 100,
+    }),
+  };
+  const summaryService = { summarize: async () => null };
+  const service = new ChatRecordsService(
+    conversationRepository as never,
+    messageRepository as never,
+    llmService as unknown as LlmService,
+    contextService as unknown as ChatContextService,
+    summaryService as never,
+  );
+
+  return { service, persisted };
+}
 
 test('标题生成会压缩空白并按 Unicode 字符截断', () => {
   const service = Object.create(
@@ -28,4 +91,61 @@ test('分页 DTO 缺省值和非法运行时值会回退到安全范围', () => 
   assert.equal(pagination.normalizedPage, 1);
   assert.equal(pagination.normalizedPageSize, 20);
   assert.equal(pagination.offset, 0);
+});
+
+test('流式聊天先产出增量，事务提交后才发送 done', async () => {
+  const { service, persisted } = createService();
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '你好' }],
+    } as never,
+  );
+  const received: Array<{ type: string; content?: string }> = [];
+
+  for await (const event of events) {
+    received.push(event);
+    if (event.type === 'delta') {
+      assert.equal(persisted.length, 0);
+    }
+    if (event.type === 'done') {
+      assert.equal(persisted.length, 2);
+      const conversation = persisted[0] as ChatConversation;
+      const messages = persisted[1] as ChatMessage[];
+      assert.equal(conversation.title, '你好');
+      assert.deepEqual(
+        messages.map((message) => [message.role, message.content]),
+        [
+          ['user', '你好'],
+          ['assistant', '第一段第二段'],
+        ],
+      );
+    }
+  }
+
+  assert.deepEqual(
+    received.map((event) => event.type),
+    ['start', 'delta', 'delta', 'done'],
+  );
+});
+
+test('流式聊天事务失败时不会发送 done', async () => {
+  const { service } = createService({ failFlush: true });
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '你好' }],
+    } as never,
+  );
+  const received: string[] = [];
+
+  await assert.rejects(
+    (async () => {
+      for await (const event of events) {
+        received.push(event.type);
+      }
+    })(),
+    /database failure/u,
+  );
+  assert.deepEqual(received, ['start', 'delta', 'delta']);
 });

@@ -59,11 +59,12 @@ const customAttrs: CustomAttrs = {
   overflow-wrap: anywhere;
 }
 
-.markdown-renderer :deep(> :first-child) {
+/* Markdown 组件会额外渲染一层根 div，首尾间距需要落到它的子元素。 */
+.markdown-renderer :deep(> div > :first-child) {
   margin-top: 0;
 }
 
-.markdown-renderer :deep(> :last-child) {
+.markdown-renderer :deep(> div > :last-child) {
   margin-bottom: 0;
 }
 

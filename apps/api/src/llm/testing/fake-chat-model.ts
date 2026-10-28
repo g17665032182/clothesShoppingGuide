@@ -1,15 +1,17 @@
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk } from '@langchain/core/messages';
 import type { BaseMessage } from '@langchain/core/messages';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { UsageMetadata } from '@langchain/core/messages';
-import type { ChatResult } from '@langchain/core/outputs';
+import { ChatGenerationChunk, type ChatResult } from '@langchain/core/outputs';
 
 export type FakeChatModelOptions = {
   response?: string;
+  chunks?: string[];
   usage?: UsageMetadata;
   responseMetadata?: Record<string, unknown>;
   error?: Error;
+  streamError?: Error;
   delayMs?: number;
 };
 
@@ -21,17 +23,21 @@ export class FakeChatModel extends BaseChatModel {
   public readonly calls: BaseMessage[][] = [];
 
   private readonly response: string;
+  private readonly chunks: string[];
   private readonly usage?: FakeChatModelOptions['usage'];
   private readonly responseMetadata: Record<string, unknown> | undefined;
   private readonly error: Error | undefined;
+  private readonly streamError: Error | undefined;
   private readonly delayMs: number;
 
   public constructor(options: FakeChatModelOptions = {}) {
     super({});
     this.response = options.response ?? 'fake response';
+    this.chunks = options.chunks ?? [this.response];
     this.usage = options.usage;
     this.responseMetadata = options.responseMetadata;
     this.error = options.error;
+    this.streamError = options.streamError;
     this.delayMs = options.delayMs ?? 0;
   }
 
@@ -75,5 +81,37 @@ export class FakeChatModel extends BaseChatModel {
         },
       ],
     };
+  }
+
+  public async *_streamResponseChunks(
+    _messages: BaseMessage[],
+    _options: this['ParsedCallOptions'],
+    _runManager?: CallbackManagerForLLMRun,
+  ): AsyncGenerator<ChatGenerationChunk> {
+    for (const [index, chunk] of this.chunks.entries()) {
+      if (this.delayMs > 0) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, this.delayMs);
+        });
+      }
+
+      if (index === this.chunks.length - 1 && this.streamError) {
+        throw this.streamError;
+      }
+
+      const message = new AIMessageChunk(chunk);
+      if (index === this.chunks.length - 1 && this.usage) {
+        (
+          message as unknown as { usage_metadata?: UsageMetadata }
+        ).usage_metadata = this.usage;
+      }
+      if (index === this.chunks.length - 1 && this.responseMetadata) {
+        message.response_metadata = this.responseMetadata;
+      }
+      yield new ChatGenerationChunk({
+        text: chunk,
+        message,
+      });
+    }
   }
 }

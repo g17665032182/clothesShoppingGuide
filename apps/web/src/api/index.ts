@@ -188,3 +188,36 @@ export async function apiRequest<T>(
     throw toApiError(error);
   }
 }
+
+/**
+ * 使用统一 Axios 客户端读取 Fetch adapter 提供的浏览器流。
+ * Token 保持显式传入，确保流式请求也经过现有 Refresh Token 拦截器。
+ */
+export async function apiStreamRequest(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<{
+  stream: ReadableStream<Uint8Array>;
+  contentType: string;
+}> {
+  const requestConfig: ApiAxiosRequestConfig = {
+    ...options,
+    adapter: 'fetch',
+    responseType: 'stream',
+    url: path,
+  };
+
+  try {
+    const response =
+      await apiClient.request<ReadableStream<Uint8Array>>(requestConfig);
+    if (!response.data || typeof response.data.getReader !== 'function') {
+      throw new ApiError('服务器未返回可读取的聊天数据流', response.status);
+    }
+    return {
+      stream: response.data,
+      contentType: String(response.headers['content-type'] ?? ''),
+    };
+  } catch (error) {
+    throw toApiError(error);
+  }
+}

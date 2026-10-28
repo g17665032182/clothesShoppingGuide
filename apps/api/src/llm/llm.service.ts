@@ -6,15 +6,18 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   AIMessage,
   BaseMessage,
+  type BaseMessageChunk,
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
 
 import { ChatMessageRole } from './dto/chat.dto.js';
-import { LLM_GRAPH } from './llm.tokens.js';
+import { normalizeUsage } from './llm.graph.js';
+import { LLM_CHAT_MODEL, LLM_GRAPH } from './llm.tokens.js';
 import type { LlmStateValue, LlmUsage } from './llm.state.js';
 
 export type ChatInput = {
@@ -32,6 +35,12 @@ export type ChatOutput = {
 
 export type LlmGraph = {
   invoke(input: { messages: BaseMessage[] }): Promise<LlmStateValue>;
+};
+
+export type LlmStreamResult = {
+  content: string;
+  model: string;
+  usage: LlmUsage | null;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -77,6 +86,24 @@ function normalizeContent(content: unknown): string {
   throw new BadGatewayException('上游大模型返回内容无法解析');
 }
 
+function normalizeChunkContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        const record = asRecord(part);
+        return typeof record.text === 'string' ? record.text : '';
+      })
+      .join('');
+  }
+  return '';
+}
+
 function toLangChainMessage(
   message: ChatInput['messages'][number],
 ): BaseMessage {
@@ -95,14 +122,12 @@ function toLangChainMessage(
 export class LlmService {
   public constructor(
     @Inject(LLM_GRAPH) private readonly graph: LlmGraph,
+    @Inject(LLM_CHAT_MODEL) private readonly chatModel: BaseChatModel,
     private readonly configService: ConfigService,
   ) {}
 
   public async chat(input: ChatInput): Promise<ChatOutput> {
-    const model = this.configService.get<string>('LLM_MODEL')?.trim();
-    if (!model) {
-      throw new ServiceUnavailableException('大模型服务尚未完成配置');
-    }
+    const model = this.assertConfigured();
 
     let result: LlmStateValue;
     try {
@@ -124,6 +149,57 @@ export class LlmService {
       model,
       usage: result.usage ?? null,
     };
+  }
+
+  public async *stream(
+    input: ChatInput,
+    signal?: AbortSignal,
+  ): AsyncGenerator<string, LlmStreamResult> {
+    const model = this.assertConfigured();
+
+    let fullMessage: BaseMessageChunk | undefined;
+    try {
+      const stream = await this.chatModel.stream(
+        input.messages.map(toLangChainMessage),
+        signal ? { signal } : undefined,
+      );
+      for await (const chunk of stream) {
+        if (signal?.aborted) {
+          throw new DOMException('The operation was aborted', 'AbortError');
+        }
+        fullMessage = fullMessage ? fullMessage.concat(chunk) : chunk;
+        const text = normalizeChunkContent(chunk.content);
+        if (text) {
+          yield text;
+        }
+      }
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        throw error;
+      }
+      this.rethrowMappedError(error);
+    }
+
+    if (!fullMessage) {
+      throw new BadGatewayException('上游大模型未返回内容');
+    }
+
+    return {
+      content: normalizeContent(fullMessage.content),
+      model,
+      usage: normalizeUsage(fullMessage) ?? null,
+    };
+  }
+
+  public assertConfigured(): string {
+    const model = this.configService.get<string>('LLM_MODEL')?.trim();
+    if (!model) {
+      throw new ServiceUnavailableException('大模型服务尚未完成配置');
+    }
+    return model;
   }
 
   private rethrowMappedError(error: unknown): never {

@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { Send } from '@lucide/vue';
+import { Send, Square } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 defineProps<{
   canSend: boolean;
   draft: string;
+  isSending: boolean;
 }>();
 
 const emit = defineEmits<{
   (event: 'submit'): void;
+  (event: 'stop'): void;
   (event: 'update:draft', value: string): void;
   (event: 'keydown', keyboardEvent: KeyboardEvent): void;
 }>();
@@ -31,6 +33,19 @@ const emit = defineEmits<{
       @update:model-value="emit('update:draft', String($event))"
     />
     <Button
+      v-if="isSending"
+      aria-label="停止生成"
+      class="shrink-0 rounded-full"
+      size="icon"
+      title="停止生成"
+      type="button"
+      variant="outline"
+      @click="emit('stop')"
+    >
+      <Square aria-hidden="true" />
+    </Button>
+    <Button
+      v-else
       :disabled="!canSend"
       aria-label="发送消息"
       class="shrink-0 rounded-full"

@@ -33,3 +33,39 @@ test('FakeChatModel 可以模拟上游异常', async () => {
 
   await assert.rejects(model.invoke([new HumanMessage('你好')]), error);
 });
+
+test('FakeChatModel 可以按分段输出并在流尾附加用量', async () => {
+  const model = new FakeChatModel({
+    chunks: ['第一段', '第二段'],
+    usage: {
+      input_tokens: 2,
+      output_tokens: 4,
+      total_tokens: 6,
+    },
+  });
+
+  const chunks: string[] = [];
+  for await (const chunk of await model.stream([new HumanMessage('你好')])) {
+    chunks.push(String(chunk.content));
+  }
+
+  assert.deepEqual(chunks, ['第一段', '第二段']);
+});
+
+test('FakeChatModel 可以模拟流式异常', async () => {
+  const error = new Error('simulated stream failure');
+  const model = new FakeChatModel({
+    chunks: ['第一段', '第二段'],
+    streamError: error,
+  });
+
+  const stream = await model.stream([new HumanMessage('你好')]);
+  await assert.rejects(
+    (async () => {
+      for await (const _chunk of stream) {
+        // 消费到流尾，触发测试替身配置的异常。
+      }
+    })(),
+    error,
+  );
+});

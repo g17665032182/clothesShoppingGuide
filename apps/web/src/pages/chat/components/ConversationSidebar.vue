@@ -17,13 +17,13 @@ import { auth } from '@/lib/auth';
 import type { Conversation } from '@/api/types/chat';
 
 defineProps<{
-  activeConversationId: number | null;
+  activeConversationId: string | null;
   conversations: Conversation[];
 }>();
 
 const emit = defineEmits<{
   (event: 'new'): void;
-  (event: 'select', conversationId: number): void;
+  (event: 'select', conversationId: string): void;
 }>();
 
 const router = useRouter();

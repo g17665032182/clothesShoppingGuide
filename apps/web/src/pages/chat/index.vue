@@ -17,9 +17,14 @@ const {
   handleKeydown,
   isSending,
   messages,
+  streamDuration,
+  errorMessage,
+  refreshUncertainTurn,
   selectConversation,
   sendMessage,
   startNewConversation,
+  status,
+  stopGeneration,
 } = useChatPage();
 </script>
 
@@ -45,13 +50,34 @@ const {
           />
           <Separator />
           <div class="min-h-0 flex-1">
-            <ChatMessageList :is-sending="isSending" :messages="messages" />
+            <ChatMessageList
+              :is-sending="isSending"
+              :messages="messages"
+              :stream-duration="streamDuration"
+            />
+          </div>
+          <div
+            v-if="errorMessage"
+            class="border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
+            role="alert"
+          >
+            {{ errorMessage }}
+            <button
+              v-if="status === 'unknown'"
+              class="ml-2 underline underline-offset-4"
+              type="button"
+              @click="refreshUncertainTurn"
+            >
+              刷新核实
+            </button>
           </div>
           <div class="border-t border-border/70 p-4 sm:p-6">
             <ChatComposer
               :can-send="canSend"
               :draft="draft"
+              :is-sending="isSending"
               @keydown="handleKeydown"
+              @stop="stopGeneration"
               @submit="sendMessage"
               @update:draft="draft = $event"
             />
@@ -76,12 +102,29 @@ const {
               </p>
             </div>
           </div>
+          <div
+            v-if="errorMessage"
+            class="border-t border-border/70 px-4 py-2 text-sm text-destructive sm:px-6"
+            role="alert"
+          >
+            {{ errorMessage }}
+            <button
+              v-if="status === 'unknown'"
+              class="ml-2 underline underline-offset-4"
+              type="button"
+              @click="refreshUncertainTurn"
+            >
+              刷新核实
+            </button>
+          </div>
           <div class="border-t border-border/70 p-4 sm:p-6">
             <ChatComposer
               :can-send="canSend"
               :draft="draft"
+              :is-sending="isSending"
               @keydown="handleKeydown"
               @submit="sendMessage"
+              @stop="stopGeneration"
               @update:draft="draft = $event"
             />
           </div>
