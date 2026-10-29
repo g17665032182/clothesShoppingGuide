@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
+import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
 
 import { LlmService } from '../llm/llm.service.js';
 import { ChatContextService } from './chat-context.service.js';
+import type { ChatHistoryMessage } from './chat-history.mapper.js';
 import type { ChatMessage } from './chat-message.entity.js';
 
 @Injectable()
@@ -17,13 +19,18 @@ export class ChatSummaryService {
 
   public async summarize(
     existingSummary: string | null,
-    messages: ChatMessage[],
+    messages: ChatMessage[] | ChatHistoryMessage[],
   ): Promise<string | null> {
     if (messages.length === 0) {
       return existingSummary;
     }
     const transcript = messages
-      .map((message) => `${message.role}: ${message.content}`)
+      .map((item) => {
+        if ('message' in item) {
+          return this.toTranscriptLine(item.message);
+        }
+        return `${item.role}: ${item.content}`;
+      })
       .join('\n');
     try {
       const result = await this.llmService.chat({
@@ -54,5 +61,19 @@ export class ChatSummaryService {
       );
       return null;
     }
+  }
+
+  private toTranscriptLine(message: BaseMessage): string {
+    if (message instanceof AIMessage && message.tool_calls?.length) {
+      return `assistant: 调用了 ${message.tool_calls
+        .map((call) => call.name)
+        .join('、')}`;
+    }
+    if (message instanceof ToolMessage) {
+      return `tool: ${message.content}`;
+    }
+    return `${message.type}: ${
+      typeof message.content === 'string' ? message.content : ''
+    }`;
   }
 }

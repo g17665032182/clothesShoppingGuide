@@ -6,7 +6,6 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   AIMessage,
   BaseMessage,
@@ -16,15 +15,19 @@ import {
 } from '@langchain/core/messages';
 
 import { ChatMessageRole } from './dto/chat.dto.js';
-import { normalizeUsage } from './llm.graph.js';
-import { LLM_CHAT_MODEL, LLM_GRAPH } from './llm.tokens.js';
+import { createLlmGraph, normalizeUsage } from './llm.graph.js';
+import { LLM_GRAPH } from './llm.tokens.js';
 import type { LlmStateValue, LlmUsage } from './llm.state.js';
+import type { LlmTraceContext } from './trace/llm-trace.types.js';
 
 export type ChatInput = {
-  messages: Array<{
-    role: 'system' | 'user' | 'assistant';
-    content: string;
-  }>;
+  messages: Array<
+    | BaseMessage
+    | {
+        role: 'system' | 'user' | 'assistant';
+        content: string;
+      }
+  >;
 };
 
 export type ChatOutput = {
@@ -33,9 +36,7 @@ export type ChatOutput = {
   usage: LlmUsage | null;
 };
 
-export type LlmGraph = {
-  invoke(input: { messages: BaseMessage[] }): Promise<LlmStateValue>;
-};
+export type LlmGraph = ReturnType<typeof createLlmGraph>;
 
 export type LlmStreamResult = {
   content: string;
@@ -107,6 +108,9 @@ function normalizeChunkContent(content: unknown): string {
 function toLangChainMessage(
   message: ChatInput['messages'][number],
 ): BaseMessage {
+  if (message instanceof BaseMessage) {
+    return message;
+  }
   switch (message.role) {
     case ChatMessageRole.SYSTEM:
       return new SystemMessage(message.content);
@@ -122,18 +126,23 @@ function toLangChainMessage(
 export class LlmService {
   public constructor(
     @Inject(LLM_GRAPH) private readonly graph: LlmGraph,
-    @Inject(LLM_CHAT_MODEL) private readonly chatModel: BaseChatModel,
     private readonly configService: ConfigService,
   ) {}
 
-  public async chat(input: ChatInput): Promise<ChatOutput> {
+  public async chat(
+    input: ChatInput,
+    traceContext?: LlmTraceContext,
+  ): Promise<ChatOutput> {
     const model = this.assertConfigured();
 
     let result: LlmStateValue;
     try {
-      result = await this.graph.invoke({
-        messages: input.messages.map(toLangChainMessage),
-      });
+      result = await this.graph.invoke(
+        {
+          messages: input.messages.map(toLangChainMessage),
+        },
+        traceContext ? { context: traceContext as any } : undefined,
+      );
     } catch (error) {
       this.rethrowMappedError(error);
       throw new BadGatewayException('上游大模型调用失败');
@@ -154,24 +163,38 @@ export class LlmService {
   public async *stream(
     input: ChatInput,
     signal?: AbortSignal,
+    traceContext?: LlmTraceContext,
   ): AsyncGenerator<string, LlmStreamResult> {
     const model = this.assertConfigured();
 
-    let fullMessage: BaseMessageChunk | undefined;
+    let fullMessage: BaseMessage | undefined;
     try {
-      const stream = await this.chatModel.stream(
-        input.messages.map(toLangChainMessage),
-        signal ? { signal } : undefined,
+      const stream = await this.graph.stream(
+        { messages: input.messages.map(toLangChainMessage) },
+        {
+          streamMode: 'values',
+          context: {
+            ...(traceContext ?? {}),
+            streaming: true,
+            ...(signal ? { signal } : {}),
+          } as any,
+        },
       );
-      for await (const chunk of stream) {
+      let previousMessageCount = 0;
+      for await (const state of stream) {
         if (signal?.aborted) {
           throw new DOMException('The operation was aborted', 'AbortError');
         }
-        fullMessage = fullMessage ? fullMessage.concat(chunk) : chunk;
-        const text = normalizeChunkContent(chunk.content);
-        if (text) {
-          yield text;
+        const response = state.messages.at(-1);
+        if (!response || response.type !== 'ai') continue;
+        const toolCalls = asRecord(response).tool_calls;
+        const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
+        if (!hasToolCalls && state.messages.length > previousMessageCount) {
+          const text = normalizeChunkContent(response.content);
+          if (text) yield text;
+          fullMessage = response as BaseMessageChunk;
         }
+        previousMessageCount = state.messages.length;
       }
     } catch (error) {
       if (

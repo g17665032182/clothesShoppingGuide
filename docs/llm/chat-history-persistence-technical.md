@@ -4,7 +4,7 @@
 
 - 关联设计文档：[LangGraph 节点级聊天历史持久化设计](./chat-history-persistence-design.md)
 - 关联契约：[用户聊天记录 CRUD 契约](../contracts/chat-records-crud-contract.md)
-- 状态：待用户确认
+- 状态：已确认
 - 所属应用：`apps/api`
 - 技术栈：NestJS、LangChain.js、LangGraph.js、MikroORM、PostgreSQL、TypeScript
 - 最后更新：2026-10-29
@@ -199,11 +199,11 @@ type LlmTraceContext = {
 
 - 写入前递归移除或掩码键名匹配 `password`、`secret`、`token`、`apiKey`、`authorization`、`credential` 的字段。
 - 非 JSON 值先规范化；循环引用、不可序列化对象不得直接落库。
-- 对单个 payload 设序列化字节上限；超限行为暂定为拒绝该事件写入并让当前 Graph 失败，具体上限在实施前确认。
+- 单个 payload 序列化后上限为 `32768` 字节；超限时拒绝该事件写入并让当前 Graph 失败。
 - 日志不得打印 payload、完整 Prompt、工具参数、工具结果或密钥。
 - 数据库访问限定在 ChatRecords 模块内部；不新增读取 trace 的 HTTP API。
 
-以上掩码只覆盖常见凭证字段，不足以识别所有个人敏感信息。生产工具接入前应按工具的数据分类增加字段级 allowlist 或专属脱敏器。
+V1 使用常见凭证字段递归掩码。该方式不足以识别所有个人敏感信息；生产工具接入前应按工具的数据分类增加字段级 allowlist 或专属脱敏器。
 
 ## 历史消息类型转换与上下文压缩
 
@@ -216,7 +216,7 @@ type LlmTraceContext = {
 
 `ChatContextService` 需从仅支持 `{ role, content }` 的字符串模型扩展为消息项模型，按消息内容和工具参数/结果估算 token。裁剪时必须保留完整工具调用闭环：不能留下没有对应结果的 `AIMessage.tool_calls`，也不能留下没有前置调用的 `ToolMessage`。摘要失败时回退到最近的完整消息组。
 
-客户端提供的 assistant 历史仍不作为可信持久化来源；会话历史只由数据库事件重建，当前请求取最后一条 user 消息。
+客户端提供的 assistant 历史仍不作为可信持久化来源；会话历史只由数据库事件重建，当前请求取最后一条 user 消息。新会话在 Graph 开始前创建，以支持 `persistInput` 在模型前写入 trace；客户端取消时删除新会话并级联清理 trace，模型或工具失败时保留会话和已提交 trace，但不保存展示消息。
 
 ## API 和流式接口
 
@@ -235,6 +235,7 @@ type LlmTraceContext = {
 - 聚合结果包含 tool calls 时，tool-call chunks、工具名称和参数不发送给前端；服务端先持久化 `model_response`/`tool_call`，再进入 `ToolNode`。
 - `ToolNode` 完成后，`persistToolEvent` 持久化工具结果；Graph 回到模型节点并继续流式输出最终文本。
 - 工具执行期间允许没有 `delta`。只有最终模型回复完成、展示投影事务成功后才发送 `done`。
+- 工具执行期间不新增 SSE 心跳。
 - 工具参数不完整、无法解析或工具执行失败时，记录安全失败事件并发送公开 `error`，不发送工具原始参数和错误详情。
 - 客户端取消时停止后续模型和工具处理；已提交的内部事件保留，未完成的展示 assistant 消息不落库。
 
@@ -286,10 +287,10 @@ llmService.chat(
 - 使用测试数据库验证一次完整模型-工具-模型循环写入和下一轮上下文恢复。
 - 测试不依赖真实供应商密钥、真实工具服务或不可控网络。
 
-## 实施前待确认项
+## 已确认的实施决策
 
-1. 单事件 payload 序列化上限。
-2. 常见凭证字段掩码是否满足业务数据要求，或所有工具是否必须提供 allowlist。
-3. 流式工具调用暂停期间是否需要新增心跳事件；默认不新增，保持现有 SSE 契约。
+1. 单事件 payload 序列化上限为 `32768` 字节，超限拒绝写入并使 Graph 失败。
+2. V1 递归掩码常见凭证字段；按工具增加更严格的 allowlist 或专属脱敏器作为后续要求。
+3. 流式工具调用期间不新增 SSE 心跳。
 
-本技术文档因新增流式工具调用范围，回退为“待用户确认”。确认后需重新审批实施文档；代码、Entity、DTO、Migration、依赖及配置仍需等待实施文档确认。
+本技术文档已纳入用户授权确定的 payload 限制、脱敏和心跳决策；实施前须确保设计、契约和本技术文档保持一致。

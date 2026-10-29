@@ -1,26 +1,111 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  AIMessage,
+  BaseMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from '@langchain/core/messages';
 import { getEncoding } from 'js-tiktoken';
 
 import type { ChatInput } from '../llm/llm.service.js';
+import type { ChatHistoryMessage } from './chat-history.mapper.js';
 import type { ChatMessage } from './chat-message.entity.js';
 
 export type ContextPlan = {
-  messages: ChatInput['messages'];
+  messages: BaseMessage[];
   needsSummary: boolean;
   summarySource: ChatMessage[];
+  messageSummarySource?: ChatHistoryMessage[];
   lastIncludedMessageId: string | null;
   hardLimit: number;
 };
+
+type MessageGroup = {
+  items: ChatHistoryMessage[];
+  tokens: number;
+};
+
+function messageText(message: BaseMessage): string {
+  const parts = [
+    typeof message.content === 'string'
+      ? message.content
+      : JSON.stringify(message.content),
+  ];
+  if (message instanceof AIMessage && message.tool_calls?.length) {
+    parts.push(JSON.stringify(message.tool_calls));
+  }
+  if (message instanceof ToolMessage) {
+    parts.push(message.tool_call_id);
+  }
+  return parts.join('\n');
+}
+
+function toLegacyHistory(history: ChatMessage[]): ChatHistoryMessage[] {
+  return history.map((item) => ({
+    id: item.id,
+    message:
+      item.role === 'user'
+        ? new HumanMessage({ content: item.content, id: item.id })
+        : new AIMessage({ content: item.content, id: item.id }),
+  }));
+}
+
+function completeMessageGroups(history: ChatHistoryMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = [];
+  for (let index = 0; index < history.length; index += 1) {
+    const current = history[index];
+    if (!current || current.message instanceof ToolMessage) {
+      continue;
+    }
+
+    const items = [current];
+    if (
+      current.message instanceof AIMessage &&
+      current.message.tool_calls?.length
+    ) {
+      const pending = new Set(
+        current.message.tool_calls.flatMap((call) =>
+          call.id ? [call.id] : [],
+        ),
+      );
+      let cursor = index + 1;
+      while (cursor < history.length && pending.size > 0) {
+        const candidate = history[cursor];
+        if (!candidate || !(candidate.message instanceof ToolMessage)) {
+          break;
+        }
+        items.push(candidate);
+        pending.delete(candidate.message.tool_call_id);
+        cursor += 1;
+      }
+      if (pending.size > 0) {
+        continue;
+      }
+      index = cursor - 1;
+    }
+
+    groups.push({
+      items,
+      tokens: items.reduce(
+        (total, item) => total + messageText(item.message).length,
+        0,
+      ),
+    });
+  }
+  return groups;
+}
 
 @Injectable()
 export class ChatContextService {
   public constructor(private readonly configService: ConfigService) {}
 
   public prepare(input: {
-    history: ChatMessage[];
+    history?: ChatMessage[];
+    messageHistory?: ChatHistoryMessage[];
     currentUserMessage: string;
-    systemMessages: ChatInput['messages'];
+    systemMessages: Array<{ content: string }>;
     contextSummary?: string | null | undefined;
     summaryThroughMessageId?: string | null | undefined;
   }): ContextPlan {
@@ -29,24 +114,25 @@ export class ChatContextService {
     const trigger = Math.floor(inputBudget * 0.75);
     const hardLimit = Math.floor(inputBudget * 0.9);
     const recentBudget = Math.floor(inputBudget * 0.3);
-    const system = input.systemMessages.filter(
-      (message) => message.role === 'system',
+    const system = input.systemMessages.map(
+      (message) => new SystemMessage(message.content),
     );
-    const current: ChatInput['messages'][number] = {
-      role: 'user',
-      content: input.currentUserMessage,
-    };
-    const allHistory = input.history;
+    const current = new HumanMessage(input.currentUserMessage);
+    const allHistory =
+      input.messageHistory ?? toLegacyHistory(input.history ?? []);
+    const groups = completeMessageGroups(allHistory);
+    for (const group of groups) {
+      group.tokens = this.countMessages(
+        group.items.map((item) => item.message),
+      );
+    }
     const allMessages = [
       ...system,
-      ...allHistory.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      ...groups.flatMap((group) => group.items.map((item) => item.message)),
       current,
     ];
 
-    if (this.countTokens(allMessages) <= trigger) {
+    if (this.countMessages(allMessages) <= trigger) {
       return {
         messages: allMessages,
         needsSummary: false,
@@ -56,84 +142,94 @@ export class ChatContextService {
       };
     }
 
-    const recent: ChatMessage[] = [];
-    let recentTokens = this.countTokens([current]);
-    for (let index = allHistory.length - 1; index >= 0; index -= 1) {
-      const candidate = allHistory[index];
-      if (!candidate) {
-        continue;
-      }
-      const candidateTokens = this.countTokens([
-        { role: candidate.role, content: candidate.content },
-      ]);
-      if (recent.length > 0 && recentTokens + candidateTokens > recentBudget) {
+    const recent: MessageGroup[] = [];
+    let recentTokens = this.countMessages([current]);
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const candidate = groups[index];
+      if (!candidate) continue;
+      if (recent.length > 0 && recentTokens + candidate.tokens > recentBudget) {
         break;
       }
       recent.unshift(candidate);
-      recentTokens += candidateTokens;
+      recentTokens += candidate.tokens;
     }
 
     const coveredIndex = input.summaryThroughMessageId
-      ? allHistory.findIndex(
-          (message) => message.id === input.summaryThroughMessageId,
+      ? groups.findIndex((group) =>
+          group.items.some(
+            (message) => message.id === input.summaryThroughMessageId,
+          ),
         )
       : -1;
-    const firstRecentIndex =
-      recent.length > 0 && recent[0]
-        ? allHistory.indexOf(recent[0])
-        : allHistory.length;
-    const summarySource = allHistory
+    const firstRecentIndex = recent.length
+      ? groups.indexOf(recent[0]!)
+      : groups.length;
+    const messageSummarySource = groups
       .slice(coveredIndex + 1, firstRecentIndex)
-      .filter(
-        (message) => message.role === 'user' || message.role === 'assistant',
-      );
+      .flatMap((group) => group.items);
+    const summaryIds = new Set(messageSummarySource.map((item) => item.id));
+    const summarySource = (input.history ?? []).filter((item) =>
+      summaryIds.has(item.id),
+    );
 
-    const messages: ChatInput['messages'] = [
+    const messages: BaseMessage[] = [
       ...system,
       ...(input.contextSummary
-        ? [
-            {
-              role: 'user' as const,
-              content: `[历史摘要]\n${input.contextSummary}`,
-            },
-          ]
+        ? [new HumanMessage(`[历史摘要]\n${input.contextSummary}`)]
         : []),
-      ...recent.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      ...recent.flatMap((group) => group.items.map((item) => item.message)),
       current,
     ];
 
-    while (this.countTokens(messages) > hardLimit && messages.length > 1) {
-      const removableIndex = messages.findIndex(
-        (message) => message.role !== 'system' && message !== current,
-      );
-      if (removableIndex < 0) {
+    while (this.countMessages(messages) > hardLimit && recent.length > 0) {
+      const removed = recent.shift();
+      if (!removed) {
         break;
       }
-      messages.splice(removableIndex, 1);
+      const removedMessages = new Set(
+        removed.items.map((item) => item.message),
+      );
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (removedMessages.has(messages[index]!)) {
+          messages.splice(index, 1);
+        }
+      }
     }
 
     return {
       messages,
-      needsSummary: summarySource.length > 0,
+      needsSummary: messageSummarySource.length > 0,
       summarySource,
+      messageSummarySource,
       lastIncludedMessageId:
-        summarySource.at(-1)?.id ?? input.summaryThroughMessageId ?? null,
+        messageSummarySource.at(-1)?.id ??
+        input.summaryThroughMessageId ??
+        null,
       hardLimit,
     };
   }
 
+  public countMessages(messages: BaseMessage[]): number {
+    return this.countText(messages.map(messageText));
+  }
+
   public countTokens(messages: ChatInput['messages']): number {
+    return this.countText(
+      messages.map((message) =>
+        message instanceof BaseMessage ? messageText(message) : message.content,
+      ),
+    );
+  }
+
+  private countText(contents: string[]): number {
     const encodingName =
       this.configService.get<string>('LLM_TOKEN_ENCODING')?.trim() ||
       'cl100k_base';
     let encoder: ReturnType<typeof getEncoding> | undefined;
     try {
       encoder = getEncoding(encodingName as Parameters<typeof getEncoding>[0]);
-      return messages.reduce(
-        (total, message) => total + encoder!.encode(message.content).length + 4,
+      return contents.reduce(
+        (total, content) => total + encoder!.encode(content).length + 4,
         0,
       );
     } catch {

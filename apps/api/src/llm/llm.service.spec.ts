@@ -16,11 +16,7 @@ function serviceWithModel(
   model: FakeChatModel,
   config: Record<string, unknown> = { LLM_MODEL: 'fake-model' },
 ): LlmService {
-  return new LlmService(
-    createLlmGraph(model),
-    model,
-    new ConfigService(config),
-  );
+  return new LlmService(createLlmGraph(model), new ConfigService(config));
 }
 
 test('LlmService 转换消息并返回统一响应', async () => {
@@ -143,7 +139,7 @@ test('LlmService 按顺序产出流式 chunk，并在结束时聚合完整结果
     chunks.push(next.value);
   }
 
-  assert.deepEqual(chunks, ['春日', '通勤', '穿搭']);
+  assert.deepEqual(chunks, ['春日通勤穿搭']);
   assert.deepEqual(result.value, {
     content: '春日通勤穿搭',
     model: 'fake-model',

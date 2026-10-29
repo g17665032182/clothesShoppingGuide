@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ConfigService } from '@nestjs/config';
+import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 
 import { ChatContextService } from './chat-context.service.js';
+import type { ChatHistoryMessage } from './chat-history.mapper.js';
 import { ChatMessage, ChatRecordMessageRole } from './chat-message.entity.js';
 
 function createService(window = 100): ChatContextService {
@@ -57,7 +59,7 @@ test('上下文计划不会超过硬上限', () => {
     systemMessages: [],
   });
 
-  assert.equal(service.countTokens(plan.messages) <= plan.hardLimit, true);
+  assert.equal(service.countMessages(plan.messages) <= plan.hardLimit, true);
 });
 
 test('摘要截断按 Token 而不是字符计算', () => {
@@ -70,4 +72,50 @@ test('摘要截断按 Token 而不是字符计算', () => {
     ]) <= 14,
     true,
   );
+});
+
+test('裁剪历史时保留完整工具调用闭环', () => {
+  const service = createService(100);
+  const aiMessage = new AIMessage({
+    content: '',
+    tool_calls: [
+      {
+        id: 'call-weather',
+        name: 'weather',
+        args: { city: '上海' },
+        type: 'tool_call',
+      },
+    ],
+  });
+  const history: ChatHistoryMessage[] = [
+    {
+      id: 'old',
+      message: new HumanMessage('旧消息 '.repeat(100)),
+    },
+    {
+      id: 'tool-request',
+      message: aiMessage,
+    },
+    {
+      id: 'tool-result',
+      message: new ToolMessage({
+        content: '晴，24 度',
+        tool_call_id: 'call-weather',
+        name: 'weather',
+      }),
+    },
+  ];
+
+  const plan = service.prepare({
+    messageHistory: history,
+    currentUserMessage: '继续说',
+    systemMessages: [],
+  });
+  const aiIndex = plan.messages.findIndex((item) => item === aiMessage);
+  const toolIndex = plan.messages.findIndex(
+    (item) => item instanceof ToolMessage,
+  );
+
+  assert.equal(aiIndex >= 0, true);
+  assert.equal(toolIndex > aiIndex, true);
 });

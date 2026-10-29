@@ -3,16 +3,21 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 
 import { ChatDto, ChatMessageRole } from '../llm/dto/chat.dto.js';
 import { LlmService, type ChatOutput } from '../llm/llm.service.js';
+import type { LlmTraceEvent } from '../llm/trace/llm-trace.types.js';
+import { mapTraceEventsToMessages } from './chat-history.mapper.js';
 import type { User } from '../users/user.entity.js';
 import { ChatContextService } from './chat-context.service.js';
 import { ChatConversation } from './chat-conversation.entity.js';
 import { ChatMessage, ChatRecordMessageRole } from './chat-message.entity.js';
 import { ChatSummaryService } from './chat-summary.service.js';
+import { ChatTraceEvent } from './chat-trace-event.entity.js';
+import { ChatTraceWriterService } from './chat-trace-writer.service.js';
 import type { AdminChatQueryDto } from './dto/admin-chat-query.dto.js';
 import type { PaginationDto } from './dto/pagination.dto.js';
 
@@ -75,6 +80,8 @@ type PreparedChat = {
   conversation: ChatConversation | null;
   persistedConversation: ChatConversation;
   currentUserMessage: string;
+  runId: string;
+  traceWriter: ChatTraceWriterService;
   plan: ReturnType<ChatContextService['prepare']>;
   nextContextSummary: string | null | undefined;
   nextSummaryThroughMessageId: string | null | undefined;
@@ -87,16 +94,23 @@ export class ChatRecordsService {
     private readonly conversations: EntityRepository<ChatConversation>,
     @InjectRepository(ChatMessage)
     private readonly messages: EntityRepository<ChatMessage>,
+    @InjectRepository(ChatTraceEvent)
+    private readonly traceEvents: EntityRepository<ChatTraceEvent>,
     private readonly llmService: LlmService,
     private readonly contextService: ChatContextService,
     private readonly summaryService: ChatSummaryService,
+    private readonly traceWriter: ChatTraceWriterService,
   ) {}
 
   public async chat(user: User, dto: ChatDto): Promise<PersistedChatOutput> {
     const prepared = await this.prepareChat(user, dto);
-    const result = await this.llmService.chat({
-      messages: prepared.plan.messages,
-    });
+    await this.ensureConversationPersisted(prepared);
+    const result = await this.llmService.chat(
+      {
+        messages: prepared.plan.messages,
+      },
+      this.traceContext(prepared),
+    );
     await this.persistChat(prepared, result);
 
     return {
@@ -119,43 +133,60 @@ export class ChatRecordsService {
     prepared: PreparedChat,
     signal?: AbortSignal,
   ): AsyncGenerator<ChatStreamEvent> {
-    yield {
-      type: 'start',
-      conversationId: prepared.persistedConversation.id,
-      title: prepared.persistedConversation.title,
-    };
     if (signal?.aborted) {
       throw new DOMException('The operation was aborted', 'AbortError');
     }
-
-    const resultIterator = this.llmService.stream(
-      { messages: prepared.plan.messages },
-      signal,
-    );
-    let result: ChatOutput | undefined;
-    while (true) {
-      const next = await resultIterator.next();
-      if (next.done) {
-        result = next.value;
-        break;
+    await this.ensureConversationPersisted(prepared);
+    let persistedMessages = false;
+    try {
+      yield {
+        type: 'start',
+        conversationId: prepared.persistedConversation.id,
+        title: prepared.persistedConversation.title,
+      };
+      if (signal?.aborted) {
+        throw new DOMException('The operation was aborted', 'AbortError');
       }
-      if (next.value) {
-        yield { type: 'delta', content: next.value };
+
+      const resultIterator = this.llmService.stream(
+        { messages: prepared.plan.messages },
+        signal,
+        this.traceContext(prepared, signal),
+      );
+      let result: ChatOutput | undefined;
+      while (true) {
+        const next = await resultIterator.next();
+        if (next.done) {
+          result = next.value;
+          break;
+        }
+        if (next.value) {
+          yield { type: 'delta', content: next.value };
+        }
+      }
+
+      if (!result || signal?.aborted) {
+        throw new DOMException('The operation was aborted', 'AbortError');
+      }
+
+      await this.persistChat(prepared, result);
+      persistedMessages = true;
+      yield {
+        type: 'done',
+        conversationId: prepared.persistedConversation.id,
+        title: prepared.persistedConversation.title,
+        model: result.model,
+        usage: result.usage,
+      };
+    } finally {
+      if (
+        !persistedMessages &&
+        signal?.aborted &&
+        prepared.conversation === null
+      ) {
+        await this.deleteConversation(prepared.persistedConversation);
       }
     }
-
-    if (!result || signal?.aborted) {
-      throw new DOMException('The operation was aborted', 'AbortError');
-    }
-
-    await this.persistChat(prepared, result);
-    yield {
-      type: 'done',
-      conversationId: prepared.persistedConversation.id,
-      title: prepared.persistedConversation.title,
-      model: result.model,
-      usage: result.usage,
-    };
   }
 
   public async listForUser(
@@ -213,12 +244,61 @@ export class ChatRecordsService {
     const conversation = dto.conversationId
       ? await this.getOwnedConversation(user.id, dto.conversationId)
       : null;
-    const history = conversation
+    const legacyMessages = conversation
       ? await this.messages.find(
           { conversationId: conversation.id },
           { orderBy: { createdAt: 'asc' } },
         )
       : [];
+    let traceHistory = conversation
+      ? await this.traceEvents.find(
+          { conversationId: conversation.id },
+          { orderBy: { createdAt: 'asc', sequence: 'asc' } },
+        )
+      : [];
+    if (
+      conversation &&
+      traceHistory.length === 0 &&
+      legacyMessages.length > 0
+    ) {
+      const legacyRunId = '00000000-0000-4000-8000-000000000001';
+      const legacyEvents = legacyMessages.reduce<LlmTraceEvent[]>(
+        (events, message, sequence) => {
+          if (message.role === ChatRecordMessageRole.USER) {
+            events.push({
+              sequence,
+              type: 'input',
+              messageId: message.id,
+              content: message.content,
+            });
+          } else {
+            events.push({
+              sequence,
+              type: 'model_response',
+              messageId: message.id,
+              content: message.content,
+              model: message.model,
+              usage: {
+                inputTokens: message.inputTokens,
+                outputTokens: message.outputTokens,
+                totalTokens: message.totalTokens,
+              },
+            });
+          }
+          return events;
+        },
+        [],
+      );
+      await this.traceWriter.writeEvents(
+        { conversationId: conversation.id, runId: legacyRunId },
+        legacyEvents,
+      );
+      traceHistory = await this.traceEvents.find(
+        { conversationId: conversation.id },
+        { orderBy: { createdAt: 'asc', sequence: 'asc' } },
+      );
+    }
+    const history = conversation ? mapTraceEventsToMessages(traceHistory) : [];
     const systemMessages = dto.messages
       .filter((message) => message.role === ChatMessageRole.SYSTEM)
       .map((message) => ({
@@ -227,7 +307,8 @@ export class ChatRecordsService {
       }));
 
     let plan = this.contextService.prepare({
-      history,
+      history: legacyMessages,
+      messageHistory: history,
       currentUserMessage: currentUserMessage.content,
       systemMessages,
       contextSummary: conversation?.contextSummary,
@@ -239,13 +320,14 @@ export class ChatRecordsService {
     if (plan.needsSummary) {
       const summary = await this.summaryService.summarize(
         conversation?.contextSummary ?? null,
-        plan.summarySource,
+        plan.messageSummarySource ?? plan.summarySource,
       );
       if (summary && conversation) {
         nextContextSummary = summary;
         nextSummaryThroughMessageId = plan.lastIncludedMessageId;
         plan = this.contextService.prepare({
-          history,
+          history: legacyMessages,
+          messageHistory: history,
           currentUserMessage: currentUserMessage.content,
           systemMessages,
           contextSummary: summary,
@@ -260,15 +342,43 @@ export class ChatRecordsService {
         userId: user.id,
         title: this.generateConversationTitle(currentUserMessage.content),
       });
-
     return {
       conversation,
       persistedConversation,
       currentUserMessage: currentUserMessage.content,
+      runId: randomUUID(),
+      traceWriter: this.traceWriter,
       plan,
       nextContextSummary,
       nextSummaryThroughMessageId,
     };
+  }
+
+  private traceContext(prepared: PreparedChat, signal?: AbortSignal) {
+    return {
+      conversationId: prepared.persistedConversation.id,
+      runId: prepared.runId,
+      writer: prepared.traceWriter,
+      model: this.llmService.assertConfigured(),
+      ...(signal ? { signal } : {}),
+    };
+  }
+
+  private async ensureConversationPersisted(
+    prepared: PreparedChat,
+  ): Promise<void> {
+    if (prepared.conversation) return;
+    const entityManager = this.conversations.getEntityManager();
+    entityManager.persist(prepared.persistedConversation);
+    await entityManager.flush();
+  }
+
+  private async deleteConversation(
+    conversation: ChatConversation,
+  ): Promise<void> {
+    const entityManager = this.conversations.getEntityManager();
+    entityManager.remove(conversation);
+    await entityManager.flush();
   }
 
   private async persistChat(

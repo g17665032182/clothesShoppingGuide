@@ -10,10 +10,14 @@ import { PaginationDto } from './dto/pagination.dto.js';
 
 function createService(options: { failFlush?: boolean } = {}) {
   const persisted: unknown[] = [];
+  const removed: unknown[] = [];
   let flushCount = 0;
   const manager = {
     persist(value: unknown) {
       persisted.push(value);
+    },
+    remove(value: unknown) {
+      removed.push(value);
     },
     async flush() {
       flushCount += 1;
@@ -32,6 +36,9 @@ function createService(options: { failFlush?: boolean } = {}) {
     getEntityManager: () => manager,
   };
   const messageRepository = {
+    find: async () => [],
+  };
+  const traceEventRepository = {
     find: async () => [],
   };
   const llmService = {
@@ -56,15 +63,18 @@ function createService(options: { failFlush?: boolean } = {}) {
     }),
   };
   const summaryService = { summarize: async () => null };
+  const traceWriter = { writeEvents: async () => undefined };
   const service = new ChatRecordsService(
     conversationRepository as never,
     messageRepository as never,
+    traceEventRepository as never,
     llmService as unknown as LlmService,
     contextService as unknown as ChatContextService,
     summaryService as never,
+    traceWriter as never,
   );
 
-  return { service, persisted };
+  return { service, persisted, removed };
 }
 
 test('标题生成会压缩空白并按 Unicode 字符截断', () => {
@@ -106,12 +116,12 @@ test('流式聊天先产出增量，事务提交后才发送 done', async () => 
   for await (const event of events) {
     received.push(event);
     if (event.type === 'delta') {
-      assert.equal(persisted.length, 0);
+      assert.equal(persisted.length, 1);
     }
     if (event.type === 'done') {
-      assert.equal(persisted.length, 2);
-      const conversation = persisted[0] as ChatConversation;
-      const messages = persisted[1] as ChatMessage[];
+      assert.equal(persisted.length, 3);
+      const conversation = persisted[1] as ChatConversation;
+      const messages = persisted[2] as ChatMessage[];
       assert.equal(conversation.title, '你好');
       assert.deepEqual(
         messages.map((message) => [message.role, message.content]),
@@ -127,6 +137,31 @@ test('流式聊天先产出增量，事务提交后才发送 done', async () => 
     received.map((event) => event.type),
     ['start', 'delta', 'delta', 'done'],
   );
+});
+
+test('新会话在流式取消后删除，避免留下空会话', async () => {
+  const { service, removed } = createService();
+  const abortController = new AbortController();
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '你好' }],
+    } as never,
+    abortController.signal,
+  );
+
+  await assert.rejects(
+    (async () => {
+      for await (const event of events) {
+        if (event.type === 'start') {
+          abortController.abort();
+        }
+      }
+    })(),
+    { name: 'AbortError' },
+  );
+  assert.equal(removed.length, 1);
+  assert.equal((removed[0] as ChatConversation).title, '你好');
 });
 
 test('流式聊天事务失败时不会发送 done', async () => {
