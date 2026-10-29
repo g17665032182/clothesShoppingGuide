@@ -1,5 +1,9 @@
 import type { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
-import { AIMessage, AIMessageChunk } from '@langchain/core/messages';
+import {
+  AIMessage,
+  AIMessageChunk,
+  type ToolCall,
+} from '@langchain/core/messages';
 import type { BaseMessage } from '@langchain/core/messages';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { UsageMetadata } from '@langchain/core/messages';
@@ -7,6 +11,10 @@ import { ChatGenerationChunk, type ChatResult } from '@langchain/core/outputs';
 
 export type FakeChatModelOptions = {
   response?: string;
+  responses?: Array<{
+    response: string;
+    toolCalls?: ToolCall[];
+  }>;
   chunks?: string[];
   usage?: UsageMetadata;
   responseMetadata?: Record<string, unknown>;
@@ -23,6 +31,10 @@ export class FakeChatModel extends BaseChatModel {
   public readonly calls: BaseMessage[][] = [];
 
   private readonly response: string;
+  private readonly responses: Array<{
+    response: string;
+    toolCalls?: ToolCall[];
+  }>;
   private readonly chunks: string[];
   private readonly usage?: FakeChatModelOptions['usage'];
   private readonly responseMetadata: Record<string, unknown> | undefined;
@@ -33,12 +45,17 @@ export class FakeChatModel extends BaseChatModel {
   public constructor(options: FakeChatModelOptions = {}) {
     super({});
     this.response = options.response ?? 'fake response';
+    this.responses = options.responses ? [...options.responses] : [];
     this.chunks = options.chunks ?? [this.response];
     this.usage = options.usage;
     this.responseMetadata = options.responseMetadata;
     this.error = options.error;
     this.streamError = options.streamError;
     this.delayMs = options.delayMs ?? 0;
+  }
+
+  public bindTools(_tools: unknown[]): this {
+    return this;
   }
 
   public _llmType(): string {
@@ -62,7 +79,13 @@ export class FakeChatModel extends BaseChatModel {
       throw this.error;
     }
 
-    const message = new AIMessage(this.response);
+    const scriptedResponse = this.responses.shift();
+    const message = new AIMessage({
+      content: scriptedResponse?.response ?? this.response,
+      ...(scriptedResponse?.toolCalls
+        ? { tool_calls: scriptedResponse.toolCalls }
+        : {}),
+    });
     if (this.usage) {
       // 默认 AIMessage 泛型未声明 usage_metadata，测试替身在这里补充供应商元数据。
       (
@@ -76,7 +99,7 @@ export class FakeChatModel extends BaseChatModel {
     return {
       generations: [
         {
-          text: this.response,
+          text: typeof message.content === 'string' ? message.content : '',
           message,
         },
       ],

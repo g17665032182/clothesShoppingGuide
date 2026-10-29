@@ -14,11 +14,11 @@
 按照设计文档和技术文档，完成一个独立的 `LlmModule`：
 
 - 使用 LangChain.js 调用 Chat Model。
-- 使用 LangGraph.js 编排 `START -> chatModel -> END` 单节点流程。
+- 使用 LangGraph.js 编排 `chatModel -> ToolNode -> chatModel` 工具调用闭环。
 - 提供受 JWT 保护的 `POST /api/llm/chat`。
 - 统一配置、响应、Token 使用量和异常处理。
 - 增加不依赖真实 API Key 的自动化测试。
-- 不引入数据库表、业务领域依赖、RAG、Agent 或持久化会话。
+- 不引入数据库表、业务领域依赖、RAG、Agent 或持久化会话；具体业务工具由调用方注入。
 
 本次实施必须使用子代理完成分工，主代理不得把全部实现集中在一个代理任务中。
 

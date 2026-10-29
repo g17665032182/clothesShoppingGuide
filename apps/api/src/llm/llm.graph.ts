@@ -1,6 +1,15 @@
+/*
+ * @Date: 2026-10-27 15:05:25
+ * @LastEditors: shiyu 625991037@qq.com
+ * @LastEditTime: 2026-10-29 13:57:04
+ * @FilePath: /clothesShoppingGuide/apps/api/src/llm/llm.graph.ts
+ * @Description:
+ */
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseMessage } from '@langchain/core/messages';
+import type { ClientTool } from '@langchain/core/tools';
 import { END, START, StateGraph } from '@langchain/langgraph';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
 
 import {
   LlmState,
@@ -29,6 +38,15 @@ function pickNumber(source: UnknownRecord, keys: string[]): number | null {
     }
   }
   return null;
+}
+
+export type LlmTool = ClientTool;
+
+function routeAfterChatModel(state: LlmStateValue): 'tools' | typeof END {
+  const lastMessage = state.messages.at(-1);
+  const toolCalls = asRecord(lastMessage).tool_calls;
+
+  return Array.isArray(toolCalls) && toolCalls.length > 0 ? 'tools' : END;
 }
 
 /**
@@ -63,19 +81,30 @@ export function normalizeUsage(message: BaseMessage): LlmUsage | undefined {
     : undefined;
 }
 
-export function createLlmGraph(model: BaseChatModel) {
+export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
+  const modelWithTools =
+    tools.length > 0
+      ? model.bindTools
+        ? model.bindTools(tools)
+        : (() => {
+            throw new Error('当前 Chat Model 不支持工具调用');
+          })()
+      : model;
+
   const chatModelNode = async (
     state: LlmStateValue,
   ): Promise<LlmStateUpdate> => {
-    // 当前节点只负责调用模型，业务判断留给后续独立节点。
-    const response = await model.invoke(state.messages);
+    // 模型节点只负责决策；工具执行交给 LangGraph 官方 ToolNode。
+    const response = await modelWithTools.invoke(state.messages);
     const usage = normalizeUsage(response);
     return usage ? { messages: [response], usage } : { messages: [response] };
   };
 
   return new StateGraph(LlmState)
     .addNode('chatModel', chatModelNode)
+    .addNode('tools', new ToolNode(tools))
     .addEdge(START, 'chatModel')
-    .addEdge('chatModel', END)
+    .addConditionalEdges('chatModel', routeAfterChatModel, ['tools', END])
+    .addEdge('tools', 'chatModel')
     .compile();
 }

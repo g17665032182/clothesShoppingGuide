@@ -3,7 +3,7 @@
 ## 文档信息
 
 - 关联设计文档：[通用大模型模块设计](./llm-module-design.md)
-- 状态：待实现
+- 状态：已实现（工具由调用方注入，当前未内置业务工具）
 - 所属应用：`apps/api`
 - 技术栈：NestJS、LangChain.js、LangGraph.js、TypeScript
 - 最后更新：2026-10-27
@@ -165,17 +165,19 @@ export type LlmStateUpdate = typeof LlmState.Update;
 
 ## Graph 构建
 
-`llm.graph.ts` 接收一个 LangChain Chat Model，创建并编译单节点 Graph：
+`llm.graph.ts` 接收一个 LangChain Chat Model 和可选工具列表，创建并编译模型节点与 `ToolNode`：
 
 ```ts
 import { END, START, StateGraph, type GraphNode } from '@langchain/langgraph';
 
 import { LlmState } from './llm.state.js';
 
-export const createLlmGraph = (model: BaseChatModel) => {
+export const createLlmGraph = (model: BaseChatModel, tools: LlmTool[] = []) => {
+  const modelWithTools =
+    tools.length > 0 ? (model.bindTools?.(tools) ?? model) : model;
+
   const chatModelNode: GraphNode<typeof LlmState> = async (state) => {
-    // 当前节点只负责调用模型，业务判断留给后续独立节点。
-    const response = await model.invoke(state.messages);
+    const response = await modelWithTools.invoke(state.messages);
     return {
       messages: [response],
       usage: normalizeUsage(response),
@@ -184,13 +186,15 @@ export const createLlmGraph = (model: BaseChatModel) => {
 
   return new StateGraph(LlmState)
     .addNode('chatModel', chatModelNode)
+    .addNode('tools', new ToolNode(tools))
     .addEdge(START, 'chatModel')
-    .addEdge('chatModel', END)
+    .addConditionalEdges('chatModel', routeAfterChatModel, ['tools', END])
+    .addEdge('tools', 'chatModel')
     .compile();
 };
 ```
 
-实际代码需要根据 LangChain 返回消息的类型导入 `AIMessage` 或通用消息类型，并将 `normalizeUsage` 放在 Graph 内部的纯函数中。
+`routeAfterChatModel` 根据最后一条 AI 消息是否存在 `tool_calls` 返回 `tools` 或 `END`。`ToolNode` 负责校验并执行工具调用，工具执行结果以 `ToolMessage` 追加回 Graph 状态。
 
 Graph 的输入只包含本次调用的消息，Graph 的输出包含最终消息和可选 Token 使用量。由于没有 Checkpointer，调用之间不会共享状态。
 

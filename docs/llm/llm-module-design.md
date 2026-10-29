@@ -2,7 +2,7 @@
 
 ## 状态与上下文
 
-- 状态：范围已确认，待实现
+- 状态：已实现（工具由调用方注入，当前未内置业务工具）
 - 模块名称：`LlmModule`
 - 业务定位：为 API 提供统一的大模型文本调用能力
 - 技术栈：NestJS、LangChain.js、LangGraph.js、TypeScript
@@ -17,7 +17,7 @@
 - 使用 LangGraph 编排一次最小模型调用流程。
 - 通过 NestJS Module、Service 和 Controller 对外提供能力。
 - 统一模型配置、错误处理和响应格式。
-- 为后续增加结构化输出、工具调用、流式输出和多节点流程保留扩展边界。
+- 支持通过 LangGraph `ToolNode` 执行调用方注入的工具，并保持工具与业务模块解耦。
 
 ## 明确不包含
 
@@ -26,7 +26,7 @@
 - 对话记录持久化和数据库表。
 - 用户画像、商品、穿搭或其他业务逻辑。
 - RAG、向量数据库和 Embedding。
-- Agent、自主规划和工具调用。
+- Agent 自主规划和内置业务工具。
 - 多模型路由和自动降级。
 - 流式输出。
 - 前端页面。
@@ -95,16 +95,17 @@ LlmService
         |
         v
 LangGraph
-  START -> chatModel -> END
-                    |
-                    v
-              LangChain Chat Model
-                    |
-                    v
-                模型供应商
+  START -> chatModel --无工具调用--> END
+                  \--有工具调用--> tools -> chatModel
+                                      |
+                                      v
+                                LangChain Chat Model
+                                      |
+                                      v
+                                  模型供应商
 ```
 
-第一版的 Graph 只有一个 `chatModel` 节点。保留 Graph 层是为了让后续增加输入校验、Prompt 处理、结构化输出和工具节点时，不需要重写 Service 接口。
+Graph 由 `chatModel` 和 LangGraph 官方 `ToolNode` 组成。模型返回工具调用时进入 `ToolNode`，工具结果追加到消息状态后再次调用模型；模型返回普通回答时结束。具体工具通过 `createLlmGraph(model, tools)` 注入，通用模块不创建商品、穿搭等领域工具。
 
 ## LangGraph 状态
 
@@ -239,12 +240,13 @@ Controller 只依赖 `LlmService`。Graph、Chat Model 和供应商配置都属�
 
 - [ ] `LlmModule` 已注册到 `AppModule`。
 - [ ] LangChain Chat Model 能从环境变量创建。
-- [ ] LangGraph 单节点流程已编译并可执行。
+- [x] LangGraph 模型节点、工具节点和条件路由已编译并可执行。
+- [x] 工具调用结果会回到模型节点生成最终回答。
 - [ ] `POST /api/llm/chat` 已实现并受 JWT 保护。
 - [ ] 请求 DTO、响应格式和错误行为符合本设计。
 - [ ] API Key 不接受客户端传入，也不会出现在日志和异常响应中。
 - [ ] 没有新增业务数据库表。
-- [ ] 没有引入商品、穿搭、RAG、Agent 或持久化会话逻辑。
+- [x] 没有引入商品、穿搭、RAG、Agent 或持久化会话逻辑。
 - [ ] 已补充使用假模型的自动化测试。
 - [ ] `pnpm check` 和所属包测试通过。
 
@@ -253,9 +255,9 @@ Controller 只依赖 `LlmService`。Graph、Chat Model 和供应商配置都属�
 后续如果确实需要，可以在不改变 `LlmService` 基础边界的前提下增加：
 
 - `withStructuredOutput()` 结构化输出。
+- 更多业务工具和工具权限控制。
 - LangGraph 多节点流程。
 - SSE 流式响应。
-- 工具调用和 Agent。
 - 会话持久化。
 - 多供应商和模型路由。
 
