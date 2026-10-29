@@ -21,9 +21,13 @@ import {
 } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from '@/components/ui/native-select';
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import {
   Table,
@@ -150,16 +154,25 @@ function updateRole(user: User, value: unknown) {
               </div>
             </TableCell>
             <TableCell>
-              <NativeSelect
+              <Select
                 :disabled="updatingUserId === user.id"
                 :model-value="user.role"
-                size="sm"
-                :aria-label="`设置 ${user.displayName} 的角色`"
                 @update:model-value="updateRole(user, $event)"
               >
-                <NativeSelectOption value="user">用户</NativeSelectOption>
-                <NativeSelectOption value="admin">管理员</NativeSelectOption>
-              </NativeSelect>
+                <SelectTrigger
+                  :aria-label="`设置 ${user.displayName} 的角色`"
+                  class="w-[96px]"
+                  size="sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="user">用户</SelectItem>
+                    <SelectItem value="admin">管理员</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </TableCell>
             <TableCell>
               <Badge
