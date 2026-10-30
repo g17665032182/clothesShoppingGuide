@@ -45,7 +45,7 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   await auth.hydrate();
   if (to.meta.guestOnly && auth.isAuthenticated.value) {
-    return auth.isAdmin.value ? '/admin/users' : '/account';
+    return '/chat';
   }
   if (to.meta.requiresAuth && !auth.isAuthenticated.value) {
     return { path: '/login', query: { redirect: to.fullPath } };

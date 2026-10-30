@@ -19,10 +19,11 @@ export function useAuthPage() {
     try {
       if (isRegister.value) {
         await auth.register(email.value, password.value, displayName.value);
+        await router.push('/account');
       } else {
         await auth.signIn(email.value, password.value);
+        await router.push('/chat');
       }
-      await router.push(auth.isAdmin.value ? '/admin/users' : '/account');
     } catch (cause) {
       error.value =
         cause instanceof ApiError && cause.status === 409
