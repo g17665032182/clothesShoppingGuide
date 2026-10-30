@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
@@ -9,7 +10,12 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { AuthService } from '../service/auth.service.js';
@@ -17,14 +23,28 @@ import { CurrentUser } from '../decorator/current-user.decorator.js';
 import { Public } from '../decorator/public.decorator.js';
 import { LoginDto } from '../dto/login.dto.js';
 import { RegisterDto } from '../dto/register.dto.js';
+import { CaptchaService } from '../captcha/service/captcha.service.js';
+import { CaptchaResponseDto } from '../captcha/dto/captcha-response.dto.js';
 import { User } from '../../users/entity/user.entity.js';
 
 @Controller('auth')
 @ApiTags('认证')
 export class AuthController {
-  public constructor(private readonly authService: AuthService) {}
+  public constructor(
+    private readonly authService: AuthService,
+    private readonly captchaService: CaptchaService,
+  ) {}
 
   private readonly refreshCookieName = 'clothes-guide.refresh-token';
+
+  @Public()
+  @Get('captcha')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: '获取登录图片验证码' })
+  @ApiOkResponse({ type: CaptchaResponseDto })
+  public getCaptcha(): Promise<CaptchaResponseDto> {
+    return this.captchaService.issueLoginChallenge();
+  }
 
   @Public()
   @Post('register')

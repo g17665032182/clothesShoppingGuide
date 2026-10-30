@@ -8,6 +8,7 @@ import { User } from '../users/entity/user.entity.js';
 import { UsersModule } from '../users/users.module.js';
 import { RolesGuard } from '../authorization/guard/roles.guard.js';
 import { AuthController } from './controller/auth.controller.js';
+import { CaptchaModule } from './captcha/captcha.module.js';
 import { RefreshSession } from './entity/refresh-session.entity.js';
 import { AuthService } from './service/auth.service.js';
 import { JwtAuthGuard } from './guard/jwt-auth.guard.js';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from './guard/jwt-auth.guard.js';
 @Module({
   imports: [
     ConfigModule,
+    CaptchaModule,
     UsersModule,
     MikroOrmModule.forFeature([User, RefreshSession]),
     JwtModule.registerAsync({

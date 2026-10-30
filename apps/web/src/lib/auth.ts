@@ -28,8 +28,18 @@ export const auth = {
   isAuthenticated: computed(() => Boolean(state.token && state.user)),
   isAdmin: computed(() => state.user?.role === 'admin'),
 
-  async signIn(email: string, password: string) {
-    const response = await signIn({ email, password });
+  async signIn(
+    email: string,
+    password: string,
+    captchaChallengeId: string,
+    captchaAnswer: string,
+  ) {
+    const response = await signIn({
+      email,
+      password,
+      captchaChallengeId,
+      captchaAnswer,
+    });
     this.setSession(response);
   },
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlertCircle } from '@lucide/vue';
+import { AlertCircle, RefreshCw } from '@lucide/vue';
 import { cn } from 'cn';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -22,8 +22,20 @@ import { Spinner } from '@/components/ui/spinner';
 import AuthBrandPanel from './components/AuthBrandPanel.vue';
 import { useAuthPage } from './page';
 
-const { displayName, email, error, isRegister, password, pending, submit } =
-  useAuthPage();
+const {
+  captchaAnswer,
+  captchaCountdown,
+  captchaImage,
+  captchaPending,
+  displayName,
+  email,
+  error,
+  isRegister,
+  password,
+  pending,
+  refreshCaptcha,
+  submit,
+} = useAuthPage();
 </script>
 
 <template>
@@ -120,6 +132,53 @@ const { displayName, email, error, isRegister, password, pending, submit } =
               <FieldDescription v-if="isRegister">
                 密码长度需要在 8 到 128 个字符之间。
               </FieldDescription>
+            </Field>
+
+            <Field v-if="!isRegister">
+              <FieldLabel for="auth-captcha">验证码</FieldLabel>
+              <div class="flex items-center gap-3">
+                <img
+                  v-if="captchaImage"
+                  :src="captchaImage"
+                  alt="登录验证码"
+                  class="h-10 w-[150px] shrink-0 rounded-md border bg-white object-contain"
+                />
+                <Button
+                  :aria-label="captchaImage ? '刷新验证码' : '获取验证码'"
+                  class="shrink-0"
+                  :disabled="pending || captchaPending || captchaCountdown > 0"
+                  :size="captchaImage ? 'icon' : 'default'"
+                  :title="captchaImage ? '刷新验证码' : '获取验证码'"
+                  type="button"
+                  variant="outline"
+                  @click="refreshCaptcha"
+                >
+                  <Spinner v-if="captchaPending" />
+                  <RefreshCw v-else aria-hidden="true" />
+                  <span v-if="!captchaImage">
+                    {{ captchaPending ? '正在获取' : '获取验证码' }}
+                  </span>
+                </Button>
+              </div>
+              <div class="flex items-center gap-3">
+                <Input
+                  id="auth-captcha"
+                  v-model.trim="captchaAnswer"
+                  autocomplete="off"
+                  inputmode="text"
+                  maxlength="5"
+                  minlength="1"
+                  placeholder="输入图片中的字符"
+                  required
+                />
+                <span
+                  class="w-20 shrink-0 text-right text-xs text-muted-foreground"
+                >
+                  {{
+                    captchaCountdown > 0 ? `${captchaCountdown} 秒后获取` : ''
+                  }}
+                </span>
+              </div>
             </Field>
           </FieldGroup>
 

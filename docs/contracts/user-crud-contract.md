@@ -2,7 +2,7 @@
 
 ## 状态与上下文
 
-- 状态：已确认
+- 状态：已确认并实现（登录验证码范围、技术方案及 60 秒获取倒计时）
 - 资源名称：用户（User）
 - 业务目的：提供注册、登录、当前用户资料和管理员用户管理能力。
 - 需求来源：用户要求“使用 SDD，做一个用户模块，要做好鉴权”。
@@ -10,11 +10,11 @@
 - 涉及模块：`apps/api/src/users`、`apps/api/src/auth`、数据库迁移和 Seeder。
 - 当前框架、ORM、数据库及版本：NestJS 12.2、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3。
 - 已阅读的相似模块和文档：NestJS JWT Guard 官方示例、MikroORM Entity/Repository 官方文档、项目 `nestjs-mikroorm-crud` 技能契约。
-- 最后更新：2026-10-27
+- 最后更新：2026-10-30
 
 ## 范围
 
-- 包含的操作：注册、登录、刷新 Token、退出登录、查询当前用户、更新当前用户、管理员查询/更新/禁用用户。
+- 包含的操作：注册、登录（增加图片验证码）、获取登录验证码、刷新 Token、退出登录、查询当前用户、更新当前用户、管理员查询/更新/禁用用户。
 - 明确不包含：邮箱验证、密码找回、多因素认证、第三方登录。
 - 路由前缀或版本约定：全局前缀为 `/api`；认证路由为 `/api/auth`，用户路由为 `/api/users`。
 
@@ -35,19 +35,20 @@
 
 ## API 契约
 
-| 操作         | 方法与路由                | 请求 DTO/参数        | 响应形状                | 认证/授权  | 状态码与错误行为                       |
-| ------------ | ------------------------- | -------------------- | ----------------------- | ---------- | -------------------------------------- |
-| 注册         | `POST /api/auth/register` | `RegisterDto`        | `{ accessToken, user }` | 公开       | `201`；邮箱重复返回 `409`              |
-| 登录         | `POST /api/auth/login`    | `LoginDto`           | `{ accessToken, user }` | 公开       | `200`；凭据错误返回 `401`              |
-| 刷新 Token   | `POST /api/auth/refresh`  | HttpOnly Cookie      | `{ accessToken, user }` | 公开       | `200`；Cookie 无效或过期返回 `401`     |
-| 退出登录     | `POST /api/auth/logout`   | HttpOnly Cookie      | 无                      | 公开       | `204`；撤销当前 Refresh Token          |
-| 当前用户     | `GET /api/auth/me`        | 无                   | `UserResponse`          | Bearer JWT | `200`；缺失/无效/禁用 Token 返回 `401` |
-| 当前资料     | `GET /api/users/me`       | 无                   | `UserResponse`          | Bearer JWT | `200`；未认证返回 `401`                |
-| 更新当前资料 | `PATCH /api/users/me`     | `UpdateProfileDto`   | `UserResponse`          | Bearer JWT | `200`；非法输入返回 `400`              |
-| 用户列表     | `GET /api/users`          | 无                   | `UserResponse[]`        | 管理员     | `200`；非管理员返回 `403`              |
-| 用户详情     | `GET /api/users/:id`      | UUID 路径参数        | `UserResponse`          | 管理员     | `200`；不存在返回 `404`                |
-| 管理员更新   | `PATCH /api/users/:id`    | `AdminUpdateUserDto` | `UserResponse`          | 管理员     | `200`；不存在返回 `404`                |
-| 管理员禁用   | `DELETE /api/users/:id`   | UUID 路径参数        | `UserResponse`          | 管理员     | `200`；不存在返回 `404`                |
+| 操作         | 方法与路由                | 请求 DTO/参数                                          | 响应形状                                                               | 认证/授权  | 状态码与错误行为                       |
+| ------------ | ------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------- | ---------- | -------------------------------------- |
+| 注册         | `POST /api/auth/register` | `RegisterDto`                                          | `{ accessToken, user }`                                                | 公开       | `201`；邮箱重复返回 `409`              |
+| 图片验证码   | `GET /api/auth/captcha`   | 无                                                     | `{ challengeId, imageData, type: 'image' }`，imageData 为 SVG data URI | 公开       | `200`；生成失败返回通用服务错误        |
+| 登录         | `POST /api/auth/login`    | `LoginDto`（含 `captchaChallengeId`、`captchaAnswer`） | `{ accessToken, user }`                                                | 公开       | `200`；凭据或验证码无效返回认证错误    |
+| 刷新 Token   | `POST /api/auth/refresh`  | HttpOnly Cookie                                        | `{ accessToken, user }`                                                | 公开       | `200`；Cookie 无效或过期返回 `401`     |
+| 退出登录     | `POST /api/auth/logout`   | HttpOnly Cookie                                        | 无                                                                     | 公开       | `204`；撤销当前 Refresh Token          |
+| 当前用户     | `GET /api/auth/me`        | 无                                                     | `UserResponse`                                                         | Bearer JWT | `200`；缺失/无效/禁用 Token 返回 `401` |
+| 当前资料     | `GET /api/users/me`       | 无                                                     | `UserResponse`                                                         | Bearer JWT | `200`；未认证返回 `401`                |
+| 更新当前资料 | `PATCH /api/users/me`     | `UpdateProfileDto`                                     | `UserResponse`                                                         | Bearer JWT | `200`；非法输入返回 `400`              |
+| 用户列表     | `GET /api/users`          | 无                                                     | `UserResponse[]`                                                       | 管理员     | `200`；非管理员返回 `403`              |
+| 用户详情     | `GET /api/users/:id`      | UUID 路径参数                                          | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                |
+| 管理员更新   | `PATCH /api/users/:id`    | `AdminUpdateUserDto`                                   | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                |
+| 管理员禁用   | `DELETE /api/users/:id`   | UUID 路径参数                                          | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                |
 
 ## 查询、权限与数据行为
 
@@ -61,6 +62,10 @@
 - 并发更新或事务要求：单次用户写操作由 MikroORM flush 在事务中提交。
 - 唯一约束冲突、资源不存在、无权限和非法输入的响应约定：分别为 `409`、`404`、`403`、`400`；认证失败为 `401`。
 - 迁移、历史数据和兼容性要求：新增 `users` 表；Seeder 创建幂等的管理员账号。
+- 登录验证码仅应用于登录，不影响注册和已有 Refresh Token 流程；任何验证码失败都不得创建会话。
+- 登录页首次进入不请求、不展示验证码图片；用户点击获取或刷新成功后进入 60 秒冷却倒计时，期间禁止重复获取。登录失败后清空已消费的验证码，不自动换图、不重置已有倒计时，由用户再次点击获取；该页面倒计时不替代服务端限流。
+- 图片验证码答案不得由客户端决定或通过接口明文返回；挑战有效期为 5 分钟，第一次提交即一次性消费，挑战存储在认证模块私有内存中。
+- 验证码验证能力使用 Provider/适配器扩展入口，图片 Provider 采用 `svg-captcha`，未来可接入第三方服务；本阶段不增加服务端频率限制，部署按单 API 实例处理。
 
 ## 实现映射
 
@@ -75,13 +80,22 @@
 
 ## 待确认问题与决策记录
 
-无。未覆盖的高级认证能力（邮箱验证、找回密码）明确留在后续范围。
+- [x] 验证码挑战有效期为 5 分钟，第一次提交即消费，无论成功或失败。
+- [x] 首次进入不加载图片，用户点击获取或刷新成功后倒计时 60 秒，获取按钮在倒计时期间禁用，页面卸载后重置。
+- [x] 挑战存储采用认证模块私有内存，当前部署按单 API 实例处理。
+- [x] 本阶段不增加验证码与登录接口服务端频率限制。
+- [x] 图片响应为 SVG data URI，登录字段为 `captchaChallengeId` 和 `captchaAnswer`，错误按技术文档处理。
+- [x] 通过 Provider/适配器替换图片实现，第三方供应商留待后续需求。
+- 既有契约中不涉及验证码的注册、Token 刷新、退出和用户管理行为保持不变。
 
 ## 验收清单
 
 - [x] Entity、DTO、迁移和响应字段与字段契约一致。
-- [x] 注册、登录、当前用户和管理员用户管理路由已实现。
+- [x] 注册、当前用户和管理员用户管理路由已实现。
+- [x] 图片验证码获取及带验证码登录契约已确认并实现。
 - [x] 输入校验、公开/认证/管理员授权已实现。
 - [x] 邮箱冲突、资源不存在、无权限和禁用行为已覆盖。
 - [ ] 已连接本地 PostgreSQL 完成端到端迁移和 HTTP 验证。
 - [x] 已执行并记录类型检查、构建和格式检查。
+
+> 登录验证码设计、技术方案及实施见[登录验证码文档](../auth/login-captcha-design.md)。

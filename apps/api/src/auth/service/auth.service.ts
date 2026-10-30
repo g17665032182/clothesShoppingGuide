@@ -12,6 +12,7 @@ import { compare, hash } from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 
 import { LoginDto } from '../dto/login.dto.js';
+import { CaptchaService } from '../captcha/service/captcha.service.js';
 import { RegisterDto } from '../dto/register.dto.js';
 import { RefreshSession } from '../entity/refresh-session.entity.js';
 import { User, UserRole, UserStatus } from '../../users/entity/user.entity.js';
@@ -26,6 +27,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly em: EntityManager,
     private readonly usersService: UsersService,
+    private readonly captchaService: CaptchaService,
     @InjectRepository(User)
     private readonly users: EntityRepository<User>,
     @InjectRepository(RefreshSession)
@@ -54,6 +56,14 @@ export class AuthService {
   }
 
   public async login(dto: LoginDto): Promise<AuthSession> {
+    const captchaValid = await this.captchaService.verifyLoginAnswer(
+      dto.captchaChallengeId,
+      dto.captchaAnswer,
+    );
+    if (!captchaValid) {
+      throw new BadRequestException('验证码错误或已失效，请刷新后重试');
+    }
+
     const user = await this.usersService.findByEmail(dto.email);
     if (
       !user ||

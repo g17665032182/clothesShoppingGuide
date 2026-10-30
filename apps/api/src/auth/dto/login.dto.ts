@@ -23,4 +23,24 @@ export class LoginDto {
   @MinLength(8)
   @MaxLength(128)
   public password!: string;
+
+  @ApiProperty({
+    description: '图片验证码挑战 ID',
+    minLength: 1,
+    maxLength: 64,
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  public captchaChallengeId!: string;
+
+  @ApiProperty({
+    description: '图片验证码答案',
+    minLength: 1,
+    maxLength: 5,
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5)
+  public captchaAnswer!: string;
 }

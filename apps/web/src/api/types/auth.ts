@@ -4,6 +4,15 @@ import type { User } from './users';
 export interface LoginPayload {
   email: string;
   password: string;
+  captchaChallengeId: string;
+  captchaAnswer: string;
+}
+
+/** 登录图片验证码响应。 */
+export interface CaptchaResponse {
+  challengeId: string;
+  imageData: string;
+  type: 'image';
 }
 
 /** 注册接口请求参数。 */

@@ -1,6 +1,7 @@
 import { apiRequest } from '@/api';
 import type {
   AuthResponse,
+  CaptchaResponse,
   LoginPayload,
   RegisterPayload,
 } from '@/api/types/auth';
@@ -11,6 +12,13 @@ export function signIn(payload: LoginPayload): Promise<AuthResponse> {
   return apiRequest<AuthResponse>('/auth/login', {
     method: 'POST',
     data: payload,
+  });
+}
+
+/** 获取登录图片验证码，响应包含短期挑战 ID 和 SVG data URI。 */
+export function getCaptcha(signal?: AbortSignal): Promise<CaptchaResponse> {
+  return apiRequest<CaptchaResponse>('/auth/captcha', {
+    signal,
   });
 }
 
