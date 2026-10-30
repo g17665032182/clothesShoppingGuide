@@ -60,10 +60,6 @@ body {
   margin: 0;
 }
 
-a {
-  color: inherit;
-}
-
 button,
 input,
 select {
@@ -279,6 +275,12 @@ a {
   * {
     @apply border-border outline-ring/50;
   }
+
+  /* 放入基础层，避免覆盖 shadcn-vue 按钮的语义文字颜色。 */
+  a {
+    color: inherit;
+  }
+
   body {
     @apply bg-background text-foreground;
   }
