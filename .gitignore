@@ -19,3 +19,9 @@ coverage/
 .idea/
 .vscode/
 .agents/
+!.agents/
+!.agents/skills/
+!.agents/skills/module-development-workflow/
+!.agents/skills/module-development-workflow/SKILL.md
+!.agents/skills/nestjs-mikroorm-crud/
+!.agents/skills/nestjs-mikroorm-crud/SKILL.md

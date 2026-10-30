@@ -144,8 +144,15 @@
 ## 后端开发规范
 
 1. 后端业务代码统一放在 `apps/api/src/`，每个业务能力使用独立模块，例如 `users/`、`auth/`、`chat-records/` 和 `llm/`。
-2. 业务模块必须保持高内聚、低耦合。模块内部维护自己的 Controller、Service、Entity、DTO 和辅助组件，禁止跨模块引用私有实现。
-3. 业务模块的 Controller、Service、Module 和 Entity 放在模块根目录；同类辅助组件按职责放入模块子目录，目录使用单数命名：
+2. 业务模块必须保持高内聚、低耦合。模块内部维护自己的 Controller、Service、Entity、DTO、测试和辅助组件，禁止跨模块引用私有实现。
+3. 业务模块根目录应保持精简，只放模块入口及少量必要的根级文件。Controller、Service、Entity、DTO 和测试分别放入所属业务模块自己的职责目录；禁止建立跨业务模块共享的全局 `entity/` 或 `spec/` 目录：
+   - `controller/*.controller.ts`
+   - `service/*.service.ts`
+   - `entity/*.entity.ts`
+   - `dto/*.dto.ts`
+   - `spec/*.spec.ts`
+4. 业务子能力有多个紧密协作文件时，可使用表达业务意图的子目录，例如 `context/`、`history/`、`trace/`；不要为单个文件机械创建目录，也不要把不同职责都塞进一个 Service。拆分以提升职责清晰度和内聚性为准，不以目录数量为目标。
+5. 同类通用辅助组件按职责放入所属业务模块子目录，目录使用单数命名：
    - `dto/*.dto.ts`
    - `guard/*.guard.ts`
    - `decorator/*.decorator.ts`
@@ -153,24 +160,24 @@
    - `interceptor/*.interceptor.ts`
    - `filter/*.filter.ts`
    - `middleware/*.middleware.ts`
-4. `Controller` 只负责 HTTP 层工作，包括接收参数、使用 DTO、读取当前用户、调用 Service 和返回响应，不得编写数据库查询或复杂业务逻辑。
-5. `Service` 负责业务规则、权限前置判断、数据转换、事务编排和业务异常。
-6. `Entity` 只表达数据库结构、字段约束、索引和关联关系，不在 Entity 中编写业务流程。
-7. 每种请求定义独立 DTO，包括创建、更新、查询和管理员操作 DTO。DTO 必须配合全局 `ValidationPipe` 使用，禁止依赖 Controller 内部手动校验。
-8. 请求模型、响应模型和数据库 Entity 必须分离。禁止直接返回 Entity；Service 或 Mapper 必须转换为安全的响应对象，密码、密码哈希、Refresh Token 和内部字段不得返回。
-9. 所有数据库访问统一使用 MikroORM Repository 或 EntityManager，不得在 Controller 中直接操作数据库。
-10. 涉及多表写入、状态切换或一致性要求的操作必须使用事务，例如聊天记录保存和 Refresh Token 轮换。
-11. 新增或修改资源、字段、索引、关联或 API 行为前，必须先创建并更新 `docs/contracts/<resource>-crud-contract.md`，记录字段、校验、权限、响应、错误、迁移和验收约定。
-12. 契约中影响数据结构、授权、兼容性或 API 行为的歧义必须先标记为“待确认”。未确认前，不得创建或修改 Entity、DTO、Guard、Decorator、Pipe 或数据库迁移。
-13. Entity 发生变化时必须创建并审查 Migration，检查 SQL、索引、外键和历史数据兼容性，并执行迁移验证。
-14. 禁止为了验证普通功能随意执行 `migration:fresh`；该命令只能用于明确可销毁的本地或 CI 数据库。
-15. 认证和授权统一复用现有 JWT Guard、`@Public()`、`@CurrentUser()`、`RolesGuard` 和 `@Roles()`。新增 Guard、Decorator 或 Pipe 前，必须确认现有实现无法复用。
-16. 异常使用 NestJS 标准异常类型，例如 `BadRequestException`、`UnauthorizedException`、`ForbiddenException`、`NotFoundException`、`ConflictException` 和 `ServiceUnavailableException`。错误信息不得泄露密码、Token、数据库连接信息或第三方密钥。
-17. `src/common/` 只允许存放跨模块基础设施，例如日志、全局过滤器、通用拦截器和通用工具。业务专属的 Guard、Decorator、DTO、Pipe 和 Service 必须保留在所属业务模块中。
-18. 配置统一通过 `ConfigModule` 和环境变量管理。密钥不得写入源码；新增配置必须同步更新 `.env.example`；生产环境必须替换默认密钥和密码；配置值必须进行类型转换和合法性校验。
-19. 新增 API 必须同步更新业务契约、Swagger 装饰器、错误行为、认证与权限说明以及验收清单。
-20. 每个新增业务模块至少补充 Service 业务规则、DTO 参数校验、权限和越权、资源不存在、唯一约束冲突以及关键状态转换测试。
-21. 后端提交前至少执行：
+6. `Controller` 只负责 HTTP 层工作，包括接收参数、使用 DTO、读取当前用户、调用 Service 和返回响应，不得编写数据库查询或复杂业务逻辑。
+7. `Service` 负责业务规则、权限前置判断、数据转换、事务编排和业务异常；不同业务职责应拆分到合适的服务或能力目录，不得为了减少文件数量而堆进单个 Service。
+8. `Entity` 只表达数据库结构、字段约束、索引和关联关系，不在 Entity 中编写业务流程。
+9. 每种请求定义独立 DTO，包括创建、更新、查询和管理员操作 DTO。DTO 必须配合全局 `ValidationPipe` 使用，禁止依赖 Controller 内部手动校验。
+10. 请求模型、响应模型和数据库 Entity 必须分离。禁止直接返回 Entity；Service 或 Mapper 必须转换为安全的响应对象，密码、密码哈希、Refresh Token 和内部字段不得返回。
+11. 所有数据库访问统一使用 MikroORM Repository 或 EntityManager，不得在 Controller 中直接操作数据库。
+12. 涉及多表写入、状态切换或一致性要求的操作必须使用事务，例如聊天记录保存和 Refresh Token 轮换。
+13. 新增或修改资源、字段、索引、关联或 API 行为前，必须先创建并更新 `docs/contracts/<resource>-crud-contract.md`，记录字段、校验、权限、响应、错误、迁移和验收约定。
+14. 契约中影响数据结构、授权、兼容性或 API 行为的歧义必须先标记为“待确认”。未确认前，不得创建或修改 Entity、DTO、Guard、Decorator、Pipe 或数据库迁移。
+15. Entity 发生变化时必须创建并审查 Migration，检查 SQL、索引、外键和历史数据兼容性，并执行迁移验证。
+16. 禁止为了验证普通功能随意执行 `migration:fresh`；该命令只能用于明确可销毁的本地或 CI 数据库。
+17. 认证和授权统一复用现有 JWT Guard、`@Public()`、`@CurrentUser()`、`RolesGuard` 和 `@Roles()`。新增 Guard、Decorator 或 Pipe 前，必须确认现有实现无法复用。
+18. 异常使用 NestJS 标准异常类型，例如 `BadRequestException`、`UnauthorizedException`、`ForbiddenException`、`NotFoundException`、`ConflictException` 和 `ServiceUnavailableException`。错误信息不得泄露密码、Token、数据库连接信息或第三方密钥。
+19. `src/common/` 只允许存放跨模块基础设施，例如日志、全局过滤器、通用拦截器和通用工具。业务专属的 Guard、Decorator、DTO、Pipe 和 Service 必须保留在所属业务模块中。
+20. 配置统一通过 `ConfigModule` 和环境变量管理。密钥不得写入源码；新增配置必须同步更新 `.env.example`；生产环境必须替换默认密钥和密码；配置值必须进行类型转换和合法性校验。
+21. 新增 API 必须同步更新业务契约、Swagger 装饰器、错误行为、认证与权限说明以及验收清单。
+22. 每个新增业务模块至少补充 Service 业务规则、DTO 参数校验、权限和越权、资源不存在、唯一约束冲突以及关键状态转换测试；测试放在所属业务模块的 `spec/` 中。
+23. 后端提交前至少执行：
 
 ```bash
 pnpm format:check
@@ -180,4 +187,4 @@ pnpm --filter @clothes-shopping-guide/api build
 pnpm check
 ```
 
-22. 新增代码中的必要注释统一使用中文，重点解释业务规则、事务边界、兼容性处理和复杂逻辑，避免逐行翻译代码。
+24. 新增代码中的必要注释统一使用中文，重点解释业务规则、事务边界、兼容性处理和复杂逻辑，避免逐行翻译代码。
