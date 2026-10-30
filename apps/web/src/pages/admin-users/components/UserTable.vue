@@ -203,7 +203,7 @@ function updateRole(user: User, value: unknown) {
                       : '恢复账户'
                 "
                 size="sm"
-                variant="ghost"
+                variant="outline"
                 @click="emit('toggle-status', user)"
               >
                 <UserRoundX

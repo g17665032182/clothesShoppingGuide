@@ -9,6 +9,8 @@
     "pnpm": "12.14.0"
   },
   "scripts": {
+    "dev": "pnpm -r --parallel --filter @clothes-shopping-guide/web --filter @clothes-shopping-guide/api run dev",
+    "dev:db": "docker compose -f apps/api/docker-compose.yml up -d",
     "build": "pnpm -r --if-present run build",
     "typecheck": "pnpm -r --if-present run typecheck",
     "migration:fresh": "pnpm --filter @clothes-shopping-guide/api migration:fresh",

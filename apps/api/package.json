@@ -11,6 +11,7 @@
     "build": "nest build",
     "test": "tsx --test 'src/**/*.spec.ts'",
     "start": "node dist/main.js",
+    "dev": "nest start --watch",
     "start:dev": "nest start --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migration:create": "pnpm build && mikro-orm migration:create --config ./dist/mikro-orm.config.js",

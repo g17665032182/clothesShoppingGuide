@@ -1,24 +1,24 @@
 <script setup lang="ts">
 import {
   ArrowRight,
+  Check,
   CircleUserRound,
+  Compass,
   MessageCircle,
+  Palette,
   ShieldCheck,
   Sparkles,
 } from '@lucide/vue';
 import type { User } from '@/api/types/users';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import styleImage from '@/assets/home-style.jpg';
 import { Badge } from '@/components/ui/badge';
 import {
   Card,
-  CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 
 defineProps<{
   user: User | null;
@@ -27,86 +27,114 @@ defineProps<{
 </script>
 
 <template>
-  <section
-    class="grid gap-8 py-12 md:py-20 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)] lg:items-center"
-  >
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <Badge class="w-fit" variant="secondary">
-          <Sparkles data-icon="inline-start" />
-          CLOTHES SHOPPING GUIDE
-        </Badge>
-        <h1
-          class="max-w-3xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-6xl"
+  <section class="flex flex-col gap-12 py-10 md:gap-16 md:py-16">
+    <div
+      class="grid gap-8 rounded-lg border border-border bg-card p-5 shadow-sm sm:p-7 md:gap-10 md:p-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)] lg:items-center lg:p-12"
+    >
+      <div class="flex flex-col gap-8">
+        <div class="flex flex-col gap-5">
+          <Badge class="w-fit" variant="secondary">
+            <Sparkles data-icon="inline-start" />
+            CLOTHES SHOPPING GUIDE
+          </Badge>
+          <div class="flex flex-col gap-4">
+            <h1
+              class="max-w-3xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-6xl"
+            >
+              穿得更像自己。
+            </h1>
+            <p
+              class="max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg"
+            >
+              从场合、风格和预算出发，把复杂的服装选择整理成清晰的下一步。
+            </p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3">
+          <Button v-if="!user" as-child size="lg">
+            <RouterLink to="/register">
+              开始建立风格
+              <ArrowRight data-icon="inline-end" />
+            </RouterLink>
+          </Button>
+          <Button v-else as-child size="lg">
+            <RouterLink to="/chat">
+              <MessageCircle data-icon="inline-start" />
+              继续探索
+              <ArrowRight data-icon="inline-end" />
+            </RouterLink>
+          </Button>
+          <Button v-if="user" as-child size="lg" variant="outline">
+            <RouterLink to="/account">
+              <CircleUserRound data-icon="inline-start" />
+              个人资料
+            </RouterLink>
+          </Button>
+          <Button v-if="isAdmin" as-child size="lg" variant="outline">
+            <RouterLink to="/admin/users">
+              <ShieldCheck data-icon="inline-start" />
+              用户管理
+            </RouterLink>
+          </Button>
+        </div>
+
+        <div
+          class="flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground"
         >
-          找到更适合自己的穿着选择。
-        </h1>
-        <p class="max-w-2xl text-lg leading-8 text-muted-foreground">
-          从了解自己的需求开始，逐步探索服装与搭配，让每一次选择都更有把握。
-        </p>
+          <span class="inline-flex items-center gap-2">
+            <Check class="text-primary" />
+            记录你的偏好
+          </span>
+          <span class="inline-flex items-center gap-2">
+            <Check class="text-primary" />
+            逐步缩小选择
+          </span>
+        </div>
       </div>
 
-      <div class="flex flex-wrap gap-3">
-        <Button v-if="!user" as-child size="lg">
-          <RouterLink to="/register">
-            开始使用
-            <ArrowRight data-icon="inline-end" />
-          </RouterLink>
-        </Button>
-        <Button
-          v-else
-          as-child
-          class="h-10 rounded-md bg-[#315c48] px-4 text-white shadow-sm transition-colors hover:bg-[#284d3b] hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#315c48]/40"
-          size="lg"
-        >
-          <RouterLink to="/chat">
-            <MessageCircle data-icon="inline-start" />
-            开始聊天
-            <ArrowRight data-icon="inline-end" />
-          </RouterLink>
-        </Button>
-        <Button v-if="user" as-child size="lg" variant="outline">
-          <RouterLink to="/account">
-            <CircleUserRound data-icon="inline-start" />
-            查看个人资料
-          </RouterLink>
-        </Button>
-        <Button v-if="isAdmin" as-child size="lg" variant="outline">
-          <RouterLink to="/admin/users">
-            <ShieldCheck data-icon="inline-start" />
-            管理用户
-          </RouterLink>
-        </Button>
-      </div>
+      <figure class="flex min-w-0 flex-col gap-2">
+        <img
+          :src="styleImage"
+          alt="明黄色运动套装的街头穿搭示例"
+          class="aspect-[16/10] w-full rounded-lg object-cover object-center lg:aspect-[4/5]"
+        />
+        <figcaption class="flex items-center justify-between gap-3 px-1">
+          <span class="text-sm font-medium">风格灵感</span>
+          <Badge variant="secondary">
+            <Palette data-icon="inline-start" />
+            明亮色彩
+          </Badge>
+        </figcaption>
+      </figure>
     </div>
 
-    <Card class="bg-muted/40">
-      <CardHeader>
-        <CardTitle class="flex items-center gap-3">
-          <Avatar v-if="user" size="lg">
-            <AvatarFallback>{{ user.displayName.slice(0, 1) }}</AvatarFallback>
-          </Avatar>
-          <span>{{
-            user ? `欢迎回来，${user.displayName}` : '从一次有意识的选择开始'
-          }}</span>
-        </CardTitle>
-        <CardDescription>
-          {{
-            user
-              ? '继续你的探索，或随时更新账户资料。'
-              : '创建账户后即可保存你的个人偏好。'
-          }}
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="flex flex-col gap-4">
-        <Separator />
-        <p class="text-sm leading-6 text-muted-foreground">
-          我们会把复杂的服装信息整理成更容易理解的下一步，陪你逐渐建立属于自己的选择方法。
-        </p>
-      </CardContent>
-      <CardFooter>
-        <Badge variant="outline">{{ user ? '账户已连接' : '准备开始' }}</Badge>
-      </CardFooter>
-    </Card>
+    <div class="grid gap-4 md:grid-cols-3">
+      <Card class="bg-background shadow-none">
+        <CardHeader>
+          <Compass class="text-muted-foreground" />
+          <CardTitle class="text-lg">明确你的场景</CardTitle>
+          <CardDescription>把“想买衣服”变成可回答的具体问题。</CardDescription>
+        </CardHeader>
+      </Card>
+      <Card class="bg-background shadow-none">
+        <CardHeader>
+          <Palette class="text-muted-foreground" />
+          <CardTitle class="text-lg">建立你的偏好</CardTitle>
+          <CardDescription
+            >记录颜色、版型和材质，减少反复试错。</CardDescription
+          >
+        </CardHeader>
+      </Card>
+      <Card class="bg-background shadow-none">
+        <CardHeader>
+          <MessageCircle class="text-muted-foreground" />
+          <CardTitle class="text-lg">得到下一步建议</CardTitle>
+          <CardDescription
+            >通过对话逐渐形成属于自己的选择方法。</CardDescription
+          >
+        </CardHeader>
+      </Card>
+    </div>
   </section>
 </template>

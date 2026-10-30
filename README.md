@@ -23,15 +23,19 @@ packages/
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm dev:db
+pnpm dev
 pnpm check
 pnpm migration:fresh
 pnpm seed
 pnpm seeder:create DatabaseSeeder
 pnpm format
-pnpm --filter @clothes-shopping-guide/web dev
 pnpm --filter @clothes-shopping-guide/shared build
-pnpm --filter @clothes-shopping-guide/api start:dev
 ```
+
+`pnpm dev` 会并行启动前端和后端开发服务：前端地址为
+`http://localhost:5173`，后端地址为 `http://localhost:3000`。首次启动或数据库容器
+停止后，先执行 `pnpm dev:db` 启动 PostgreSQL；该命令只负责基础设施，不会启动应用进程。
 
 `pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。`pnpm migration:fresh` 内置 `--seed`，会清空本地数据库、重跑迁移并执行默认 Seeder，只应在可重建的本地或 CI 数据库中使用。`pnpm seeder:create DatabaseSeeder` 会在 `apps/api/src/database/seeders/` 生成 Seeder 类。当前没有业务逻辑和测试用例；新增功能时应在所属包中补充测试及 `test` 脚本，并接入 CI。
 
@@ -43,13 +47,15 @@ pnpm --filter @clothes-shopping-guide/api start:dev
 
 后端位于 `apps/api`，使用 NestJS 12、MikroORM 7 和 PostgreSQL。复制 `apps/api/.env.example` 为 `.env` 后即可配置连接信息。
 
+首次配置本地环境时执行：
+
 ```bash
 cp apps/api/.env.example apps/api/.env
-docker compose -f apps/api/docker-compose.yml up -d
+pnpm dev:db
 pnpm --filter @clothes-shopping-guide/api migration:up
-pnpm migration:fresh
-pnpm --filter @clothes-shopping-guide/api start:dev
 ```
+
+之后日常开发只需执行 `pnpm dev:db`（数据库未运行时）和 `pnpm dev`。`pnpm migration:fresh` 会清空数据库，仅用于明确可重建的本地或 CI 数据库。
 
 健康检查地址为 `GET /api/health`。`migration:fresh` 会执行全部迁移并自动运行 `DatabaseSeeder`；单独执行 `pnpm seed` 只运行 Seeder。MikroORM CLI 使用 `tsx` 直接加载 TypeScript Entity，迁移和 Seeder 命令不依赖手工切换 loader。
 
