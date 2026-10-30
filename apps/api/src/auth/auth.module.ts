@@ -4,12 +4,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { APP_GUARD } from '@nestjs/core';
 
-import { User } from '../users/user.entity.js';
+import { User } from '../users/entity/user.entity.js';
 import { UsersModule } from '../users/users.module.js';
 import { RolesGuard } from '../authorization/guard/roles.guard.js';
-import { AuthController } from './auth.controller.js';
-import { RefreshSession } from './refresh-session.entity.js';
-import { AuthService } from './auth.service.js';
+import { AuthController } from './controller/auth.controller.js';
+import { RefreshSession } from './entity/refresh-session.entity.js';
+import { AuthService } from './service/auth.service.js';
 import { JwtAuthGuard } from './guard/jwt-auth.guard.js';
 
 @Module({

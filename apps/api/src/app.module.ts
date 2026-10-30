@@ -6,9 +6,8 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import mikroOrmConfig from './mikro-orm.config.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ChatRecordsModule } from './chat-records/chat-records.module.js';
-import { DbExceptionFilter } from './common/filters/db-exception.filter.js';
-import { HealthController } from './health/health.controller.js';
-import { HealthService } from './health/health.service.js';
+import { DbExceptionFilter } from './common/filter/db-exception.filter.js';
+import { HealthModule } from './health/health.module.js';
 import { LlmModule } from './llm/llm.module.js';
 import { LoggingModule } from './common/logging/logging.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -26,10 +25,9 @@ import { UsersModule } from './users/users.module.js';
     AuthModule,
     LlmModule,
     ChatRecordsModule,
+    HealthModule,
   ],
-  controllers: [HealthController],
   providers: [
-    HealthService,
     {
       provide: APP_FILTER,
       useClass: DbExceptionFilter,

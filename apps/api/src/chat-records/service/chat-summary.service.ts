@@ -1,0 +1,79 @@
+import { Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
+import { AIMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
+
+import { LlmService } from '../../llm/service/llm.service.js';
+import { ChatContextService } from '../context/chat-context.service.js';
+import type { ChatHistoryMessage } from '../history/chat-history.mapper.js';
+import type { ChatMessage } from '../entity/chat-message.entity.js';
+
+@Injectable()
+export class ChatSummaryService {
+  public constructor(
+    private readonly llmService: LlmService,
+    private readonly contextService: ChatContextService,
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(ChatSummaryService.name);
+  }
+
+  public async summarize(
+    existingSummary: string | null,
+    messages: ChatMessage[] | ChatHistoryMessage[],
+  ): Promise<string | null> {
+    if (messages.length === 0) {
+      return existingSummary;
+    }
+    const transcript = messages
+      .map((item) => {
+        if ('message' in item) {
+          return this.toTranscriptLine(item.message);
+        }
+        return `${item.role}: ${item.content}`;
+      })
+      .join('\n');
+    try {
+      const result = await this.llmService.chat({
+        messages: [
+          {
+            role: 'system',
+            content:
+              '请把聊天历史压缩为中文结构化摘要。固定包含：目标、事实、约束、决定、未解决问题。只输出摘要，不要寒暄。',
+          },
+          {
+            role: 'user',
+            content: [
+              existingSummary ? `已有摘要：\n${existingSummary}` : '',
+              `新增聊天记录：\n${transcript}`,
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+          },
+        ],
+      });
+      return this.contextService.truncateToTokens(result.content, 1024);
+    } catch (error) {
+      // 摘要只是性能优化，失败时由调用方继续使用最近消息。
+      this.logger.warn(
+        `聊天上下文摘要失败: ${
+          error instanceof Error ? error.constructor.name : 'UnknownError'
+        }`,
+      );
+      return null;
+    }
+  }
+
+  private toTranscriptLine(message: BaseMessage): string {
+    if (message instanceof AIMessage && message.tool_calls?.length) {
+      return `assistant: 调用了 ${message.tool_calls
+        .map((call) => call.name)
+        .join('、')}`;
+    }
+    if (message instanceof ToolMessage) {
+      return `tool: ${message.content}`;
+    }
+    return `${message.type}: ${
+      typeof message.content === 'string' ? message.content : ''
+    }`;
+  }
+}

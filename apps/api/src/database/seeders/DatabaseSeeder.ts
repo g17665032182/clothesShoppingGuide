@@ -2,7 +2,7 @@ import { EntityManager } from '@mikro-orm/core';
 import { Seeder } from '@mikro-orm/seeder';
 import { hash } from 'bcryptjs';
 
-import { User, UserRole, UserStatus } from '../../users/user.entity.js';
+import { User, UserRole, UserStatus } from '../../users/entity/user.entity.js';
 
 export class DatabaseSeeder extends Seeder {
   public async run(em: EntityManager): Promise<void> {

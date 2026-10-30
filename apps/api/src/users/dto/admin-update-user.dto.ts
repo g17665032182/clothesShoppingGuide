@@ -7,7 +7,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-import { UserRole, UserStatus } from '../user.entity.js';
+import { UserRole, UserStatus } from '../entity/user.entity.js';
 
 export class AdminUpdateUserDto {
   @ApiPropertyOptional({

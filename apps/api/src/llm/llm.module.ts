@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 
-import { createLlmGraph } from './llm.graph.js';
-import { LLM_CHAT_MODEL, LLM_GRAPH } from './llm.tokens.js';
-import { LlmService } from './llm.service.js';
-import { ChatModelFactory } from './providers/chat-model.factory.js';
+import { createLlmGraph } from './graph/llm.graph.js';
+import { LLM_CHAT_MODEL, LLM_GRAPH } from './graph/llm.tokens.js';
+import { LlmService } from './service/llm.service.js';
+import { ChatModelFactory } from './provider/chat-model.factory.js';
 
 @Module({
   imports: [ConfigModule],

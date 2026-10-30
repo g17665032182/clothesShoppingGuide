@@ -1,4 +1,4 @@
-import type { LlmUsage } from '../llm.state.js';
+import type { LlmUsage } from '../graph/llm.state.js';
 
 export type LlmTraceWriteContext = {
   conversationId: string;
