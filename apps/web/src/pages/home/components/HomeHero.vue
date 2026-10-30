@@ -53,7 +53,7 @@ defineProps<{
 
         <div class="flex flex-wrap gap-3">
           <Button v-if="!user" as-child size="lg">
-            <RouterLink to="/register">
+            <RouterLink to="/login">
               开始建立风格
               <ArrowRight data-icon="inline-end" />
             </RouterLink>
