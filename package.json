@@ -9,7 +9,7 @@
     "pnpm": "12.14.0"
   },
   "scripts": {
-    "dev": "pnpm -r --parallel --filter @clothes-shopping-guide/web --filter @clothes-shopping-guide/api run dev",
+    "dev": "concurrently --kill-others --names web,api \"pnpm --dir apps/web exec vite --host 0.0.0.0\" \"pnpm --dir apps/api exec nest start --watch\"",
     "dev:db": "docker compose -f apps/api/docker-compose.yml up -d",
     "build": "pnpm -r --if-present run build",
     "typecheck": "pnpm -r --if-present run typecheck",
@@ -21,6 +21,7 @@
     "check": "pnpm format:check && pnpm typecheck && pnpm build"
   },
   "devDependencies": {
+    "concurrently": "^10.0.6",
     "prettier": "3.9.10"
   }
 }
