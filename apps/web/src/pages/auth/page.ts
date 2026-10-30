@@ -110,7 +110,9 @@ export function useAuthPage() {
             ? cause.message
             : '操作失败，请稍后重试。';
       if (loginAttempted) {
-        // 挑战提交后已被消费，只清空旧图，等待用户再次点击获取。
+        // 挑战提交后已被消费，清空旧图并解除冷却，允许用户立即手动获取新图。
+        clearCaptchaTimer();
+        captchaCountdown.value = 0;
         captchaChallengeId.value = '';
         captchaAnswer.value = '';
         captchaImage.value = '';
