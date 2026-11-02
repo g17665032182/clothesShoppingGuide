@@ -4,7 +4,11 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "assets": ["llm/context/system-context.md"],
+    "assets": [
+      "llm/context/system-context.md",
+      "llm/context/shopping-flow.md",
+      "llm/context/after-sales-flow.md"
+    ],
     "watchAssets": true,
     "plugins": ["@nestjs/swagger"]
   }

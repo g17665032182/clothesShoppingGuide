@@ -32,6 +32,8 @@ HTTP DTO (user/assistant only)
 apps/api/src/llm/
   context/
     system-context.md
+    shopping-flow.md
+    after-sales-flow.md
     system-context.ts
   dto/
     chat.dto.ts
@@ -43,8 +45,9 @@ apps/api/src/llm/
     llm.service.spec.ts
 ```
 
-- `context/system-context.md`：维护固定系统上下文内容，由 Nest 构建时复制到输出目录。
-- `context/system-context.ts`：读取同目录 Markdown 并导出上下文文本，不读请求字段或数据库。
+- `context/system-context.md`：维护角色、行为边界、输出要求和流程路由，由 Nest 构建时复制到输出目录。
+- `context/shopping-flow.md`、`context/after-sales-flow.md`：分别维护选购与退/换货对话流程，由 Nest 构建时复制到输出目录。
+- `context/system-context.ts`：按固定顺序读取并组合三份 Markdown，导出完整上下文；不读请求字段或数据库。
 - `dto/chat.dto.ts`：限制 HTTP 输入消息角色为 `user`、`assistant`，拒绝额外字段。
 - `ChatContextService`：把服务端 system 消息计入持久化聊天的 Token 预算；系统消息不能进入历史摘要来源。
 - `LlmService`：区分直接用户调用、已完成上下文规划的用户调用与内部任务调用，避免遗漏或重复注入。

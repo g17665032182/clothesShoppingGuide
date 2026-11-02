@@ -31,7 +31,10 @@
 
 | 文件                                                          | 变更职责                                                                  |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `apps/api/src/llm/context/system-context.ts`                  | 新增后端固定系统上下文及只读访问入口                                      |
+| `apps/api/src/llm/context/system-context.md`                  | 维护角色职责、禁止行为、输出要求和流程入口                                |
+| `apps/api/src/llm/context/shopping-flow.md`                   | 维护选购对话流程                                                          |
+| `apps/api/src/llm/context/after-sales-flow.md`                | 维护退/换货对话流程                                                       |
+| `apps/api/src/llm/context/system-context.ts`                  | 读取并组合三份系统上下文 Markdown                                         |
 | `apps/api/src/llm/dto/chat.dto.ts`                            | 将客户端角色限制为 `user`、`assistant`，保留严格对象和长度校验            |
 | `apps/api/src/llm/service/llm.service.ts`                     | 明确区分直接用户调用、已规划上下文调用和内部任务调用                      |
 | `apps/api/src/chat-records/context/chat-context.service.ts`   | 将服务端 system 消息计入输入 Token 预算，排除在摘要来源和历史消息来源之外 |
@@ -50,7 +53,8 @@
 ### 1. 固定上下文和客户端 DTO
 
 - 在 LLM 模块中维护设计稿确认的角色职责、禁止行为和输出要求。
-- 工作流程、工具规范和用户记忆仅保留文档中的未来扩展说明，不添加空实现、配置开关或持久化结构。
+- 系统上下文分别从 `shopping-flow.md` 和 `after-sales-flow.md` 加载选购、退/换货流程；不添加空实现、配置开关或持久化结构。
+- 工具规范和用户记忆仅保留未来扩展说明。
 - 客户端 DTO 的消息角色只允许 `user`、`assistant`。
 - 保持 `z.strictObject` 行为，使 system/未知角色、额外消息字段和额外系统指令字段均返回 `400`。
 - 同步 Swagger DTO 对角色范围的描述；运行时校验继续以 Zod schema 为准。
