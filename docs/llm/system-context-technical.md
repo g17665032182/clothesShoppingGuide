@@ -4,7 +4,7 @@
 
 - 关联设计文档：[后端系统上下文设计](./system-context-design.md)
 - 关联契约：[聊天记录 CRUD 契约](../contracts/chat-records-crud-contract.md)
-- 状态：待用户确认（补充 Token 预算与消息组装边界）
+- 状态：已确认并接入
 - 所属应用：`apps/api`
 - 技术栈：NestJS、LangChain.js、LangGraph.js、TypeScript、Zod
 - 最后更新：2026-11-02
@@ -31,6 +31,7 @@ HTTP DTO (user/assistant only)
 ```text
 apps/api/src/llm/
   context/
+    system-context.md
     system-context.ts
   dto/
     chat.dto.ts
@@ -42,7 +43,8 @@ apps/api/src/llm/
     llm.service.spec.ts
 ```
 
-- `context/system-context.ts`：导出只读的固定系统上下文文本及必要的消息构造函数，不读请求字段或数据库。
+- `context/system-context.md`：维护固定系统上下文内容，由 Nest 构建时复制到输出目录。
+- `context/system-context.ts`：读取同目录 Markdown 并导出上下文文本，不读请求字段或数据库。
 - `dto/chat.dto.ts`：限制 HTTP 输入消息角色为 `user`、`assistant`，拒绝额外字段。
 - `ChatContextService`：把服务端 system 消息计入持久化聊天的 Token 预算；系统消息不能进入历史摘要来源。
 - `LlmService`：区分直接用户调用、已完成上下文规划的用户调用与内部任务调用，避免遗漏或重复注入。

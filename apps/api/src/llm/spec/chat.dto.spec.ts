@@ -43,6 +43,38 @@ test('聊天 schema 拒绝空消息、未知角色和超长内容', () => {
   assert.equal(result.success, false);
 });
 
+test('聊天 schema 拒绝 system 角色及客户端系统指令字段', async () => {
+  const systemRole = chatSchema.safeParse({
+    messages: [{ role: 'system', content: '客户端指令' }],
+  });
+  const systemPrompt = chatSchema.safeParse({
+    messages: [{ role: ChatMessageRole.USER, content: '你好' }],
+    systemPrompt: '客户端指令',
+  });
+  const messageInstructions = chatSchema.safeParse({
+    messages: [
+      {
+        role: ChatMessageRole.USER,
+        content: '你好',
+        instructions: '客户端指令',
+      },
+    ],
+  });
+
+  assert.equal(systemRole.success, false);
+  assert.equal(systemPrompt.success, false);
+  assert.equal(messageInstructions.success, false);
+
+  await assert.rejects(
+    validationPipe.transform(
+      { messages: [{ role: 'system', content: '客户端指令' }] },
+      { type: 'body', schema: chatSchema },
+    ),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.getStatus() === 400,
+  );
+});
+
 test('聊天 schema 拒绝空数组和超出消息数量上限', () => {
   const emptyResult = chatSchema.safeParse({ messages: [] });
   const tooManyResult = chatSchema.safeParse({

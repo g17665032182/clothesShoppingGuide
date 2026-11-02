@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ConfigService } from '@nestjs/config';
-import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from '@langchain/core/messages';
 
 import { ChatContextService } from '../context/chat-context.service.js';
 import type { ChatHistoryMessage } from '../history/chat-history.mapper.js';
@@ -17,6 +22,9 @@ function createService(window = 100): ChatContextService {
       LLM_CONTEXT_WINDOW_TOKENS: String(window),
       LLM_TOKEN_ENCODING: 'cl100k_base',
     }),
+    {
+      createSystemContextMessage: () => new SystemMessage('服务端上下文'),
+    } as never,
   );
 }
 
@@ -42,7 +50,6 @@ test('上下文达到阈值时生成摘要来源并保留当前消息', () => {
   const plan = service.prepare({
     history,
     currentUserMessage: '当前问题',
-    systemMessages: [],
   });
 
   assert.equal(plan.needsSummary, true);
@@ -59,10 +66,11 @@ test('上下文计划不会超过硬上限', () => {
   const plan = service.prepare({
     history,
     currentUserMessage: '当前问题',
-    systemMessages: [],
   });
 
   assert.equal(service.countMessages(plan.messages) <= plan.hardLimit, true);
+  assert.equal(plan.messages[0] instanceof SystemMessage, true);
+  assert.equal(plan.messages.at(-1)?.content, '当前问题');
 });
 
 test('摘要截断按 Token 而不是字符计算', () => {
@@ -78,7 +86,7 @@ test('摘要截断按 Token 而不是字符计算', () => {
 });
 
 test('裁剪历史时保留完整工具调用闭环', () => {
-  const service = createService(100);
+  const service = createService(200);
   const aiMessage = new AIMessage({
     content: '',
     tool_calls: [
@@ -112,7 +120,6 @@ test('裁剪历史时保留完整工具调用闭环', () => {
   const plan = service.prepare({
     messageHistory: history,
     currentUserMessage: '继续说',
-    systemMessages: [],
   });
   const aiIndex = plan.messages.findIndex((item) => item === aiMessage);
   const toolIndex = plan.messages.findIndex(
@@ -121,4 +128,33 @@ test('裁剪历史时保留完整工具调用闭环', () => {
 
   assert.equal(aiIndex >= 0, true);
   assert.equal(toolIndex > aiIndex, true);
+});
+
+test('系统上下文参与预算，但不会进入摘要来源', () => {
+  const service = createService(80);
+  const history = Array.from({ length: 12 }, (_, index) =>
+    message(String(index), '历史消息 '.repeat(10)),
+  );
+
+  const plan = service.prepare({
+    history,
+    currentUserMessage: '当前问题',
+  });
+
+  assert.equal(plan.needsSummary, true);
+  assert.equal(
+    plan.summarySource.every(
+      (item) => !item.content.includes('服务端系统上下文'),
+    ),
+    true,
+  );
+  assert.equal(
+    plan.messageSummarySource?.every(
+      (item) =>
+        typeof item.message.content !== 'string' ||
+        !item.message.content.includes('服务端系统上下文'),
+    ),
+    true,
+  );
+  assert.equal(plan.messages[0] instanceof SystemMessage, true);
 });

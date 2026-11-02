@@ -33,7 +33,7 @@ export class ChatSummaryService {
       })
       .join('\n');
     try {
-      const result = await this.llmService.chat({
+      const result = await this.llmService.chatInternal({
         messages: [
           {
             role: 'system',

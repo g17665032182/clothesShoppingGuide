@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 
-import { ChatMessageRole, type ChatInput } from '../../llm/dto/chat.dto.js';
+import type { ChatInput } from '../../llm/dto/chat.dto.js';
 import { LlmService, type ChatOutput } from '../../llm/service/llm.service.js';
 import type { LlmTraceEvent } from '../../llm/trace/llm-trace.types.js';
 import { mapTraceEventsToMessages } from '../history/chat-history.mapper.js';
@@ -108,7 +108,7 @@ export class ChatRecordsService {
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
     const prepared = await this.prepareChat(user, dto);
     await this.ensureConversationPersisted(prepared);
-    const result = await this.llmService.chat(
+    const result = await this.llmService.chatPrepared(
       {
         messages: prepared.plan.messages,
       },
@@ -151,7 +151,7 @@ export class ChatRecordsService {
         throw new DOMException('The operation was aborted', 'AbortError');
       }
 
-      const resultIterator = this.llmService.stream(
+      const resultIterator = this.llmService.streamPrepared(
         { messages: prepared.plan.messages },
         signal,
         this.traceContext(prepared, signal),
@@ -239,7 +239,7 @@ export class ChatRecordsService {
     this.llmService.assertConfigured();
     const currentUserMessage = [...dto.messages]
       .reverse()
-      .find((message) => message.role === ChatMessageRole.USER);
+      .find((message) => message.role === 'user');
     if (!currentUserMessage) {
       throw new BadRequestException('聊天请求至少需要一条 user 消息');
     }
@@ -302,18 +302,10 @@ export class ChatRecordsService {
       );
     }
     const history = conversation ? mapTraceEventsToMessages(traceHistory) : [];
-    const systemMessages = dto.messages
-      .filter((message) => message.role === ChatMessageRole.SYSTEM)
-      .map((message) => ({
-        role: message.role,
-        content: message.content,
-      }));
-
     let plan = this.contextService.prepare({
       history: legacyMessages,
       messageHistory: history,
       currentUserMessage: currentUserMessage.content,
-      systemMessages,
       contextSummary: conversation?.contextSummary,
       summaryThroughMessageId: conversation?.summaryThroughMessageId,
     });
@@ -332,7 +324,6 @@ export class ChatRecordsService {
           history: legacyMessages,
           messageHistory: history,
           currentUserMessage: currentUserMessage.content,
-          systemMessages,
           contextSummary: summary,
           summaryThroughMessageId: plan.lastIncludedMessageId,
         });

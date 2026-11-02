@@ -4,12 +4,12 @@ import {
   AIMessage,
   BaseMessage,
   HumanMessage,
-  SystemMessage,
   ToolMessage,
 } from '@langchain/core/messages';
 import { getEncoding } from 'js-tiktoken';
 
 import type { ChatInput } from '../../llm/service/llm.service.js';
+import { LlmService } from '../../llm/service/llm.service.js';
 import type { ChatHistoryMessage } from '../history/chat-history.mapper.js';
 import type { ChatMessage } from '../entity/chat-message.entity.js';
 
@@ -99,13 +99,15 @@ function completeMessageGroups(history: ChatHistoryMessage[]): MessageGroup[] {
 
 @Injectable()
 export class ChatContextService {
-  public constructor(private readonly configService: ConfigService) {}
+  public constructor(
+    private readonly configService: ConfigService,
+    private readonly llmService: LlmService,
+  ) {}
 
   public prepare(input: {
     history?: ChatMessage[];
     messageHistory?: ChatHistoryMessage[];
     currentUserMessage: string;
-    systemMessages: Array<{ content: string }>;
     contextSummary?: string | null | undefined;
     summaryThroughMessageId?: string | null | undefined;
   }): ContextPlan {
@@ -114,9 +116,7 @@ export class ChatContextService {
     const trigger = Math.floor(inputBudget * 0.75);
     const hardLimit = Math.floor(inputBudget * 0.9);
     const recentBudget = Math.floor(inputBudget * 0.3);
-    const system = input.systemMessages.map(
-      (message) => new SystemMessage(message.content),
-    );
+    const system = [this.llmService.createSystemContextMessage()];
     const current = new HumanMessage(input.currentUserMessage);
     const allHistory =
       input.messageHistory ?? toLegacyHistory(input.history ?? []);

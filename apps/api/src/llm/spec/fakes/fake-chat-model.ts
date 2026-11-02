@@ -107,10 +107,12 @@ export class FakeChatModel extends BaseChatModel {
   }
 
   public async *_streamResponseChunks(
-    _messages: BaseMessage[],
+    messages: BaseMessage[],
     _options: this['ParsedCallOptions'],
     _runManager?: CallbackManagerForLLMRun,
   ): AsyncGenerator<ChatGenerationChunk> {
+    this.calls.push(messages);
+
     for (const [index, chunk] of this.chunks.entries()) {
       if (this.delayMs > 0) {
         await new Promise<void>((resolve) => {

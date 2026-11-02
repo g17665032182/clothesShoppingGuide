@@ -6,13 +6,12 @@ export const MAX_CHAT_MESSAGE_LENGTH = 8_000;
 export const MAX_CHAT_TOTAL_LENGTH = 32_000;
 
 export enum ChatMessageRole {
-  SYSTEM = 'system',
   USER = 'user',
   ASSISTANT = 'assistant',
 }
 
 const chatMessageSchema = z.strictObject({
-  role: z.enum(ChatMessageRole),
+  role: z.enum([ChatMessageRole.USER, ChatMessageRole.ASSISTANT]),
   content: z.string().trim().min(1).max(MAX_CHAT_MESSAGE_LENGTH),
 });
 

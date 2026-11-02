@@ -19,6 +19,14 @@ import { createLlmGraph, normalizeUsage } from '../graph/llm.graph.js';
 import { LLM_GRAPH } from '../graph/llm.tokens.js';
 import type { LlmStateValue, LlmUsage } from '../graph/llm.state.js';
 import type { LlmTraceContext } from '../trace/llm-trace.types.js';
+import { SYSTEM_CONTEXT } from '../context/system-context.js';
+
+export type UserChatInput = {
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
+};
 
 export type ChatInput = {
   messages: Array<
@@ -112,7 +120,7 @@ function toLangChainMessage(
     return message;
   }
   switch (message.role) {
-    case ChatMessageRole.SYSTEM:
+    case 'system':
       return new SystemMessage(message.content);
     case ChatMessageRole.ASSISTANT:
       return new AIMessage(message.content);
@@ -120,6 +128,14 @@ function toLangChainMessage(
     default:
       return new HumanMessage(message.content);
   }
+}
+
+function toUserMessage(
+  message: UserChatInput['messages'][number],
+): BaseMessage {
+  return message.role === ChatMessageRole.ASSISTANT
+    ? new AIMessage(message.content)
+    : new HumanMessage(message.content);
 }
 
 @Injectable()
@@ -130,6 +146,21 @@ export class LlmService {
   ) {}
 
   public async chat(
+    input: UserChatInput,
+    traceContext?: LlmTraceContext,
+  ): Promise<ChatOutput> {
+    return this.chatPrepared(
+      {
+        messages: [
+          new SystemMessage(SYSTEM_CONTEXT),
+          ...input.messages.map(toUserMessage),
+        ],
+      },
+      traceContext,
+    );
+  }
+
+  public async chatPrepared(
     input: ChatInput,
     traceContext?: LlmTraceContext,
   ): Promise<ChatOutput> {
@@ -161,6 +192,23 @@ export class LlmService {
   }
 
   public async *stream(
+    input: UserChatInput,
+    signal?: AbortSignal,
+    traceContext?: LlmTraceContext,
+  ): AsyncGenerator<string, LlmStreamResult> {
+    return yield* this.streamPrepared(
+      {
+        messages: [
+          new SystemMessage(SYSTEM_CONTEXT),
+          ...input.messages.map(toUserMessage),
+        ],
+      },
+      signal,
+      traceContext,
+    );
+  }
+
+  public async *streamPrepared(
     input: ChatInput,
     signal?: AbortSignal,
     traceContext?: LlmTraceContext,
@@ -215,6 +263,14 @@ export class LlmService {
       model,
       usage: normalizeUsage(fullMessage) ?? null,
     };
+  }
+
+  public createSystemContextMessage(): SystemMessage {
+    return new SystemMessage(SYSTEM_CONTEXT);
+  }
+
+  public async chatInternal(input: ChatInput): Promise<ChatOutput> {
+    return this.chatPrepared(input);
   }
 
   public assertConfigured(): string {

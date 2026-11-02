@@ -7,10 +7,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SystemMessage } from '@langchain/core/messages';
 
 import { createLlmGraph } from '../graph/llm.graph.js';
 import { LlmService } from '../service/llm.service.js';
 import { FakeChatModel } from './fakes/fake-chat-model.js';
+import { SYSTEM_CONTEXT } from '../context/system-context.js';
 
 function serviceWithModel(
   model: FakeChatModel,
@@ -32,7 +34,6 @@ test('LlmService 转换消息并返回统一响应', async () => {
 
   const result = await service.chat({
     messages: [
-      { role: 'system', content: 'system prompt' },
       { role: 'user', content: 'hello' },
       { role: 'assistant', content: 'previous answer' },
     ],
@@ -51,6 +52,20 @@ test('LlmService 转换消息并返回统一响应', async () => {
     model.calls[0]?.map((message) => message.type),
     ['system', 'human', 'ai'],
   );
+  assert.equal(model.calls[0]?.[0]?.content, SYSTEM_CONTEXT);
+});
+
+test('内部调用使用调用方指令，不注入导购系统上下文', async () => {
+  const model = new FakeChatModel({ response: 'summary' });
+  const service = serviceWithModel(model);
+
+  await service.chatInternal({
+    messages: [{ role: 'system', content: '摘要专属指令' }],
+  });
+
+  assert.equal(model.calls[0]?.length, 1);
+  assert.equal(model.calls[0]?.[0]?.content, '摘要专属指令');
+  assert.equal(model.calls[0]?.[0] instanceof SystemMessage, true);
 });
 
 test('LlmService 在缺少模型配置时返回 503', async () => {
@@ -140,6 +155,7 @@ test('LlmService 按顺序产出流式 chunk，并在结束时聚合完整结果
   }
 
   assert.deepEqual(chunks, ['春日通勤穿搭']);
+  assert.equal(model.calls[0]?.[0]?.content, SYSTEM_CONTEXT);
   assert.deepEqual(result.value, {
     content: '春日通勤穿搭',
     model: 'fake-model',

@@ -4,6 +4,8 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
+    "assets": ["llm/context/system-context.md"],
+    "watchAssets": true,
     "plugins": ["@nestjs/swagger"]
   }
 }

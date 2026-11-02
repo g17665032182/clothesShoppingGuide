@@ -11,6 +11,7 @@ import { PaginationDto } from '../dto/pagination.dto.js';
 function createService(options: { failFlush?: boolean } = {}) {
   const persisted: unknown[] = [];
   const removed: unknown[] = [];
+  const modelInputs: unknown[] = [];
   let flushCount = 0;
   const manager = {
     persist(value: unknown) {
@@ -43,7 +44,11 @@ function createService(options: { failFlush?: boolean } = {}) {
   };
   const llmService = {
     assertConfigured: () => 'fake-model',
-    async *stream(): AsyncGenerator<string, ChatOutput> {
+    chatPrepared: async (input: unknown) => {
+      modelInputs.push(input);
+      return { content: '回复', model: 'fake-model', usage: null };
+    },
+    async *streamPrepared(): AsyncGenerator<string, ChatOutput> {
       yield '第一段';
       yield '第二段';
       return {
@@ -55,7 +60,10 @@ function createService(options: { failFlush?: boolean } = {}) {
   };
   const contextService = {
     prepare: () => ({
-      messages: [{ role: 'user' as const, content: '你好' }],
+      messages: [
+        { role: 'system' as const, content: '服务端上下文' },
+        { role: 'user' as const, content: '你好' },
+      ],
       needsSummary: false,
       summarySource: [],
       lastIncludedMessageId: null,
@@ -74,8 +82,29 @@ function createService(options: { failFlush?: boolean } = {}) {
     traceWriter as never,
   );
 
-  return { service, persisted, removed };
+  return { service, persisted, removed, modelInputs };
 }
+
+test('持久化聊天仅将系统上下文传给模型，不写入消息或响应', async () => {
+  const { service, persisted, modelInputs } = createService();
+  const result = await service.chat(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '你好' }],
+    } as never,
+  );
+
+  assert.deepEqual(modelInputs, [
+    {
+      messages: [
+        { role: 'system', content: '服务端上下文' },
+        { role: 'user', content: '你好' },
+      ],
+    },
+  ]);
+  assert.equal(JSON.stringify(persisted).includes('服务端上下文'), false);
+  assert.equal(JSON.stringify(result).includes('服务端上下文'), false);
+});
 
 test('标题生成会压缩空白并按 Unicode 字符截断', () => {
   const service = Object.create(
