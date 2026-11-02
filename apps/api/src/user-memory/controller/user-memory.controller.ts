@@ -7,14 +7,18 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiOkResponse,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -31,6 +35,13 @@ import {
   type UpdateMemoryInput,
   type UpdateMemorySettingsInput,
 } from '../dto/user-memory.dto.js';
+import { UserMemoryDocumentService } from '../service/user-memory-document.service.js';
+import {
+  updateMemoryDocumentSchema,
+  UpdateUserMemoryDocumentDto,
+  UserMemoryDocumentDto,
+  type UpdateMemoryDocumentInput,
+} from '../dto/user-memory-document.dto.js';
 import { memoryIdParamSchema } from '../dto/memory-id.dto.js';
 import { UserMemoryService } from '../service/user-memory.service.js';
 
@@ -38,7 +49,37 @@ import { UserMemoryService } from '../service/user-memory.service.js';
 @ApiBearerAuth('bearer')
 @ApiTags('用户长期记忆')
 export class UserMemoryController {
-  public constructor(private readonly userMemory: UserMemoryService) {}
+  public constructor(
+    private readonly userMemory: UserMemoryService,
+    private readonly userMemoryDocument: UserMemoryDocumentService,
+  ) {}
+
+  @Get('document')
+  @ApiOkResponse({ type: UserMemoryDocumentDto })
+  public getDocument(@CurrentUser() user: User) {
+    return this.userMemoryDocument.get(user.id);
+  }
+
+  @Put('document')
+  @ApiBody({ type: UpdateUserMemoryDocumentDto })
+  @ApiOkResponse({ type: UserMemoryDocumentDto })
+  @ApiBadRequestResponse({ description: '文档内容或请求格式不合法' })
+  @ApiConflictResponse({ description: '文档版本冲突' })
+  @ApiServiceUnavailableResponse({ description: '记忆文档存储暂不可用' })
+  public updateDocument(
+    @CurrentUser() user: User,
+    @Body({ schema: updateMemoryDocumentSchema })
+    input: UpdateMemoryDocumentInput,
+  ) {
+    return this.userMemoryDocument.update(user.id, input);
+  }
+
+  @Delete('document')
+  @HttpCode(204)
+  @ApiNoContentResponse({ description: 'Markdown 记忆文档已清空' })
+  public async clearDocument(@CurrentUser() user: User): Promise<void> {
+    await this.userMemoryDocument.clear(user.id);
+  }
 
   @Get()
   @ApiOkResponse({ description: '当前用户的长期记忆分页列表和设置' })

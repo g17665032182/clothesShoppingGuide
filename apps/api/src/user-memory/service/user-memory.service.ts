@@ -215,10 +215,31 @@ export class UserMemoryService {
     userId: string,
     input: UpdateMemorySettingsInput,
   ): Promise<MemorySettingsResponse> {
-    const setting = await this.getOrCreateSettings(userId);
-    setting.enabled = input.enabled;
-    await this.settings.getEntityManager().flush();
-    return this.toSettingsResponse(setting);
+    return this.settings.getEntityManager().transactional(async (em) => {
+      // 与文档补丁应用共用用户锁，确保关闭后不会再提交旧任务结果。
+      await em
+        .getConnection()
+        .execute(
+          'select pg_advisory_xact_lock(hashtextextended(?, 0))',
+          [`user-memory-document:${userId}`],
+          'run',
+          em.getTransactionContext(),
+        );
+      const repository = em.getRepository(UserMemorySetting);
+      let setting = await repository.findOne({ userId });
+      if (!setting) {
+        setting = repository.create({
+          userId,
+          enabled: input.enabled,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } else {
+        setting.enabled = input.enabled;
+      }
+      await em.flush();
+      return this.toSettingsResponse(setting);
+    });
   }
 
   public async getSettings(userId: string): Promise<MemorySettingsResponse> {

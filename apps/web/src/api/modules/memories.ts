@@ -3,6 +3,7 @@ import type {
   CreateMemoryPayload,
   DeleteAllMemoriesResponse,
   MemoryListResponse,
+  MemoryDocument,
   MemorySettings,
   MemoryRecord,
   UpdateMemoryPayload,
@@ -78,4 +79,27 @@ export function updateMemorySettings(
     data: { enabled },
     token,
   });
+}
+
+export function getMemoryDocument(
+  token: string,
+  signal?: AbortSignal,
+): Promise<MemoryDocument> {
+  return apiRequest<MemoryDocument>('/memories/document', { token, signal });
+}
+
+export function updateMemoryDocument(
+  token: string,
+  content: string,
+  expectedRevision: number,
+): Promise<MemoryDocument> {
+  return apiRequest<MemoryDocument>('/memories/document', {
+    method: 'PUT',
+    data: { content, expectedRevision },
+    token,
+  });
+}
+
+export function clearMemoryDocument(token: string): Promise<void> {
+  return apiRequest<void>('/memories/document', { method: 'DELETE', token });
 }

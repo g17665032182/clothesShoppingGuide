@@ -8,8 +8,9 @@ const NORTH_AMERICA_PHONE_PATTERN =
 const US_SSN_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/u;
 const PAYMENT_CARD_PATTERN = /\b(?:\d[ -]*?){13,19}\b/u;
 
-/** 只检查自由文本字段，避免把稳定类别枚举误判为敏感信息。 */
 export function containsSensitiveMemoryText(value: unknown): boolean {
+  if (typeof value === 'string') return containsSensitiveText(value);
+
   const record =
     typeof value === 'object' && value !== null
       ? (value as Record<string, unknown>)
@@ -22,14 +23,17 @@ export function containsSensitiveMemoryText(value: unknown): boolean {
     ...(Array.isArray(record.terms) ? record.terms : []),
   ].filter((item): item is string => typeof item === 'string');
 
-  return textValues.some(
-    (text) =>
-      SENSITIVE_TEXT_PATTERN.test(text) ||
-      EMAIL_PATTERN.test(text) ||
-      CHINA_PHONE_PATTERN.test(text) ||
-      CHINA_ID_PATTERN.test(text) ||
-      NORTH_AMERICA_PHONE_PATTERN.test(text) ||
-      US_SSN_PATTERN.test(text) ||
-      PAYMENT_CARD_PATTERN.test(text),
-  );
+  return textValues.some(containsSensitiveText);
+}
+
+function containsSensitiveText(text: string): boolean {
+  return [
+    SENSITIVE_TEXT_PATTERN,
+    EMAIL_PATTERN,
+    CHINA_PHONE_PATTERN,
+    CHINA_ID_PATTERN,
+    NORTH_AMERICA_PHONE_PATTERN,
+    US_SSN_PATTERN,
+    PAYMENT_CARD_PATTERN,
+  ].some((pattern) => pattern.test(text));
 }

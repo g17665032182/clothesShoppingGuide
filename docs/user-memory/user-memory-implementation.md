@@ -2,74 +2,79 @@
 
 ## 状态与审批边界
 
-- 状态：已确认，代码实现完成；真实模型端到端验证待执行
-- 设计文档：[用户长期记忆设计文档](./user-memory-design.md)
-- CRUD 契约：[用户长期记忆 CRUD 契约](../contracts/user-memory-crud-contract.md)
-- 技术文档：[用户长期记忆技术文档](./user-memory-technical.md)
-- 当前阶段：实施交付与验证记录
-- 实施限制：实施文档已获确认；代码变更必须遵守本文文件所有权、串行阶段和验证要求。
+- 状态：已确认，实施中
+- 设计文档：[用户长期记忆设计文档](./user-memory-design.md)，已确认
+- CRUD 契约：[用户长期记忆 CRUD 契约](../contracts/user-memory-crud-contract.md)，已确认
+- 技术文档：[用户长期记忆技术文档](./user-memory-technical.md)，已确认
+- 当前阶段：实现与集成
+- 下一阶段：完成自动化验证、可用环境下的 Smoke Test，并记录交付结果
+- 实施限制：实现须遵守本文范围、文件所有权和验证约定；范围变化需回到对应文档确认
 - 最后更新：2026-11-03
 
-本文只规定如何把已确认的技术方案落地为可审查、可回滚、可验证的代码。文档确认后，实施仍必须遵守仓库 `AGENTS.md`、模块开发流程和现有未提交修改保护规则。
+本文规划在现有结构化用户偏好模块上新增 Markdown 记忆能力。现有偏好数据、API、页面和聊天接线均已存在；不得按旧实施文档重建模块或覆盖工作区已有修改。
 
 ## 开发流程总览
 
 ```text
 实施文档确认
-  -> 主代理项目调查与工作区基线
-  -> 后端领域基础与 API 骨架
-  -> LLM 结构化文本生成端口
-  -> 任务领取、提取和重试处理器
-  -> 聊天读取、注入和任务登记接线
-  -> 前端记忆管理页面与 API 适配器
-  -> 单元、HTTP、数据库和全链路测试
-  -> 主代理接线、迁移审查和冲突处理
-  -> 仓库级验证
-  -> Smoke Test
-  -> 交付记录
+  -> 主代理记录工作区基线并检查七牛依赖/API
+  -> 对象存储适配器、配置和依赖接线
+  -> 文档领域 API、元数据实体和数据库迁移
+  -> 静默提取、文档补丁和任务幂等
+  -> 聊天上下文读取及清空代次接线
+  -> Markdown 编辑页面和 Axios API 扩展
+  -> 单元、HTTP、迁移和聊天链路验证
+  -> 主代理集成、全量检查和 Smoke Test
+  -> 更新交付记录
 ```
 
-实施采用串行阶段。阶段完成前不得开始依赖该阶段输出的下一阶段；阶段之间由主代理检查完成标准后推进。任何阶段发现契约、数据模型、权限或 API 行为需要改变时，立即停止编码，回到受影响的最早文档阶段重新确认。
+阶段按依赖顺序推进。只有文件所有权互不冲突的工作可以并行；任何阶段发现数据、权限、API 或行为与已确认文档不一致时，暂停实现并回到受影响的最早文档阶段重新审批。
+
+## 当前代码基线
+
+- 后端 `apps/api/src/user-memory/` 已有 Controller、结构化偏好 Service、设置、任务、提取器、调度器、读取器、生命周期和模块注册。
+- 前端已有 `apps/web/src/pages/memories/` 页面、编辑组件，以及 `apps/web/src/api/modules/memories.ts` 和对应类型。
+- `apps/api/src/chat-records/` 已依赖记忆模块读取器、任务服务和生命周期服务；`apps/api/src/app.module.ts` 已注册记忆模块。
+- API 已有 `test`、`typecheck`、`build` 脚本；Web 有 `typecheck` 和 `build`，当前没有 Vitest、Vue Test Utils 或 Playwright 测试基础设施。
+- API 已新增官方 `qiniu` SDK `7.15.2`；已复核 SDK 当前 Node.js、区域、上传、私有下载和删除 API 文档。
+- 每次代理启动前重新运行 `git status --short`；本节只记录本次调查快照，不代表之后工作区状态不变。
 
 ## 子代理角色和文件所有权
 
-子代理只修改下表中的独占文件范围。主代理负责所有公共接线文件、迁移和最终集成。没有明确列出的文件不得擅自修改。
+主代理为所有共享文件的唯一所有者。代理不得修改表外文件；发现需要调整公共接口或数据契约时，先报告主代理，不得自行扩展范围。
 
-| 角色         | 独占文件范围                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 主要职责                                                                                                           | 明确禁止                                                                                     |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| 后端领域代理 | `apps/api/src/user-memory/user-memory.module.ts`；`apps/api/src/user-memory/controller/**`；`apps/api/src/user-memory/service/user-memory.service.ts`；`apps/api/src/user-memory/service/user-memory-reader.service.ts`；`apps/api/src/user-memory/service/user-memory-lifecycle.service.ts`；`apps/api/src/user-memory/entity/**`；`apps/api/src/user-memory/dto/**`；`apps/api/src/user-memory/context/memory-value.schema.ts`；`apps/api/src/user-memory/context/memory-candidate.schema.ts`；`apps/api/src/user-memory/context/memory-context.formatter.ts` | 落地实体、Zod schema、DTO 类型、手动 CRUD、设置开关、读取端口、生命周期端口和响应 mapper；必要复杂逻辑添加中文注释 | 不修改 `app.module.ts`、MikroORM 配置、迁移、聊天模块、LLM 模块、前端和测试文件              |
-| LLM 端口代理 | `apps/api/src/llm/port/structured-text-generation.port.ts` 及该目录下为端口所需的新文件                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | 定义并实现窄的结构化文本生成端口，复用现有模型供应商配置和超时约定，不绑定工具、trace 或用户可见响应               | 不修改 `apps/api/src/llm/llm.module.ts`、聊天图、供应商密钥配置或记忆业务规则                |
-| 任务处理代理 | `apps/api/src/user-memory/service/user-memory-task.service.ts`；`apps/api/src/user-memory/service/user-memory-extractor.service.ts`；`apps/api/src/user-memory/service/user-memory-scheduler.service.ts`；`apps/api/src/user-memory/task/**`                                                                                                                                                                                                                                                                                                                    | 实现任务登记、`FOR UPDATE SKIP LOCKED` 领取、模型候选过滤、幂等应用、退避、processing 超时回收和模块销毁清理       | 不修改实体定义、迁移、`ChatRecordsService`、LLM 模块注册、前端或测试文件                     |
-| 前端代理     | `apps/web/src/pages/memories/**`；`apps/web/src/api/modules/memories.ts`；`apps/web/src/api/types/memories.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                  | 实现记忆页面、加载/空态/错误/提交状态、结构化值编辑、删除确认和 Axios 适配器；遵守页面目录与中文注释约定           | 不修改 `apps/web/src/router/index.ts`、`AppShell.vue`、共享 UI 基础组件、后端代码或 API 底座 |
-| 测试代理     | `apps/api/src/user-memory/spec/**`；为测试专用的新 fake 文件放在 `apps/api/src/user-memory/spec/fakes/**`                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 编写 schema、Service、任务、HTTP 和权限边界测试；不依赖真实供应商密钥                                              | 不修改生产代码、迁移、根配置、聊天模块、前端或包锁文件                                       |
-| 主代理       | `apps/api/src/app.module.ts`；`apps/api/src/mikro-orm.config.ts`；`apps/api/src/database/migrations/**` 中本功能新迁移；`apps/api/src/llm/llm.module.ts`；`apps/api/src/chat-records/**` 现有文件；`apps/web/src/router/index.ts`；`apps/web/src/components/AppShell.vue`；包脚本、环境示例、锁文件和文档                                                                                                                                                                                                                                                       | 维护公共文件，完成模块导出和导入、聊天与 LLM 接线、路由和导航、迁移审查、依赖冲突处理、最终验证和交付记录          | 不回滚用户已有改动；不将跨模块私有实现暴露为公共依赖；不跳过审批门槛                         |
+| 角色         | 独占文件范围                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 主要职责                                                                                                           | 明确禁止                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| 对象存储代理 | `apps/api/src/user-memory/service/user-memory-document-store.service.ts`；该服务专属的 `apps/api/src/user-memory/spec/user-memory-document-store.service.spec.ts`                                                                                                                                                                                                                                                                                                                           | 封装七牛 SDK、配置读取接口、私有对象上传/读取/删除、对象键派生和可替换测试端口；不在适配器中承载文档业务规则       | 不修改环境示例、依赖清单、锁文件、实体、迁移、Controller、模块注册或其他代理文件               |
+| 文档领域代理 | `apps/api/src/user-memory/controller/user-memory.controller.ts`；`apps/api/src/user-memory/service/user-memory-document.service.ts`；`apps/api/src/user-memory/entity/user-memory-document-state.entity.ts`；`apps/api/src/user-memory/dto/user-memory-document.dto.ts`；`apps/api/src/user-memory/context/memory-document.schema.ts`；`apps/api/src/user-memory/context/memory-document-patch.schema.ts`；`apps/api/src/user-memory/context/memory-safety.ts`；对应的文档 API/Service spec | 实现 Markdown 读取、更新、清空、并发 revision、用户归属和敏感内容校验；复用现有鉴权、Zod Pipe 和偏好开关           | 不修改 `user-memory.module.ts`、MikroORM 配置、迁移、任务处理、聊天、LLM、前端或其他代理的测试 |
+| 提取任务代理 | `apps/api/src/user-memory/service/user-memory-extractor.service.ts`；`apps/api/src/user-memory/service/user-memory-task.service.ts`；`apps/api/src/user-memory/service/user-memory-scheduler.service.ts`；`apps/api/src/user-memory/task/**`；`apps/api/src/user-memory/spec/user-memory-extractor.service.spec.ts` 和任务相关 spec                                                                                                                                                         | 扩展现有异步任务以生成、过滤、应用幂等 Markdown 补丁；遵守清空 generation 和共享设置开关                           | 不修改实体、迁移、文档 Service/Store、`ChatRecordsService`、模块注册、前端或其他代理的测试     |
+| 前端代理     | `apps/web/src/pages/memories/**`；`apps/web/src/api/modules/memories.ts`；`apps/web/src/api/types/memories.ts`                                                                                                                                                                                                                                                                                                                                                                              | 在现有记忆页增加 Markdown 原文编辑、预览、保存冲突、清空确认和错误状态；沿用 Axios、MarkdownRenderer 与 shadcn-vue | 不修改路由、AppShell、共享 UI、API 底座、后端或测试基础设施                                    |
+| 测试代理     | `apps/api/src/user-memory/spec/**` 中不归属其他代理的新增 spec 和 `spec/fakes/**`                                                                                                                                                                                                                                                                                                                                                                                                           | 编写领域边界、模块 HTTP、权限、并发和迁移集成测试替身；核对测试不依赖真实七牛凭据                                  | 不修改生产代码、实体、迁移、聊天/LLM 模块、前端、包清单或锁文件                                |
+| 主代理       | `apps/api/src/user-memory/user-memory.module.ts`；`apps/api/src/mikro-orm.config.ts`；`apps/api/src/database/migrations/**` 中本功能新迁移；`apps/api/src/chat-records/**`；`apps/api/src/app.module.ts`；`apps/api/src/llm/**` 中必要接线；`apps/api/package.json`、`apps/api/.env.example`、`pnpm-lock.yaml`；路由或导航确需调整时对应公共文件；文档                                                                                                                                      | 依赖和环境配置、MikroORM 注册、迁移、跨模块接线、文件所有权协调、集成验证及交付记录                                | 不覆盖或回滚已有用户修改；不扩大记忆模块公开接口；不把密钥写入跟踪文件                         |
 
-同一文件不得同时分配给两个代理。代理需要修改不在所有权表内的文件时，先在完成报告中提出，由主代理决定是否接线；不得直接越界修改。
+不得将 `user-memory.module.ts`、迁移、SDK 依赖或 `.env.example` 同时分给其他代理。若实施时需要扩展上述范围，先由主代理调整本表并再次检查无重叠。
 
 ## 子代理开始前检查
 
-每个代理开始前必须完成以下检查，并把结果写入自己的工作记录：
+1. 实施文档已获用户明确确认；当前设计、CRUD 契约和技术文档版本一致。
+2. 阅读仓库 `AGENTS.md`、相关应用 README、目标模块代码和包脚本，并检查 `git status --short`。
+3. 阅读技术文档列出的七牛官方文档与项目当前 Nest、MikroORM、Zod、Axios、Markdown Renderer 使用方式。
+4. 确认对象存储适配器不向前端暴露 Bucket、对象键、AK/SK、上传 token 或私有下载签名 URL。
+5. 确认必要代码注释使用中文；日志不得包含 Markdown 正文、完整聊天内容、模型原始输出或任何凭据。
+6. 自动化测试使用 fake 对象存储和模型端口，不依赖真实七牛凭据或不可控外网；需要真实服务的验证明确标记为 Smoke Test。
 
-1. 阅读三份已确认文档和本实施文档，确认当前阶段允许修改的文件。
-2. 阅读仓库 `AGENTS.md`、相关应用 README、目标模块现有代码和包脚本。
-3. 执行 `git status --short`，识别已有修改；不得覆盖或回滚无关变更。
-4. 使用 `pnpm` 检查本地依赖版本和现有实现，优先复用 Zod、Nest `StandardSchemaValidationPipe`、MikroORM、Axios、shadcn-vue 和现有认证能力。
-5. 对要使用的框架 API 阅读仓库已记录的官方文档或当前依赖对应文档；不引入 Bull/BullMQ、Redis、Embedding 或向量数据库。
-6. 确认新增代码的必要注释使用中文，且不会把密码、Token、API Key、完整聊天原文、模型原始响应或完整记忆值写入日志。
-7. 确认测试不调用生产服务、不依赖真实第三方密钥；需要真实数据库或模型时标记为 Smoke Test。
-
-若检查发现技术文档与现有代码冲突，代理只记录冲突并停止该阶段，不自行改变模块边界或公共契约。
+发现技术文档与现有运行时能力冲突时，停止受影响阶段并报告，不自行替换 SDK、数据结构或接口契约。
 
 ## 子代理完成报告
 
-每个代理完成后必须向主代理提交以下固定格式：
+每个代理完成后按以下格式向主代理报告：
 
 ```text
 修改文件
 - <相对路径>
 
 执行命令
-- <命令>
+- <实际执行的命令>
 
 测试结果
 - <通过、失败或未执行，以及关键输出>
@@ -78,267 +83,181 @@
 - <风险或“无”>
 
 越界修改
-- <文件路径和原因，或“无”>
+- <文件和原因，或“无”>
 ```
 
-主代理在接受报告前检查 `git diff --check`、所有文件是否仍在独占范围内，以及报告中的测试是否与当前工作区一致。报告缺少命令、结果或越界说明时，阶段不算完成。
+主代理检查报告中的文件边界、`git diff --check` 和可复现验证结果后，才接受该阶段交付。
 
 ## 主代理集成任务
 
-主代理不把公共接线隐含在子代理任务中，必须显式完成以下工作：
-
-1. 在 `app.module.ts` 注册 `UserMemoryModule`，并确认导出端口的依赖方向没有循环依赖。
-2. 在 `mikro-orm.config.ts` 注册四个新实体，检查实体发现路径、迁移路径和测试配置。
-3. 审查并创建单独的 MikroORM migration：设置表、记忆表、任务表、任务结果表、索引、部分唯一索引、检查约束、外键和 `down` 顺序。
-4. 在 `llm.module.ts` 注册并导出结构化文本生成端口的实现，确认复用已有供应商配置、超时和错误分类。
-5. 在 `chat-records` 中接入记忆读取、上下文注入、聊天事务内任务登记和来源会话删除标记；聊天模块只能依赖记忆模块公开端口。
-6. 检查聊天 HTTP 响应不等待异步提取，且任务写入失败时沿用既有聊天事务错误语义。
-7. 在前端路由注册懒加载的 `/memories` 页面，并在已有账户或应用导航中添加入口；不把页面局部状态放入全局 Store。
-8. 检查 Axios 适配器、响应类型、错误映射和当前认证重试行为与现有 `src/api/` 约定一致。
-9. 处理包脚本、环境示例、锁文件和格式化差异；新增配置必须同步 `.env.example`，不得写入真实凭据。
-10. 集成后重新检查模块边界、中文注释、实体响应隔离、用户归属查询和日志脱敏。
+1. 在 `apps/api/package.json` 添加官方 `qiniu` 依赖并更新 `pnpm-lock.yaml`；核对 SDK 模块格式与当前 Node.js 22 / ESM 构建兼容性。
+2. 在 `apps/api/.env.example` 增加 `QINIU_ACCESS_KEY`、`QINIU_SECRET_KEY`、`QINIU_BUCKET`、`QINIU_DOMAIN` 和可选 `QINIU_REGION` 占位配置；不写真实密钥。
+3. 将对象存储适配器注册到现有 `UserMemoryModule`；将新增状态实体注册到 MikroORM 配置，检查 Nest provider 依赖图无循环引用。
+4. 创建独立 MikroORM migration：文档状态表、对象键与摘要字段、任务 generation、文档操作幂等结果表及相关约束/索引；审阅 SQL、外键和 down 顺序。
+5. 在现有聊天与记忆公开端口上接入 Markdown 读取、静默补丁应用和 generation 校验；聊天模块不得直接访问存储 Service、Repository 或 Entity。
+6. 在现有页面中接入 Markdown 编辑工作流，保留结构化偏好功能、现有记忆开关和已有 API 行为。
+7. 集成各代理修改，检查用户归属、服务端对象键派生、签名 URL 脱敏、存储错误映射、并发冲突和清空后的旧任务隔离。
+8. 更新相关技术/实施交付记录仅在实现完成后进行；实现期间保持文档所描述范围与代码一致。
 
 ## 按顺序排列的实施阶段
 
-### 阶段 0：基线和依赖确认
-
-**负责者：** 主代理。
-
-**前置检查：**
-
-- 实施文档已获用户明确确认。
-- `git status --short` 已记录，已有改动未被覆盖。
-- 已阅读当前 `users`、`chat-records`、`llm`、认证、MikroORM 配置和前端路由实现。
-- 已确认当前工作区使用的 Zod 绑定、Axios、Vue 页面结构和测试命令。
-
-**完成标准：**
-
-- 形成不修改代码的基线记录。
-- 确认数据库可用性、迁移命令、API typecheck/test/build 命令和前端构建命令。
-- 明确本次实现不增加新基础设施依赖。
-
-### 阶段 1：后端领域基础与 API 骨架
-
-**负责者：** 后端领域代理。
-
-**实施内容：**
-
-- 创建 `apps/api/src/user-memory/` 目录及职责子目录。
-- 创建四个 Entity，字段、关系、索引和软删除状态与技术文档一致。
-- 创建类别值、候选结果和 API Body/Query/Param schema；对象默认使用 `z.strictObject`。
-- 创建 DTO 输入/输出类型、响应 mapper、手动 CRUD、设置开关、用户读取端口和来源生命周期端口。
-- 绑定 `StandardSchemaValidationPipe` 所需的 Controller schema 元数据。
-- 对用户归属、资源不存在、越权、未知字段、默认值、转换和 `404/400` 行为补充中文注释和实现说明。
-
-**前置检查：**
-
-- 阶段 0 完成。
-- 不创建迁移；实体只按已确认表结构编写。
-- 不在 Controller 手写业务校验，不直接返回 Entity。
-
-**完成标准：**
-
-- 模块内部编译通过，Controller 只负责参数、当前用户、Service 调用和响应。
-- 所有 API schema 都能区分 `z.input` 与 `z.output` 的需要，并覆盖严格字段和边界规则。
-- 模块导出仅限 `UserMemoryReaderService`、`UserMemoryTaskService`、`UserMemoryLifecycleService` 所需公开能力。
-- 代理报告通过主代理的文件所有权检查。
-
-### 阶段 2：LLM 结构化文本生成端口
-
-**负责者：** LLM 端口代理；主代理负责模块注册。
-
-**实施内容：**
-
-- 新增窄接口 `StructuredTextGenerationPort`，输入仅包含 system、user 和超时，输出只包含模型标识与文本。
-- 复用现有 `ChatModelFactory` 的供应商配置和超时策略。
-- 明确不绑定聊天工具、LangGraph trace、可见响应或长期聊天状态。
-- 对供应商超时、空输出和不可用错误映射为任务处理器可识别的内部失败分类。
-
-**前置检查：**
-
-- 阶段 1 已定义候选 schema 和提取输入边界。
-- 已阅读当前 LLM provider、fake model 和模块导出方式。
-
-**完成标准：**
-
-- 端口不暴露密钥、不记录完整 prompt 或原始模型响应。
-- 端口类型可被 `UserMemoryExtractorService` 注入，且不反向依赖记忆模块。
-- 主代理可以在不修改聊天图行为的情况下完成模块注册。
-
-### 阶段 3：任务领取、提取和重试处理器
-
-**负责者：** 任务处理代理；主代理负责实体注册和迁移接线。
-
-**实施内容：**
-
-- 实现聊天事务内的 `deduplicationKey` 登记。
-- 实现 `pending/failed` 任务领取、`FOR UPDATE SKIP LOCKED`、`processing` 锁定和尝试次数。
-- 实现结构化候选解析、`explicit` 检查、敏感过滤、数量限制、值规范化和 SHA-256 指纹。
-- 实现候选结果唯一键、冲突规则、主要偏好锁定、软删除和事务边界。
-- 实现 `1m/5m/30m` 退避（首次处理后最多重试三次）、processing 超时回收和 `onModuleDestroy` 清理轮询器。
-- 失败只记录内部错误分类，不写入模型原文、聊天原文或完整记忆值。
-
-**前置检查：**
-
-- 阶段 1 和阶段 2 完成。
-- 已确认任务表字段、索引、结果唯一键和设置关闭语义。
-- 已确认进程内轮询器不能阻断聊天请求。
-
-**完成标准：**
-
-- 重复任务、重复候选、并发主要偏好更新和处理崩溃重试均保持幂等。
-- 设置关闭时任务可以成功结束但不应用候选。
-- 模型无效 JSON、超时、敏感候选和数据库瞬时错误都有明确状态或退避行为。
-- 轮询器在模块销毁时停止，不遗留定时器。
-
-### 阶段 4：聊天读取、注入和生命周期接线
+### 阶段 0：基线、依赖和对象存储 API 验证
 
 **负责者：** 主代理。
 
 **实施内容：**
 
-- 在聊天模型调用前读取当前用户相关记忆，遵守“当前消息 > 长期记忆 > 系统默认规则”。
-- 将最多 8 条、最多 512 token 的结构化摘要加入现有 `ChatContextService` 预算。
-- 在 `ChatRecordsService.persistChat` 保存用户和助手消息的同一事务内登记提取任务。
-- 在来源会话删除前调用生命周期端口，标记 `source_status=deleted`，再沿用现有聊天删除级联。
-- 处理记忆模块导入、公开端口和 existing tracing/chat history 的依赖方向。
-
-**前置检查：**
-
-- 阶段 1 和阶段 3 完成，公开端口已经稳定。
-- 已阅读现有聊天记录事务、上下文预算和会话删除实现。
+- 记录 `git status --short`、现有迁移状态、API/Web 基础检查结果和本地数据库可用性。
+- 复核七牛 SDK 当前版本、Node.js 22 兼容性、区域发现、上传、私有下载、对象删除和错误行为。
+- 确认实际 Bucket、区域、服务端下载域名及运行环境密钥注入方式；密钥只由环境提供。
 
 **完成标准：**
 
-- 聊天响应不等待模型提取任务。
-- 记忆关闭时不读取、不注入、不产生新的提取应用。
-- 聊天模块不访问记忆 Repository、Entity 或私有 DTO。
-- 删除来源聊天后记忆保留且只显示来源已删除状态。
+- 依赖和 SDK 方法均有官方文档依据，未依赖猜测的 SDK API。
+- 自动化测试可以在没有七牛账户和密钥的环境下运行。
+- 基线及已有工作区修改已记录，没有覆盖或回滚用户内容。
 
-### 阶段 5：前端记忆管理页面
+### 阶段 1：对象存储适配器和配置接线
 
-**负责者：** 前端代理；主代理负责路由和导航接线。
+**负责者：** 对象存储代理；主代理拥有依赖、环境示例和模块注册。
 
 **实施内容：**
 
-- 创建 `apps/web/src/pages/memories/index.vue`、`page.ts` 和页面私有 `components/`。
-- 创建 `apps/web/src/api/modules/memories.ts` 和 `apps/web/src/api/types/memories.ts`。
-- 实现列表加载、空数据、加载失败、提交中、提交失败、删除单条、删除全部确认、设置开关和结构化值编辑。
-- 按类别展示 `single/multi/range` 值，隐藏内部任务、指纹、用户 ID 和模型字段。
-- 使用现有 shadcn-vue 基础组件和图标，组件通过 typed Props/Emits 保持单向数据流。
-- 所有请求走 Axios API 底座，不在页面中直接拼接 URL 或处理认证重试。
-
-**前置检查：**
-
-- 阶段 1 的最终响应类型和错误契约可用。
-- 已阅读现有 `account`、`chat` 页面结构、路由 Guard、API 模块和 UI 组件。
+- 实现窄的对象存储能力：生成服务端对象键、上传不可变对象、服务端代理读取、删除孤儿对象。
+- 私有下载签名仅在服务端生成并即时使用；不返回客户端、不打日志。
+- 统一处理配置缺失、权限错误、限流、超时和对象不存在等可分类错误。
 
 **完成标准：**
 
-- 页面满足 `idle/loading/success/empty/error` 和提交状态要求。
-- 删除全部只发送 `confirm: true`，重复提交被阻止。
-- 删除全部与提取任务并发时，已提交记忆会被软删除，未提交候选不会重新创建记忆。
-- 页面卸载清理请求或过期响应保护，不产生旧请求覆盖新状态。
-- 主代理可以在不改页面私有文件的情况下完成路由注册。
+- 适配器不依赖文档实体或 Controller；业务层通过注入端口调用对象存储。
+- 对象键仅由服务端用户 UUID、revision 和随机后缀生成；调用方不能指定 Bucket 或任意对象键。
+- fake 覆盖上传、读取、删除、超时、权限失败和签名安全。
 
-### 阶段 6：自动化测试和测试替身
+### 阶段 2：文档领域 API、状态实体和迁移
 
-**负责者：** 测试代理；主代理补充跨模块测试。
+**负责者：** 文档领域代理；主代理负责模块注册及迁移。
 
 **实施内容：**
 
-- 覆盖每个类别值 schema 的合法、边界、未知字段和非法组合。
-- 覆盖 `z.input` 查询转换、默认 pageSize、Body/Query/Param 的 400 映射。
-- 覆盖手动 CRUD、设置开关、用户隔离、越权 404、重复值幂等和软删除。
-- 覆盖任务领取、退避、超时回收、候选解析、敏感过滤、重复结果和并发主要标记。
-- 使用 Fake Structured Text Generation Port，不调用真实供应商。
-- 主代理补充真实测试数据库迁移、模块注册、聊天链路和来源删除集成测试。
-
-**前置检查：**
-
-- 阶段 1 至阶段 5 的接口已稳定；测试代理不得为了通过测试改变生产契约。
-- 已确认测试数据库、fixture、认证测试工具和现有 Jest/Vitest 配置。
+- 扩展现有 Controller，提供 `GET/PUT/DELETE /api/memories/document`，复用现有 JWT Guard、`@CurrentUser()` 和 Standard Schema 校验 Pipe。
+- 实现 Zod strict schema、UTF-8 字节上限、敏感内容检查、response DTO 和 document Service。
+- 新增 `UserMemoryDocumentState` 状态实体，记录 revision、object key、generation、摘要和更新时间。
+- 实现 PostgreSQL 锁下的 revision 检查、对象上传后切换数据库指针、清空后延迟清理。
 
 **完成标准：**
 
-- 新增测试放在 `apps/api/src/user-memory/spec/`，不创建跨业务全局 spec 目录。
-- 测试能证明未知字段、非法值、权限边界和内部字段泄漏均符合契约。
-- 测试失败时报告最小复现命令和失败原因，不以放宽断言解决实现问题。
+- 未知字段和非法内容返回约定 `400`；revision 冲突返回 `409`；对象服务失败返回 `503`。
+- 仅当前认证用户可读写自己的文档；响应不含对象键、签名 URL、凭据或内部状态字段。
+- 迁移 `up/down` 经 SQL 审阅，并在可销毁的专用测试数据库验证；不运行 `migration:fresh` 清理用户数据库。
 
-### 阶段 7：主代理集成、迁移审查和仓库验证
+### 阶段 3：静默提取和任务幂等
+
+**负责者：** 提取任务代理；主代理负责实体迁移与模块接线。
+
+**实施内容：**
+
+- 扩展现有 extractor/task/scheduler，生成受 Zod 约束的有限 Markdown `append/replace/delete` 操作，不让模型输出全文覆盖。
+- 按服装、穿搭和购物优先，其他长期个性化背景为辅；过滤临时信息、低置信度内容和健康、身份、财务及认证敏感内容。
+- 将 operation key 写入独立的文档任务结果表，保证重试不重复应用。
+- 在应用前重新检查记忆开关和 `document_generation`；清空前登记的旧任务不得恢复 Markdown 内容。
+
+**完成标准：**
+
+- 重复任务和部分成功后的重试幂等；未唯一匹配的 replace/delete 安全跳过。
+- 手动编辑并发时对最新版本应用补丁，不覆盖用户内容。
+- 模型错误、对象存储错误或任务重试不会改变已经完成的聊天响应。
+
+### 阶段 4：聊天读取与跨模块集成
 
 **负责者：** 主代理。
 
 **实施内容：**
 
-- 完成模块、实体、LLM 端口、聊天、前端路由和导航的公共接线。
-- 创建并审查迁移 SQL，确认外键、部分唯一索引、检查约束、`ON DELETE` 行为和 `down` 顺序。
-- 检查 package scripts、环境示例、锁文件和格式化结果。
-- 执行完整验证命令和真实数据库 Smoke Test。
-- 汇总子代理报告，记录未解决风险、未实施的非目标和后续工作。
+- 在现有 `UserMemoryReaderService` 读取相关 Markdown 块并与结构化偏好合并，沿用技术文档确定的总上下文预算与优先级。
+- 扩展现有聊天事务内的任务登记，携带当前文档 generation；读取失败时跳过记忆并继续普通聊天。
+- 保持 `chat_messages`、trace 和聊天 API 响应现有语义不变。
 
 **完成标准：**
 
-- 没有越界修改、循环依赖、直接返回 Entity、跨用户查询或敏感日志。
-- 所有文档链接有效，实施结果与已确认技术文档一致。
-- 只有完成本阶段后，才能把模块标记为已实现。
+- 聊天模块只通过记忆模块公开端口读取或登记任务。
+- 记忆关闭后不读取、不注入且不应用结构化或 Markdown 提取结果。
+- 通过真实 HTTP/数据库链路验证聊天持久化、任务登记、提取候选应用和后续上下文读取；若真实模型不可用，清楚标记未覆盖的部分。
+
+### 阶段 5：Markdown 记忆管理页面
+
+**负责者：** 前端代理。
+
+**实施内容：**
+
+- 在 `apps/web/src/pages/memories/` 现有页面上新增 Markdown 视图，不重建偏好 CRUD。
+- 通过现有 `src/api/modules/memories.ts` 和 API 类型访问文档 API；编辑原始 Markdown，提供安全预览、保存、冲突处理和独立清空确认。
+- 明确管理页加载、空文档、读取失败、dirty、saving、saved、conflict、提交失败和清空状态。
+
+**完成标准：**
+
+- 使用 `MarkdownRenderer.vue` 的 sanitize 能力；不使用 `v-html`、不关闭 sanitizer、不将签名 URL 或对象键注入界面。
+- `409` 时保留草稿，不自动覆盖远端版本；防重复提交，过期响应不能覆盖当前草稿。
+- 结构化偏好页面、用户记忆开关和现有记忆操作保持可用。
+
+### 阶段 6：测试、集成检查和 Smoke Test
+
+**负责者：** 测试代理负责模块测试；主代理负责迁移、HTTP 和全链路验证。
+
+**实施内容：**
+
+- 测试 Zod schema、Standard Schema Pipe 的 HTTP 400、用户隔离、revision 冲突、对象存储失败、任务重试、敏感过滤和清空竞态。
+- 使用 fake 七牛适配器与 fake 模型端口运行自动化测试，不要求真实凭据或外网。
+- 因当前 Web 尚无 Vitest/Vue Test Utils/Playwright 基础设施，不在本任务擅自新增测试框架；运行现有 typecheck/build，并按条件进行浏览器手工 Smoke Test。
+- 对配置真实七牛凭据的验证只运行于明确授权的非生产环境，记录实际验证环境，禁止打印或写入密钥。
+
+**完成标准：**
+
+- 服务端测试覆盖 schema/HTTP、授权边界、对象状态一致性、任务幂等及代次隔离。
+- API typecheck/test/build 和 Web typecheck/build 均有真实运行结果。
+- `pnpm format:check`、`pnpm check` 和 `git diff --check` 的结果如实记录；对既有或未修改文件造成的格式失败，说明具体路径，不进行无关重排。
+- Smoke Test 验证私有对象不可匿名读取、跨用户隔离、两 API 实例并发、清空与旧任务竞态以及备份指针一致性。
 
 ## 验收标准
 
-### 业务和权限
+### 文档、权限与安全
 
-- 登录用户可以查看、创建、修改、删除和删除全部自己的长期记忆。
-- 游客无法创建或读取长期记忆；访问返回现有认证错误。
-- 访问他人记忆 ID、伪造来源或越权删除统一返回 `404`，不泄露资源存在性。
-- 管理员普通接口不能读取其他用户记忆原文。
-- 关闭记忆停止读取、注入和提取应用，但不删除已有数据；重新开启后 active 记忆可继续使用。
+- 已有结构化服装偏好继续可用；每位用户最多一份独立 Markdown 文档。
+- 文档以服装、穿搭、购物信息为主，其他长期个性化背景为辅；不写入健康、身份、财务或认证敏感信息。
+- Bucket 为私有空间；客户端不能指定或获得对象键、下载签名 URL、AK/SK。
+- 游客、其他用户和普通管理员接口不能读取文档原文。
 
-### 数据和一致性
+### 持久化、并发与任务
 
-- 四张表、索引、检查约束、外键级联和来源会话 `ON DELETE SET NULL` 与技术文档一致。
-- 记忆值只能通过类别判别联合 schema，不能写入任意画像 JSON。
-- active 值指纹、任务去重键和候选结果键共同保证幂等。
-- 主要偏好在事务和锁定范围内保持同类最多一条。
-- 删除来源聊天保留记忆并标记来源已删除；账号物理删除具备级联清理能力。
-
-### 聊天、模型和任务
-
-- 当前消息优先于长期记忆，长期记忆优先于系统默认规则。
-- 只注入相关记忆，最多 8 条且最多 512 token，不突破现有上下文 hard limit。
-- 聊天 HTTP 响应不等待异步提取；任务失败、模型超时和无效 JSON 不影响已完成聊天。
-- 轮询器支持多实例领取、退避、超时回收和模块销毁清理。
-- 日志不包含密钥、Token、完整原文、模型原始响应、完整记忆值或候选推理。
+- PostgreSQL 只保存文档状态及对象指针，不保存 Markdown 正文。
+- 新对象上传成功后才切换数据库指针；对象上传或数据库事务失败时，之前有效版本仍可读取。
+- 手工编辑使用 `expectedRevision`，并发冲突返回 `409` 且不丢本地草稿。
+- 清空递增 generation 并让读取立即变为空；旧任务不能复活 Markdown 文档，旧对象清理由延迟任务安全重试。
+- 聊天完成不等待提取；对象存储或模型失败不阻断普通聊天。
 
 ### API、前端和验证
 
-- Body、Query、Param 均由 Zod schema 和 `StandardSchemaValidationPipe` 校验；未知字段返回 `400`。
-- 响应对象不包含 `userId`、指纹、任务字段、删除值或内部错误。
-- 前端完整处理加载、空数据、错误、提交中和提交失败状态，且遵守页面目录、Axios、Props/Emits 和生命周期约定。
-- 迁移 `up/down`、API typecheck、API test、API build、格式检查、`pnpm check` 和主要 Smoke Test 均有实际结果记录。
+- `GET/PUT/DELETE /api/memories/document` 仅从当前认证用户确定资源归属。
+- API schema、未知字段、字节长度、敏感内容和错误映射符合已确认技术文档。
+- 页面支持原始 Markdown 编辑和 sanitize 预览，正常处理加载、空状态、保存、冲突、错误和清空。
+- 自动化测试不依赖真实七牛密钥；数据库迁移、安全边界和关键聊天工作流有实际验证记录。
 
 ## 风险和停止条件
 
-以下情况必须停止当前实施阶段，不得用临时改动绕过：
+- 七牛 SDK 版本、Node ESM 兼容性、Bucket 区域或私有下载 API 与技术文档不符。
+- 生产 Bucket、区域、下载域名、最小权限 AK/SK、密钥轮换或备份策略尚未明确。
+- 对象存储与 PostgreSQL 指针可能出现部分失败；若无法实现可重试的孤儿清理和状态核对，不得上线写入。
+- 数据库实体/迁移、任务幂等、清空 generation 或用户归属与已确认契约不一致。
+- 当前 HTTP/数据库/LLM 链路无法验证任务登记、执行、结果反馈和后续读取。
+- 自动化测试被迫依赖真实生产凭据或不可控外网。
+- 实施需要改变已确认 API、数据语义、隐私范围或现有结构化偏好行为。
 
-- 技术文档中的表结构、类别、API 路由、权限或删除语义与现有代码无法兼容。
-- 需要新增 Redis、队列、向量数据库、Embedding、外部服务或新的认证体系。
-- 发现需要修改 `chat_messages`、`chat_trace_events` 的公开语义才能实现记忆功能。
-- 无法保证同一文件的独占所有权，或代理出现未报告的越界修改。
-- 迁移无法安全创建、回滚或验证外键、部分唯一索引和历史数据兼容性。
-- 无法确认用户归属、关闭设置、来源删除或账号删除的事务边界。
-- 模型端口需要记录原始 prompt、原始响应、供应商凭据或完整聊天原文。
-- 测试只能依赖真实生产服务、真实第三方密钥或不可控外网。
-- `pnpm format:check`、API typecheck/test/build、`pnpm check` 或迁移验证失败，且无法定位为环境问题。
-
-环境问题必须单独记录命令、错误和影响范围；不能把未执行或失败的验证写成通过。`migration:fresh` 只可在明确可销毁的本地或 CI 数据库执行，不作为普通功能验证。
+遇到上述情况暂停对应阶段，给出复现信息和受影响文件，回到适当审批阶段，不用临时兼容层绕过。不得将未执行或失败的检查记为通过。`migration:fresh` 仅可用于明确可销毁的本地或 CI 数据库。
 
 ## 实施交付记录
 
-- 代码范围：长期记忆 API、结构化提取任务、聊天上下文接线、来源会话生命周期、管理页面和路由已实现。
-- 数据库：`Migration20261103120000` 已应用到当前本地 PostgreSQL；通过 MikroORM 查询确认已执行。已审阅 `down()` SQL，但未在当前数据库执行回滚。
-- API：`pnpm --filter @clothes-shopping-guide/api typecheck`、`test`、`build` 通过；测试共 75 项通过。
-- Web：前端代理报告 `typecheck`、`build`、变更文件 Prettier 和 `git diff --check` 通过。
-- 变更文件 Prettier 与 `git diff --check` 通过。
-- 本地 HTTP/PostgreSQL Smoke Test 通过：认证、记忆列表、未知字段 400、创建、跨用户越权 404、开关、单条删除和删除全部；测试使用的临时账户已清理。
-- 关闭记忆时不读取聊天原文、不调用提取模型的行为有自动化回归测试。未调用真实 LLM；真实模型提取、聊天后任务入队再到记忆应用的完整端到端 Smoke Test 仍待验证。
-- `pnpm check` 在 `format:check` 阶段失败：格式检查仍报告生成的 MikroORM snapshot 和未修改的 `apps/api/src/llm/context/system-context.md`。未对生成 snapshot 或无关上下文文档做全文件重排。根级 `pnpm typecheck` 与 `pnpm build` 已分别通过。
+- 状态：实现完成，进入交付验证。
+- 已完成：七牛对象存储适配器、Markdown 文档 API、revision/generation 并发控制、延迟清理队列、聊天后静默补丁提取、512 token 记忆上下文接线，以及前端 Markdown 编辑/预览/冲突处理/清空流程。
+- 依赖与配置：API 新增 `qiniu@7.15.2`；`.env.example` 已增加七牛占位配置，未写入真实凭据。
+- 数据库：已新增 `Migration20261103130000`；在临时数据库 `csg_memory_test_20261103` 完成全量迁移验证，验证后已删除临时数据库。
+- 自动化验证：API typecheck、API build、API 86 项测试、Web typecheck、Web build、定向 Prettier 和 `git diff --check` 通过。
+- 未覆盖：未使用真实七牛凭据进行联调，未执行真实模型的完整提取链路和浏览器级 Playwright 验证；`pnpm format:check`/`pnpm check` 仍受仓库既有未修改文件 `apps/api/src/database/migrations/.snapshot-clothes_guide.json`、`apps/api/src/llm/context/system-context.md` 的格式检查影响。

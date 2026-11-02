@@ -40,6 +40,9 @@ export class UserMemoryTask {
   @Property({ type: 'uuid', fieldName: 'assistant_message_id', nullable: true })
   public assistantMessageId: string | null = null;
 
+  @Property({ type: 'integer', fieldName: 'document_generation', default: 0 })
+  public documentGeneration = 0;
+
   @Property({
     type: 'string',
     fieldName: 'deduplication_key',

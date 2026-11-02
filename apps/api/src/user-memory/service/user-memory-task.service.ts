@@ -37,13 +37,33 @@ export class UserMemoryTaskService {
   ): Promise<void> {
     const now = new Date();
     const deduplicationKey = `${input.conversationId}:${input.userMessageId}`;
+    const transactionContext = entityManager.getTransactionContext();
+    const connection = entityManager.getConnection();
+    const lockKey = `user-memory-document:${input.userId}`;
+    await connection.execute(
+      'select pg_advisory_xact_lock(hashtextextended(?, 0))',
+      [lockKey],
+      'run',
+      transactionContext,
+    );
+    const [documentState] = await connection.execute<
+      Array<{ document_generation: number }>
+    >(
+      `select document_generation
+       from user_memory_document_states
+       where user_id = ?`,
+      [input.userId],
+      'all',
+      transactionContext,
+    );
+    const documentGeneration = documentState?.document_generation ?? 0;
     await entityManager.getConnection().execute(
       `insert into user_memory_tasks (
          id, user_id, conversation_id, user_message_id, assistant_message_id,
-         deduplication_key, status, attempts, available_at, locked_at,
+         deduplication_key, document_generation, status, attempts, available_at, locked_at,
          last_error_code, created_at, updated_at
        )
-       values (?, ?, ?, ?, ?, ?, ?, 0, ?, null, null, ?, ?)
+       values (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, null, null, ?, ?)
        on conflict (deduplication_key) do nothing`,
       [
         randomUUID(),
@@ -52,13 +72,14 @@ export class UserMemoryTaskService {
         input.userMessageId,
         input.assistantMessageId,
         deduplicationKey,
+        documentGeneration,
         UserMemoryTaskStatus.PENDING,
         now,
         now,
         now,
       ],
       'run',
-      entityManager.getTransactionContext(),
+      transactionContext,
     );
   }
 

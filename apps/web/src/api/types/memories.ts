@@ -86,3 +86,9 @@ export interface UpdateMemoryPayload {
 export interface DeleteAllMemoriesResponse {
   deletedCount: number;
 }
+
+export interface MemoryDocument {
+  content: string;
+  revision: number;
+  updatedAt: string | null;
+}

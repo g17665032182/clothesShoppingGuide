@@ -4,6 +4,7 @@ import {
   memoryCategorySchema,
   parseMemoryValue,
 } from './memory-value.schema.js';
+import { memoryDocumentOperationsSchema } from './memory-document-patch.schema.js';
 
 const candidateOperationSchema = z
   .strictObject({
@@ -27,6 +28,7 @@ const candidateOperationSchema = z
 
 export const memoryCandidateSchema = z.strictObject({
   operations: z.array(candidateOperationSchema).max(10),
+  documentOperations: memoryDocumentOperationsSchema.default([]),
 });
 
 export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;

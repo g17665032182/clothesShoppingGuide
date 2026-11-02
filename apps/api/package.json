@@ -43,6 +43,7 @@
     "js-tiktoken": "^1.0.21",
     "nestjs-pino": "^5.3.1",
     "pino-pretty": "^13.2.0",
+    "qiniu": "7.15.2",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "svg-captcha": "1.4.0",
