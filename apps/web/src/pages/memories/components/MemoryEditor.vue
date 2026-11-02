@@ -12,7 +12,6 @@ import { Spinner } from '@/components/ui/spinner';
 
 const props = defineProps<{
   modelValue: MemoryEditorState;
-  title: string;
   pending: boolean;
   error: string;
 }>();
@@ -33,13 +32,7 @@ function setField<Key extends keyof MemoryEditorState>(
 
 <template>
   <form class="flex flex-col gap-5" @submit.prevent="emit('submit')">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h2 class="text-lg font-semibold">{{ title }}</h2>
-        <p class="mt-1 text-sm text-muted-foreground">
-          仅填写与服装选择有关的偏好。
-        </p>
-      </div>
+    <div class="flex flex-wrap items-start justify-end gap-3">
       <label class="flex min-h-8 items-center gap-2 text-sm">
         <input
           type="checkbox"

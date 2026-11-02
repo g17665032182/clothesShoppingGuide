@@ -15,6 +15,13 @@ import { useMemoriesPage } from './page';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -63,6 +70,10 @@ const {
   totalPages,
   settingPending,
 } = useMemoriesPage();
+
+function handleEditorOpenChange(open: boolean) {
+  if (!open) cancelEdit();
+}
 </script>
 
 <template>
@@ -103,21 +114,6 @@ const {
     <p v-if="submitError" role="alert" class="text-sm text-destructive">
       {{ submitError }}
     </p>
-
-    <section
-      v-if="editorOpen"
-      class="rounded-md border bg-card p-4 md:p-6"
-      aria-label="记忆编辑器"
-    >
-      <MemoryEditor
-        v-model="editor"
-        :title="editingTitle"
-        :pending="submitting"
-        :error="submitError"
-        @submit="saveMemory"
-        @cancel="cancelEdit"
-      />
-    </section>
 
     <div
       class="flex flex-wrap items-center justify-between gap-3 border-y py-3"
@@ -282,6 +278,24 @@ const {
       </footer>
     </div>
   </section>
+
+  <Dialog :open="editorOpen" @update:open="handleEditorOpenChange">
+    <DialogContent
+      class="max-h-[90vh] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-2xl"
+    >
+      <DialogHeader>
+        <DialogTitle>{{ editingTitle }}</DialogTitle>
+        <DialogDescription> 仅填写与服装选择有关的偏好。 </DialogDescription>
+      </DialogHeader>
+      <MemoryEditor
+        v-model="editor"
+        :pending="submitting"
+        :error="submitError"
+        @submit="saveMemory"
+        @cancel="cancelEdit"
+      />
+    </DialogContent>
+  </Dialog>
 
   <AlertDialog v-model:open="deleteAllDialogOpen">
     <AlertDialogContent>
