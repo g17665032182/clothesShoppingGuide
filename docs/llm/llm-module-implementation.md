@@ -4,7 +4,7 @@
 
 - 关联设计文档：[通用大模型模块设计](./llm-module-design.md)
 - 关联技术文档：[通用大模型模块技术文档](./llm-module-technical.md)
-- 状态：已实施（真实供应商 Smoke Test 待配置密钥后执行）
+- 状态：已实施（真实供应商及本地工具调用 Smoke Test 已验证）
 - 实施方式：主代理统筹，子代理分工实施
 - 所属应用：`apps/api`
 - 最后更新：2026-10-27
@@ -118,6 +118,10 @@ git diff --check
 - 模型响应格式正确。
 - Token 使用量缺失时返回 `null`。
 - 上游错误和超时被转换为约定状态码。
+
+本地工具调用 Smoke Test 通过临时环境变量
+`LLM_ENABLE_LOCAL_TEST_TOOL=true` 启用 `local_echo_tool`，验证了模型调用工具、
+工具结果回传模型、事件持久化和公开历史接口隔离。验证完成后已删除临时用户和会话数据。
 
 ### 8. 交付记录
 
@@ -419,6 +423,7 @@ curl -X POST http://localhost:3000/api/llm/chat \
 - [x] 没有引入商品、穿搭、RAG、Agent 或会话持久化。
 - [x] `pnpm check` 通过。
 - [x] `git diff --check` 通过。
+- [x] 本地工具调用闭环通过：`input -> model_response -> tool_call -> tool_result -> model_response`。
 
 ## 风险和处理
 

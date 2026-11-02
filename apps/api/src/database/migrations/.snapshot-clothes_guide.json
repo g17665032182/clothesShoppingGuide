@@ -1,6 +1,8 @@
 {
   "name": "public",
-  "namespaces": ["public"],
+  "namespaces": [
+    "public"
+  ],
   "tables": [
     {
       "name": "chat_conversations",
@@ -128,7 +130,9 @@
       },
       "indexes": [
         {
-          "columnNames": ["id"],
+          "columnNames": [
+            "id"
+          ],
           "composite": false,
           "constraint": true,
           "keyName": "chat_conversations_pkey",
@@ -136,7 +140,9 @@
           "unique": true
         },
         {
-          "columnNames": ["user_id"],
+          "columnNames": [
+            "user_id"
+          ],
           "composite": false,
           "constraint": false,
           "keyName": "chat_conversations_user_id_index",
@@ -148,10 +154,14 @@
       "triggers": [],
       "foreignKeys": {
         "chat_conversations_user_id_foreign": {
-          "columnNames": ["user_id"],
+          "columnNames": [
+            "user_id"
+          ],
           "constraintName": "chat_conversations_user_id_foreign",
           "localTableName": "public.chat_conversations",
-          "referencedColumnNames": ["id"],
+          "referencedColumnNames": [
+            "id"
+          ],
           "referencedTableName": "public.users",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -296,7 +306,10 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": ["user", "assistant"],
+          "enumItems": [
+            "user",
+            "assistant"
+          ],
           "mappedType": "enum"
         },
         "total_tokens": {
@@ -319,7 +332,9 @@
       },
       "indexes": [
         {
-          "columnNames": ["conversation_id"],
+          "columnNames": [
+            "conversation_id"
+          ],
           "composite": false,
           "constraint": false,
           "keyName": "chat_messages_conversation_id_index",
@@ -327,7 +342,9 @@
           "unique": false
         },
         {
-          "columnNames": ["id"],
+          "columnNames": [
+            "id"
+          ],
           "composite": false,
           "constraint": true,
           "keyName": "chat_messages_pkey",
@@ -346,10 +363,341 @@
       "triggers": [],
       "foreignKeys": {
         "chat_messages_conversation_id_foreign": {
-          "columnNames": ["conversation_id"],
+          "columnNames": [
+            "conversation_id"
+          ],
           "constraintName": "chat_messages_conversation_id_foreign",
           "localTableName": "public.chat_messages",
-          "referencedColumnNames": ["id"],
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.chat_conversations",
+          "updateRule": "cascade",
+          "deleteRule": "cascade"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "chat_trace_events",
+      "schema": "public",
+      "columns": {
+        "content": {
+          "name": "content",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "input",
+            "model_response",
+            "tool_call",
+            "tool_result"
+          ],
+          "mappedType": "enum"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "model": {
+          "name": "model",
+          "type": "varchar(100)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 100,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "tool_call_id": {
+          "name": "tool_call_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
+        "tool_name": {
+          "name": "tool_name",
+          "type": "varchar(200)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 200,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "usage": {
+          "name": "usage",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "json"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "conversation_id",
+            "created_at",
+            "sequence"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "chat_trace_events_conversation_created_sequence_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "conversation_id",
+            "tool_call_id"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "chat_trace_events_conversation_tool_call_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "chat_trace_events_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "conversation_id",
+            "run_id",
+            "sequence"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "chat_trace_events_run_sequence_unique",
+          "primary": false,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "chat_trace_events_event_type_check",
+          "expression": "\"event_type\" in ('input', 'model_response', 'tool_call', 'tool_result')",
+          "definition": "check (\"event_type\" in ('input', 'model_response', 'tool_call', 'tool_result'))",
+          "columnName": "event_type"
+        },
+        {
+          "name": "chat_trace_events_status_check",
+          "expression": "(status IS NULL) OR (status = ANY (ARRAY['success'::text, 'failed'::text, 'partial'::text]))",
+          "definition": "CHECK (((status IS NULL) OR (status = ANY (ARRAY['success'::text, 'failed'::text, 'partial'::text]))))",
+          "columnName": "status"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "chat_trace_events_conversation_id_foreign": {
+          "columnNames": [
+            "conversation_id"
+          ],
+          "constraintName": "chat_trace_events_conversation_id_foreign",
+          "localTableName": "public.chat_trace_events",
+          "referencedColumnNames": [
+            "id"
+          ],
           "referencedTableName": "public.chat_conversations",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -449,7 +797,9 @@
       },
       "indexes": [
         {
-          "columnNames": ["id"],
+          "columnNames": [
+            "id"
+          ],
           "composite": false,
           "constraint": true,
           "keyName": "refresh_sessions_pkey",
@@ -457,7 +807,9 @@
           "unique": true
         },
         {
-          "columnNames": ["token_hash"],
+          "columnNames": [
+            "token_hash"
+          ],
           "composite": false,
           "constraint": false,
           "keyName": "refresh_sessions_token_hash_unique",
@@ -465,7 +817,9 @@
           "unique": true
         },
         {
-          "columnNames": ["user_id"],
+          "columnNames": [
+            "user_id"
+          ],
           "composite": false,
           "constraint": false,
           "keyName": "refresh_sessions_user_id_index",
@@ -477,10 +831,14 @@
       "triggers": [],
       "foreignKeys": {
         "refresh_sessions_user_id_foreign": {
-          "columnNames": ["user_id"],
+          "columnNames": [
+            "user_id"
+          ],
           "constraintName": "refresh_sessions_user_id_foreign",
           "localTableName": "public.refresh_sessions",
-          "referencedColumnNames": ["id"],
+          "referencedColumnNames": [
+            "id"
+          ],
           "referencedTableName": "public.users",
           "updateRule": "cascade",
           "deleteRule": "cascade"
@@ -591,7 +949,10 @@
           "default": "'user'",
           "comment": null,
           "collation": null,
-          "enumItems": ["user", "admin"],
+          "enumItems": [
+            "user",
+            "admin"
+          ],
           "mappedType": "enum"
         },
         "status": {
@@ -608,7 +969,10 @@
           "default": "'active'",
           "comment": null,
           "collation": null,
-          "enumItems": ["active", "disabled"],
+          "enumItems": [
+            "active",
+            "disabled"
+          ],
           "mappedType": "enum"
         },
         "updated_at": {
@@ -631,7 +995,9 @@
       },
       "indexes": [
         {
-          "columnNames": ["email"],
+          "columnNames": [
+            "email"
+          ],
           "composite": false,
           "constraint": true,
           "keyName": "users_email_unique",
@@ -639,7 +1005,9 @@
           "unique": true
         },
         {
-          "columnNames": ["id"],
+          "columnNames": [
+            "id"
+          ],
           "composite": false,
           "constraint": true,
           "keyName": "users_pkey",

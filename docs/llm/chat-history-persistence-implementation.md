@@ -210,6 +210,11 @@ pnpm check
 - 删除会话，确认 trace 行级联删除。
 - 不将 API Key、工具 payload 或完整 Prompt 输出到终端和日志。
 
+本次已使用临时启用的 `local_echo_tool` 完成上述核心链路验证：
+模型实际产生工具调用，`ToolNode` 执行结果后再次调用模型，最终答案包含工具返回值；
+`chat_trace_events` 保存了 `input`、`model_response`、`tool_call` 和 `tool_result`，
+公开聊天详情未返回工具事件，删除会话后相关 trace 级联删除。
+
 ## 风险和停止条件
 
 - 如果 LangGraph 当前锁定版本不能按设计传递 typed runtime context，先调整技术方案并重新审批，不得将 writer 塞入 Graph state 或引入 LLM 到 ChatRecords 的反向依赖。

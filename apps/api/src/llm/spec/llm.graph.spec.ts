@@ -62,25 +62,23 @@ test('LangGraph 使用 ToolNode 执行工具后回到模型节点', async () => 
       schema: z.object({ value: z.string() }),
     },
   );
-  const graph = createLlmGraph(
-    new FakeChatModel({
-      responses: [
-        {
-          response: '',
-          toolCalls: [
-            {
-              name: 'echo_tool',
-              args: { value: 'hello' },
-              id: 'call-1',
-              type: 'tool_call',
-            },
-          ],
-        },
-        { response: 'final response' },
-      ],
-    }),
-    [echoTool],
-  );
+  const model = new FakeChatModel({
+    responses: [
+      {
+        response: '',
+        toolCalls: [
+          {
+            name: 'echo_tool',
+            args: { value: 'hello' },
+            id: 'call-1',
+            type: 'tool_call',
+          },
+        ],
+      },
+      { response: 'final response' },
+    ],
+  });
+  const graph = createLlmGraph(model, [echoTool]);
 
   const result = await graph.invoke({
     messages: [new HumanMessage('请调用工具')],
@@ -92,6 +90,8 @@ test('LangGraph 使用 ToolNode 执行工具后回到模型节点', async () => 
     result.messages.filter((message) => message.type === 'tool').length,
     1,
   );
+  assert.equal(model.calls[1]?.at(-1)?.type, 'tool');
+  assert.equal(model.calls[1]?.at(-1)?.content, 'tool result: hello');
 });
 
 test('LangGraph 节点按顺序记录输入、模型、工具调用和工具结果', async () => {
@@ -153,6 +153,7 @@ test('LangGraph 节点按顺序记录输入、模型、工具调用和工具结�
   );
   assert.equal(events[2]?.type, 'tool_call');
   assert.equal(events[3]?.type, 'tool_result');
+  assert.equal(events[3]?.content, 'tool result: hello');
 });
 
 test('流式工具参数完整聚合后才执行，结果持久化后继续模型流', async () => {

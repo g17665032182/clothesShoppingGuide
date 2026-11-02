@@ -198,6 +198,10 @@ export const createLlmGraph = (model: BaseChatModel, tools: LlmTool[] = []) => {
 
 Graph 的输入只包含本次调用的消息，Graph 的输出包含最终消息和可选 Token 使用量。由于没有 Checkpointer，调用之间不会共享状态。
 
+本地链路验证工具 `local_echo_tool` 默认不注册。仅当服务端环境变量
+`LLM_ENABLE_LOCAL_TEST_TOOL=true` 时，`LlmModule` 才将它注入 Graph；该工具只回显参数，
+不访问外部资源或修改数据。生产环境应保持关闭，业务工具由拥有对应业务能力的模块显式注入。
+
 ## Token 使用量标准化
 
 不同供应商可能将 Token 数据放在 `usage_metadata` 或 `response_metadata` 中。模块内部统一转换为：
@@ -337,6 +341,7 @@ export class LlmModule {}
 ```
 
 实际实现可根据 NestJS 类型推断调整 Provider 的类型声明，但不得让 Controller 直接依赖模型实例。
+Graph Provider 在 `LLM_ENABLE_LOCAL_TEST_TOOL=true` 时注入本地回显工具，否则传入空工具列表。
 
 ## Controller 和认证
 
