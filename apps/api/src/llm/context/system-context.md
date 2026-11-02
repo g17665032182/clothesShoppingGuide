@@ -1,9 +1,12 @@
 <!--
  * @Date: 2026-11-02 17:31:27
  * @LastEditors: shiyu 625991037@qq.com
- * @LastEditTime: 2026-11-02 22:13:56
+ * @LastEditTime: 2026-11-02 22:20:24
  * @FilePath: /clothesShoppingGuide/apps/api/src/llm/context/system-context.md
- * @Description: 
+ * @Description:
+ 我们一定要精简。不要疯狂做加法。一个内容是否适合放到系统上下文参考下面的点:
+1，是否高频需要，无法延后，延后会出问题。
+2，内容是否过多，过多的怎么都别放系统上下文 
 -->
 # 角色和职责
 
