@@ -7,6 +7,9 @@ import { LLM_CHAT_MODEL, LLM_GRAPH } from './graph/llm.tokens.js';
 import { LlmService } from './service/llm.service.js';
 import { ChatModelFactory } from './provider/chat-model.factory.js';
 import { createConfiguredTools } from './tools/tool-registry.js';
+import { LLM_MODEL_NAME } from './port/structured-text-generation.tokens.js';
+import { StructuredTextGenerationService } from './port/structured-text-generation.service.js';
+import { STRUCTURED_TEXT_GENERATION_PORT } from './port/structured-text-generation.port.js';
 
 @Module({
   imports: [ConfigModule],
@@ -20,13 +23,24 @@ import { createConfiguredTools } from './tools/tool-registry.js';
         factory.create(),
     },
     {
+      provide: LLM_MODEL_NAME,
+      inject: [ChatModelFactory],
+      useFactory: (factory: ChatModelFactory): string =>
+        factory.readModelName(),
+    },
+    {
       provide: LLM_GRAPH,
       inject: [LLM_CHAT_MODEL, ConfigService],
       useFactory: (model: BaseChatModel, config: ConfigService) =>
         createLlmGraph(model, createConfiguredTools(config)),
     },
     LlmService,
+    StructuredTextGenerationService,
+    {
+      provide: STRUCTURED_TEXT_GENERATION_PORT,
+      useExisting: StructuredTextGenerationService,
+    },
   ],
-  exports: [LlmService],
+  exports: [LlmService, STRUCTURED_TEXT_GENERATION_PORT],
 })
 export class LlmModule {}

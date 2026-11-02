@@ -28,6 +28,12 @@ export const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/memories',
+      name: 'memories',
+      component: () => import('@/pages/memories/index.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/chat',
       name: 'chat',
       component: () => import('@/pages/chat/index.vue'),

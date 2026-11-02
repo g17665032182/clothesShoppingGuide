@@ -25,6 +25,9 @@ function signOut() {
         <RouterLink v-if="auth.state.user" class="text-link" to="/chat"
           >聊天</RouterLink
         >
+        <RouterLink v-if="auth.state.user" class="text-link" to="/memories"
+          >我的记忆</RouterLink
+        >
         <RouterLink v-if="auth.state.user" class="account-link" to="/account">
           <UserRound :size="16" />
           <span>{{ auth.state.user.displayName }}</span>

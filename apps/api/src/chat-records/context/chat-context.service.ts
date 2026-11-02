@@ -4,6 +4,7 @@ import {
   AIMessage,
   BaseMessage,
   HumanMessage,
+  SystemMessage,
   ToolMessage,
 } from '@langchain/core/messages';
 import { getEncoding } from 'js-tiktoken';
@@ -108,6 +109,7 @@ export class ChatContextService {
     history?: ChatMessage[];
     messageHistory?: ChatHistoryMessage[];
     currentUserMessage: string;
+    memoryContext?: string;
     contextSummary?: string | null | undefined;
     summaryThroughMessageId?: string | null | undefined;
   }): ContextPlan {
@@ -116,7 +118,10 @@ export class ChatContextService {
     const trigger = Math.floor(inputBudget * 0.75);
     const hardLimit = Math.floor(inputBudget * 0.9);
     const recentBudget = Math.floor(inputBudget * 0.3);
-    const system = [this.llmService.createSystemContextMessage()];
+    const system = [
+      this.llmService.createSystemContextMessage(),
+      ...(input.memoryContext ? [new SystemMessage(input.memoryContext)] : []),
+    ];
     const current = new HumanMessage(input.currentUserMessage);
     const allHistory =
       input.messageHistory ?? toLegacyHistory(input.history ?? []);

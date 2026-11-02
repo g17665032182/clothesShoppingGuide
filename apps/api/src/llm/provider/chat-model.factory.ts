@@ -36,6 +36,10 @@ export class ChatModelFactory {
     });
   }
 
+  public readModelName(): string {
+    return this.readConfig().model;
+  }
+
   private readConfig(): LlmConfig {
     const provider = this.readString('LLM_PROVIDER') ?? 'openai-compatible';
     if (provider !== 'openai-compatible') {

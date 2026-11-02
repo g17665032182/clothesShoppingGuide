@@ -23,6 +23,9 @@ import { ChatTraceEvent } from '../entity/chat-trace-event.entity.js';
 import { ChatTraceWriterService } from '../trace/chat-trace-writer.service.js';
 import type { AdminChatQueryDto } from '../dto/admin-chat-query.dto.js';
 import type { PaginationDto } from '../dto/pagination.dto.js';
+import { UserMemoryReaderService } from '../../user-memory/service/user-memory-reader.service.js';
+import { UserMemoryTaskService } from '../../user-memory/service/user-memory-task.service.js';
+import { UserMemoryLifecycleService } from '../../user-memory/service/user-memory-lifecycle.service.js';
 
 export type Page<T> = {
   items: T[];
@@ -88,6 +91,7 @@ type PreparedChat = {
   plan: ReturnType<ChatContextService['prepare']>;
   nextContextSummary: string | null | undefined;
   nextSummaryThroughMessageId: string | null | undefined;
+  memoryContext: string;
 };
 
 @Injectable()
@@ -103,6 +107,9 @@ export class ChatRecordsService {
     private readonly contextService: ChatContextService,
     private readonly summaryService: ChatSummaryService,
     private readonly traceWriter: ChatTraceWriterService,
+    private readonly memoryReader: UserMemoryReaderService,
+    private readonly memoryTasks: UserMemoryTaskService,
+    private readonly memoryLifecycle: UserMemoryLifecycleService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -223,8 +230,14 @@ export class ChatRecordsService {
   public async deleteForUser(userId: string, id: string): Promise<void> {
     const conversation = await this.getOwnedConversation(userId, id);
     const entityManager = this.conversations.getEntityManager();
-    entityManager.remove(conversation);
-    await entityManager.flush();
+    await entityManager.transactional(async (transactionalEntityManager) => {
+      await this.memoryLifecycle.markConversationDeleted(
+        conversation.id,
+        transactionalEntityManager,
+      );
+      transactionalEntityManager.remove(conversation);
+      await transactionalEntityManager.flush();
+    });
   }
 
   public generateConversationTitle(content: string): string {
@@ -243,6 +256,10 @@ export class ChatRecordsService {
     if (!currentUserMessage) {
       throw new BadRequestException('聊天请求至少需要一条 user 消息');
     }
+    const memoryContext = this.contextService.truncateToTokens(
+      await this.memoryReader.readContext(user.id, currentUserMessage.content),
+      512,
+    );
 
     const conversation = dto.conversationId
       ? await this.getOwnedConversation(user.id, dto.conversationId)
@@ -306,6 +323,7 @@ export class ChatRecordsService {
       history: legacyMessages,
       messageHistory: history,
       currentUserMessage: currentUserMessage.content,
+      memoryContext,
       contextSummary: conversation?.contextSummary,
       summaryThroughMessageId: conversation?.summaryThroughMessageId,
     });
@@ -324,6 +342,7 @@ export class ChatRecordsService {
           history: legacyMessages,
           messageHistory: history,
           currentUserMessage: currentUserMessage.content,
+          memoryContext,
           contextSummary: summary,
           summaryThroughMessageId: plan.lastIncludedMessageId,
         });
@@ -345,6 +364,7 @@ export class ChatRecordsService {
       plan,
       nextContextSummary,
       nextSummaryThroughMessageId,
+      memoryContext,
     };
   }
 
@@ -408,6 +428,12 @@ export class ChatRecordsService {
       await transactionalEntityManager.flush();
       transactionalEntityManager.persist([userMessage, assistantMessage]);
       await transactionalEntityManager.flush();
+      await this.memoryTasks.enqueueInTransaction(transactionalEntityManager, {
+        userId: persistedConversation.userId,
+        conversationId: persistedConversation.id,
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+      });
     });
   }
 

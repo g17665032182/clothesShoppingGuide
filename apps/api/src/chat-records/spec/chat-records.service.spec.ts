@@ -59,6 +59,7 @@ function createService(options: { failFlush?: boolean } = {}) {
     },
   };
   const contextService = {
+    truncateToTokens: (content: string) => content,
     prepare: () => ({
       messages: [
         { role: 'system' as const, content: '服务端上下文' },
@@ -72,6 +73,9 @@ function createService(options: { failFlush?: boolean } = {}) {
   };
   const summaryService = { summarize: async () => null };
   const traceWriter = { writeEvents: async () => undefined };
+  const memoryReader = { readContext: async () => '' };
+  const memoryTasks = { enqueueInTransaction: async () => undefined };
+  const memoryLifecycle = { markConversationDeleted: async () => undefined };
   const service = new ChatRecordsService(
     conversationRepository as never,
     messageRepository as never,
@@ -80,6 +84,9 @@ function createService(options: { failFlush?: boolean } = {}) {
     contextService as unknown as ChatContextService,
     summaryService as never,
     traceWriter as never,
+    memoryReader as never,
+    memoryTasks as never,
+    memoryLifecycle as never,
   );
 
   return { service, persisted, removed, modelInputs };

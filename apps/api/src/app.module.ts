@@ -11,6 +11,7 @@ import { HealthModule } from './health/health.module.js';
 import { LlmModule } from './llm/llm.module.js';
 import { LoggingModule } from './common/logging/logging.module.js';
 import { UsersModule } from './users/users.module.js';
+import { UserMemoryModule } from './user-memory/user-memory.module.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module.js';
     LoggingModule,
     MikroOrmModule.forRoot(mikroOrmConfig),
     UsersModule,
+    UserMemoryModule,
     AuthModule,
     LlmModule,
     ChatRecordsModule,
