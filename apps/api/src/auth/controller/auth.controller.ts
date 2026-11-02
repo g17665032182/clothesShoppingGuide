@@ -21,8 +21,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AuthService } from '../service/auth.service.js';
 import { CurrentUser } from '../decorator/current-user.decorator.js';
 import { Public } from '../decorator/public.decorator.js';
-import { LoginDto } from '../dto/login.dto.js';
-import { RegisterDto } from '../dto/register.dto.js';
+import { LoginDto, loginSchema } from '../dto/login.dto.js';
+import { RegisterDto, registerSchema } from '../dto/register.dto.js';
 import { CaptchaService } from '../captcha/service/captcha.service.js';
 import { CaptchaResponseDto } from '../captcha/dto/captcha-response.dto.js';
 import { User } from '../../users/entity/user.entity.js';
@@ -49,7 +49,7 @@ export class AuthController {
   @Public()
   @Post('register')
   public async register(
-    @Body() dto: RegisterDto,
+    @Body({ schema: registerSchema }) dto: RegisterDto,
     @Res({ passthrough: true }) response: ServerResponse,
   ) {
     const session = await this.authService.register(dto);
@@ -61,7 +61,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('login')
   public async login(
-    @Body() dto: LoginDto,
+    @Body({ schema: loginSchema }) dto: LoginDto,
     @Res({ passthrough: true }) response: ServerResponse,
   ) {
     const session = await this.authService.login(dto);

@@ -1,5 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { z } from 'zod';
+
+export const loginSchema = z.strictObject({
+  email: z.email({ pattern: z.regexes.html5Email }).max(255),
+  password: z.string().min(8).max(128),
+  captchaChallengeId: z.string().min(1).max(64),
+  captchaAnswer: z.string().min(1).max(5),
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
 
 export class LoginDto {
   @ApiProperty({
@@ -8,8 +17,6 @@ export class LoginDto {
     format: 'email',
     maxLength: 255,
   })
-  @IsEmail()
-  @MaxLength(255)
   public email!: string;
 
   @ApiProperty({
@@ -19,9 +26,6 @@ export class LoginDto {
     minLength: 8,
     maxLength: 128,
   })
-  @IsString()
-  @MinLength(8)
-  @MaxLength(128)
   public password!: string;
 
   @ApiProperty({
@@ -29,9 +33,6 @@ export class LoginDto {
     minLength: 1,
     maxLength: 64,
   })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(64)
   public captchaChallengeId!: string;
 
   @ApiProperty({
@@ -39,8 +40,5 @@ export class LoginDto {
     minLength: 1,
     maxLength: 5,
   })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(5)
   public captchaAnswer!: string;
 }

@@ -8,8 +8,8 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 import { hash } from 'bcryptjs';
 
-import { AdminUpdateUserDto } from '../dto/admin-update-user.dto.js';
-import { UpdateProfileDto } from '../dto/update-profile.dto.js';
+import type { AdminUpdateUserInput } from '../dto/admin-update-user.dto.js';
+import type { UpdateProfileInput } from '../dto/update-profile.dto.js';
 import { User, UserStatus } from '../entity/user.entity.js';
 
 export type UserResponse = {
@@ -58,7 +58,7 @@ export class UsersService {
 
   public async updateProfile(
     user: User,
-    dto: UpdateProfileDto,
+    dto: UpdateProfileInput,
   ): Promise<UserResponse> {
     if (dto.displayName !== undefined) {
       const displayName = dto.displayName.trim();
@@ -76,7 +76,7 @@ export class UsersService {
 
   public async updateByAdmin(
     id: string,
-    dto: AdminUpdateUserDto,
+    dto: AdminUpdateUserInput,
   ): Promise<UserResponse> {
     const user = await this.getRequired(id);
     if (dto.displayName !== undefined) {

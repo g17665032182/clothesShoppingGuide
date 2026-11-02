@@ -47,7 +47,7 @@
 ## 子代理开始前检查
 
 - 确认 `svg-captcha` 版本、许可证和锁文件变更；不引入未审查的替代包。
-- 确认现有 `ApiRequestOptions`、全局 `ValidationPipe` 和 Swagger 配置可直接复用。
+- 确认现有 `ApiRequestOptions`、Zod schema 校验和 Swagger 配置可直接复用。
 - 确认登录页当前未提交修改，保留已完成的登录成功跳转 `/chat`。
 - 确认验证码答案、输入和 Token 不写入日志。
 - 确认单实例内存存储限制写入技术注释和部署说明，不伪装成多实例方案。

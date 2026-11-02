@@ -51,7 +51,7 @@ apps/web/src/
 - 本地依赖检查未发现验证码生成器、缓存模块或 Redis 客户端可复用。
 - 拟采用 `svg-captcha` 生成图片，不让该库管理登录会话或验证码状态。其上游 README 说明 `create()` 返回 SVG 数据和验证码文本，生成图像使用 SVG，不需要 C++ 图形插件：[svg-captcha 上游文档](https://github.com/produck/svg-captcha)。
 - 维护风险：上游仓库长期缺少活跃维护。该库只作为可替换的 SVG 渲染器使用；实施前需复核锁定版本、依赖树、许可证和安全扫描。若项目不接受此维护状态，应先选定替代包再进入实施。
-- NestJS、Vue、class-validator 与现有 API 层均复用当前依赖，不需新增验证码相关前端依赖。
+- NestJS、Vue 与现有 API 层均复用当前依赖，不需新增验证码相关前端依赖。
 
 ## 接口和依赖注入
 
@@ -95,7 +95,7 @@ apps/web/src/
 
 ## DTO、校验和错误映射
 
-- 复用全局 `ValidationPipe` 和 `class-validator`。
+- 使用 Zod 请求 schema，并由 Nest `StandardSchemaValidationPipe` 完成请求校验。
 - `captchaChallengeId` 必须为非空字符串且长度受限；`captchaAnswer` 必须为非空字符串且最大长度与生成字符数一致。
 - 不存在、过期、重复消费或错误的挑战统一返回通用 `400` 或 `401` 错误，不指出挑战处于哪种无效状态。
 - 账号密码错误继续沿用现有 `401` 语义，响应不泄露账号是否存在。

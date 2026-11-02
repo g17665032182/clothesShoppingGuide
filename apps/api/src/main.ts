@@ -7,7 +7,7 @@
  */
 import 'reflect-metadata';
 
-import { ValidationPipe } from '@nestjs/common';
+import { StandardSchemaValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -21,18 +21,8 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(Logger));
   app.use(helmet());
 
-  // 全局开启 DTO 校验，拒绝未知字段并自动转换常见请求参数。
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      // 启用隐式类型转换，允许将请求参数自动转换为 DTO 中定义的类型。
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-    }),
-  );
+  // 请求参数通过装饰器绑定的 Zod schema 校验并使用其转换结果。
+  app.useGlobalPipes(new StandardSchemaValidationPipe());
   app.setGlobalPrefix('api');
   // 前端通过 HttpOnly Cookie 携带 Refresh Token，跨源开发请求需要允许凭证。
   app.enableCors({ origin: true, credentials: true });

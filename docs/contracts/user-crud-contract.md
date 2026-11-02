@@ -6,7 +6,7 @@
 - 资源名称：用户（User）
 - 业务目的：提供注册、登录、当前用户资料和管理员用户管理能力。
 - 需求来源：用户要求“使用 SDD，做一个用户模块，要做好鉴权”。
-- 确认依据：用户需求；项目现有 NestJS 12、MikroORM 7、PostgreSQL 和全局 DTO 校验配置。
+- 确认依据：用户需求；项目现有 NestJS 12、MikroORM 7、PostgreSQL 和 Zod 请求校验配置。
 - 涉及模块：`apps/api/src/users`、`apps/api/src/auth`、数据库迁移和 Seeder。
 - 当前框架、ORM、数据库及版本：NestJS 12.2、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3。
 - 已阅读的相似模块和文档：NestJS JWT Guard 官方示例、MikroORM Entity/Repository 官方文档、项目 `nestjs-mikroorm-crud` 技能契约。
@@ -69,14 +69,14 @@
 
 ## 实现映射
 
-| 能力                    | 复用的现有实现                   | 需要新增内容及理由                                        |
-| ----------------------- | -------------------------------- | --------------------------------------------------------- |
-| Entity/Repository       | MikroORM Nest 集成               | `User` Entity 与 `UsersService`，封装用户持久化和脱敏响应 |
-| Create/Update/Query DTO | 全局 `ValidationPipe`            | 注册、登录、个人更新、管理员更新 DTO                      |
-| Guard/公开标记          | NestJS `Reflector` 与 Guard 模式 | 全局 JWT Guard、`@Public()`、管理员 `RolesGuard`          |
-| Decorator               | NestJS 参数装饰器                | `@CurrentUser()` 提取当前用户                             |
-| Pipe                    | 全局 `ValidationPipe`            | 复用现有校验和转换，不新增自定义 Pipe                     |
-| Migration               | MikroORM Migrator                | 创建 `users` 表及唯一邮箱约束                             |
+| 能力                    | 复用的现有实现                      | 需要新增内容及理由                                        |
+| ----------------------- | ----------------------------------- | --------------------------------------------------------- |
+| Entity/Repository       | MikroORM Nest 集成                  | `User` Entity 与 `UsersService`，封装用户持久化和脱敏响应 |
+| Create/Update/Query DTO | Zod schema + Nest 标准校验 Pipe     | 注册、登录、个人更新、管理员更新 schema                   |
+| Guard/公开标记          | NestJS `Reflector` 与 Guard 模式    | 全局 JWT Guard、`@Public()`、管理员 `RolesGuard`          |
+| Decorator               | NestJS 参数装饰器                   | `@CurrentUser()` 提取当前用户                             |
+| Pipe                    | 全局 `StandardSchemaValidationPipe` | 校验显式绑定 schema 的请求参数并使用解析结果              |
+| Migration               | MikroORM Migrator                   | 创建 `users` 表及唯一邮箱约束                             |
 
 ## 待确认问题与决策记录
 

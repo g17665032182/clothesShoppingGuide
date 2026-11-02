@@ -25,7 +25,7 @@ pnpm dlx @nestjs/cli new <project-name> --package-manager pnpm
 生成骨架后，查阅当前 NestJS 和 MikroORM 文档，确定兼容版本，再添加 PostgreSQL 驱动、Nest 集成、迁移、反射/Decorator 支持和请求校验依赖。默认技术栈的 pnpm 安装通常包括：
 
 ```bash
-pnpm add @mikro-orm/core @mikro-orm/nestjs @mikro-orm/postgresql @mikro-orm/migrations @mikro-orm/reflection @mikro-orm/decorators class-validator class-transformer
+pnpm add @mikro-orm/core @mikro-orm/nestjs @mikro-orm/postgresql @mikro-orm/migrations @mikro-orm/reflection @mikro-orm/decorators zod
 pnpm add -D @mikro-orm/cli
 ```
 
@@ -52,7 +52,7 @@ pnpm exec nest g controller <resource>
 根据项目包管理器调整命令；不确定 CLI 参数时，先核对已安装版本的文档。
 
 - Entity 只表达持久化结构和数据库约束。
-- 为创建、更新、查询请求分别定义 DTO；复用项目验证管道和已安装的校验器。
+- 为创建、更新、查询请求分别在模块的 `dto/` 中定义 Zod schema，通过全局 Nest `StandardSchemaValidationPipe` 和 `@Body({ schema })`、`@Query({ schema })`、`@Param({ schema })` 绑定；类型从 schema 派生。对象请求默认使用 `z.strictObject`，明确转换、默认值、可空性和未知字段策略。Swagger DTO 仅提供 API 文档元数据，不作为运行时校验来源；不得新增 `class-validator` / `class-transformer` 或 Controller 手动校验。
 - 业务规则和持久化逻辑放在 Service；Controller 只处理 HTTP 参数绑定和调用。
 - 按项目现有 MikroORM 模式注册 Entity Repository。
 - 复用现有认证、公开路由标记、授权、当前用户 Decorator 和输入校验。只有存在明确且可复用的独立需求时才添加 Guard、Decorator 或 Pipe，并在契约中说明原因。
@@ -94,6 +94,6 @@ pnpm exec nest g controller <resource>
 
 ## 验证与汇报
 
-对照已确认的契约检查实现。按需覆盖创建、列表、详情、更新、删除、输入校验、授权、冲突、不存在资源和关联行为。运行仓库现有测试、构建、格式/类型检查和迁移状态检查，并如实报告命令和结果。不得声称未运行的检查已通过。审查最终差异，排除无关改动、密钥和破坏性 SQL。
+对照已确认的契约检查实现。按需覆盖创建、列表、详情、更新、删除、Zod 输入校验、授权、冲突、不存在资源和关联行为。校验测试应覆盖合法输入、非法边界、未知字段拒绝、默认值/转换结果，以及请求层 400 错误行为。运行仓库现有测试、构建、格式/类型检查和迁移状态检查，并如实报告命令和结果。不得声称未运行的检查已通过。审查最终差异，排除无关改动、密钥和破坏性 SQL。
 
 按模块目录规范检查新增或调整模块中的 Decorator、Guard、Pipe、Interceptor、Filter、Middleware 和 DTO，确认同类文件位于对应子目录，并搜索确认没有遗留旧路径引用。检查模块注册、依赖注入及跨模块调用仍指向移动后的组件。纯目录整理应保持原有行为，不夹带业务逻辑修改。

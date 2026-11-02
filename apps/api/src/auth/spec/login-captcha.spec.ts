@@ -4,22 +4,58 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
-import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
 
 import { CaptchaService } from '../captcha/service/captcha.service.js';
-import { LoginDto } from '../dto/login.dto.js';
+import { loginSchema } from '../dto/login.dto.js';
+import { registerSchema } from '../dto/register.dto.js';
 import { AuthService } from '../service/auth.service.js';
 
-test('LoginDto 要求带上完整验证码凭据', async () => {
-  const dto = plainToInstance(LoginDto, {
+test('注册和登录 schema 校验字段范围并拒绝未知字段', () => {
+  assert.equal(
+    registerSchema.safeParse({
+      email: 'user@example.com',
+      password: 'ChangeMe123!',
+      displayName: '春日衣橱',
+    }).success,
+    true,
+  );
+  assert.equal(
+    registerSchema.safeParse({
+      email: 'user@example.com',
+      password: 'ChangeMe123!',
+      displayName: '春日衣橱',
+      role: 'admin',
+    }).success,
+    false,
+  );
+  assert.equal(
+    loginSchema.safeParse({
+      email: 'invalid',
+      password: 'ChangeMe123!',
+      captchaChallengeId: 'challenge',
+      captchaAnswer: 'abc',
+    }).success,
+    false,
+  );
+});
+
+test('登录 schema 要求带上完整验证码凭据', () => {
+  const result = loginSchema.safeParse({
     email: 'user@example.com',
     password: 'ChangeMe123!',
   });
-  const errors = await validate(dto);
 
-  assert.ok(errors.some((error) => error.property === 'captchaChallengeId'));
-  assert.ok(errors.some((error) => error.property === 'captchaAnswer'));
+  assert.equal(result.success, false);
+  if (!result.success) {
+    assert.ok(
+      result.error.issues.some(
+        (issue) => issue.path[0] === 'captchaChallengeId',
+      ),
+    );
+    assert.ok(
+      result.error.issues.some((issue) => issue.path[0] === 'captchaAnswer'),
+    );
+  }
 });
 
 test('验证码无效时不会查询账户或继续认证', async () => {

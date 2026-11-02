@@ -12,11 +12,18 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorator/current-user.decorator.js';
 import { Roles } from '../../authorization/decorator/roles.decorator.js';
 import { RolesGuard } from '../../authorization/guard/roles.guard.js';
-import { AdminUpdateUserDto } from '../dto/admin-update-user.dto.js';
-import { UpdateProfileDto } from '../dto/update-profile.dto.js';
+import {
+  AdminUpdateUserDto,
+  adminUpdateUserSchema,
+} from '../dto/admin-update-user.dto.js';
+import {
+  UpdateProfileDto,
+  updateProfileSchema,
+} from '../dto/update-profile.dto.js';
 import { User, UserRole } from '../entity/user.entity.js';
 import { UsersService } from '../service/users.service.js';
 import type { UserResponse } from '../service/users.service.js';
+import { userIdSchema } from '../dto/user-id.dto.js';
 
 @Controller('users')
 @ApiBearerAuth('bearer')
@@ -32,7 +39,7 @@ export class UsersController {
   @Patch('me')
   public updateMe(
     @CurrentUser() user: User,
-    @Body() dto: UpdateProfileDto,
+    @Body({ schema: updateProfileSchema }) dto: UpdateProfileDto,
   ): Promise<UserResponse> {
     return this.usersService.updateProfile(user, dto);
   }
@@ -47,7 +54,9 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Get(':id')
-  public async getById(@Param('id') id: string): Promise<UserResponse> {
+  public async getById(
+    @Param('id', { schema: userIdSchema }) id: string,
+  ): Promise<UserResponse> {
     return this.usersService.toResponse(
       await this.usersService.getRequired(id),
     );
@@ -57,8 +66,8 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   @Patch(':id')
   public updateByAdmin(
-    @Param('id') id: string,
-    @Body() dto: AdminUpdateUserDto,
+    @Param('id', { schema: userIdSchema }) id: string,
+    @Body({ schema: adminUpdateUserSchema }) dto: AdminUpdateUserDto,
   ): Promise<UserResponse> {
     return this.usersService.updateByAdmin(id, dto);
   }
@@ -66,7 +75,9 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @Delete(':id')
-  public disable(@Param('id') id: string): Promise<UserResponse> {
+  public disable(
+    @Param('id', { schema: userIdSchema }) id: string,
+  ): Promise<UserResponse> {
     return this.usersService.disable(id);
   }
 }

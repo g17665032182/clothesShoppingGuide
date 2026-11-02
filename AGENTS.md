@@ -163,7 +163,7 @@
 6. `Controller` 只负责 HTTP 层工作，包括接收参数、使用 DTO、读取当前用户、调用 Service 和返回响应，不得编写数据库查询或复杂业务逻辑。
 7. `Service` 负责业务规则、权限前置判断、数据转换、事务编排和业务异常；不同业务职责应拆分到合适的服务或能力目录，不得为了减少文件数量而堆进单个 Service。
 8. `Entity` 只表达数据库结构、字段约束、索引和关联关系，不在 Entity 中编写业务流程。
-9. 每种请求定义独立 DTO，包括创建、更新、查询和管理员操作 DTO。DTO 必须配合全局 `ValidationPipe` 使用，禁止依赖 Controller 内部手动校验。
+9. 所有后端 API 的 Body、Query 和路由参数校验统一使用 Zod schema，并通过 Nest `StandardSchemaValidationPipe` 与 `@Body({ schema })`、`@Query({ schema })`、`@Param({ schema })` 绑定；不得在 Controller 或 Service 中重复手动校验。为创建、更新、查询和管理员操作分别定义请求 schema；类型从 schema 派生（优先 `z.infer`，输入与转换后类型不同时分别使用 `z.input` / `z.output`）。对象请求默认使用 `z.strictObject` 拒绝未声明字段，转换、默认值、可空性和边界规则须与 API 契约一致。保留 Nest Swagger DTO 作为文档元数据，不把它当运行时校验来源；不得新增 `class-validator` / `class-transformer` 或另建重复校验管道。
 10. 请求模型、响应模型和数据库 Entity 必须分离。禁止直接返回 Entity；Service 或 Mapper 必须转换为安全的响应对象，密码、密码哈希、Refresh Token 和内部字段不得返回。
 11. 所有数据库访问统一使用 MikroORM Repository 或 EntityManager，不得在 Controller 中直接操作数据库。
 12. 涉及多表写入、状态切换或一致性要求的操作必须使用事务，例如聊天记录保存和 Refresh Token 轮换。
@@ -176,7 +176,7 @@
 19. `src/common/` 只允许存放跨模块基础设施，例如日志、全局过滤器、通用拦截器和通用工具。业务专属的 Guard、Decorator、DTO、Pipe 和 Service 必须保留在所属业务模块中。
 20. 配置统一通过 `ConfigModule` 和环境变量管理。密钥不得写入源码；新增配置必须同步更新 `.env.example`；生产环境必须替换默认密钥和密码；配置值必须进行类型转换和合法性校验。
 21. 新增 API 必须同步更新业务契约、Swagger 装饰器、错误行为、认证与权限说明以及验收清单。
-22. 每个新增业务模块至少补充 Service 业务规则、DTO 参数校验、权限和越权、资源不存在、唯一约束冲突以及关键状态转换测试；测试放在所属业务模块的 `spec/` 中。
+22. 每个新增业务模块至少补充 Service 业务规则、Zod schema 与 Nest 参数校验（合法/非法边界、未知字段、默认值或转换及 400 错误行为）、权限和越权、资源不存在、唯一约束冲突以及关键状态转换测试；测试放在所属业务模块的 `spec/` 中。
 23. 后端提交前至少执行：
 
 ```bash

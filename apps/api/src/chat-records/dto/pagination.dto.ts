@@ -1,6 +1,5 @@
-import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, Max, Min } from 'class-validator';
+import { z } from 'zod';
 
 export class PaginationDto {
   @ApiPropertyOptional({
@@ -9,9 +8,6 @@ export class PaginationDto {
     default: 1,
     minimum: 1,
   })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
   public page = 1;
 
   @ApiPropertyOptional({
@@ -21,10 +17,6 @@ export class PaginationDto {
     minimum: 1,
     maximum: 100,
   })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
   public pageSize = 20;
 
   public get normalizedPage(): number {
@@ -41,3 +33,12 @@ export class PaginationDto {
     return (this.normalizedPage - 1) * this.normalizedPageSize;
   }
 }
+
+export const paginationSchema = z
+  .strictObject({
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  })
+  .transform(({ page, pageSize }) =>
+    Object.assign(new PaginationDto(), { page, pageSize }),
+  );

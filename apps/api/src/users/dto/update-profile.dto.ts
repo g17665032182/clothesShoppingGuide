@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { z } from 'zod';
+
+export const updateProfileSchema = z.strictObject({
+  displayName: z.string().min(1).max(100).optional(),
+  password: z.string().min(8).max(128).optional(),
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({
@@ -8,10 +15,6 @@ export class UpdateProfileDto {
     minLength: 1,
     maxLength: 100,
   })
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(100)
   public displayName?: string;
 
   @ApiPropertyOptional({
@@ -21,9 +24,5 @@ export class UpdateProfileDto {
     minLength: 8,
     maxLength: 128,
   })
-  @IsOptional()
-  @IsString()
-  @MinLength(8)
-  @MaxLength(128)
   public password?: string;
 }

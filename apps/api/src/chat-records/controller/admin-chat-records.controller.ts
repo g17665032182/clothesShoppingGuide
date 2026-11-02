@@ -1,19 +1,16 @@
-import {
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { z } from 'zod';
 
 import { Roles } from '../../authorization/decorator/roles.decorator.js';
 import { RolesGuard } from '../../authorization/guard/roles.guard.js';
 import { UserRole } from '../../users/entity/user.entity.js';
 import { ChatRecordsService } from '../service/chat-records.service.js';
-import { AdminChatQueryDto } from '../dto/admin-chat-query.dto.js';
-import { PaginationDto } from '../dto/pagination.dto.js';
+import {
+  AdminChatQueryDto,
+  adminChatQuerySchema,
+} from '../dto/admin-chat-query.dto.js';
+import { PaginationDto, paginationSchema } from '../dto/pagination.dto.js';
 
 @Controller('admin/chat/conversations')
 @UseGuards(RolesGuard)
@@ -24,14 +21,16 @@ export class AdminChatRecordsController {
   public constructor(private readonly chatRecords: ChatRecordsService) {}
 
   @Get()
-  public list(@Query() query: AdminChatQueryDto) {
+  public list(
+    @Query({ schema: adminChatQuerySchema }) query: AdminChatQueryDto,
+  ) {
     return this.chatRecords.listForAdmin(query);
   }
 
   @Get(':id')
   public detail(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Query() pagination: PaginationDto,
+    @Param('id', { schema: z.uuid() }) id: string,
+    @Query({ schema: paginationSchema }) pagination: PaginationDto,
   ) {
     return this.chatRecords.getForAdmin(id, pagination);
   }

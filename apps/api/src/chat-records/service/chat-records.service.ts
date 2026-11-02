@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 
-import { ChatDto, ChatMessageRole } from '../../llm/dto/chat.dto.js';
+import { ChatMessageRole, type ChatInput } from '../../llm/dto/chat.dto.js';
 import { LlmService, type ChatOutput } from '../../llm/service/llm.service.js';
 import type { LlmTraceEvent } from '../../llm/trace/llm-trace.types.js';
 import { mapTraceEventsToMessages } from '../history/chat-history.mapper.js';
@@ -105,7 +105,7 @@ export class ChatRecordsService {
     private readonly traceWriter: ChatTraceWriterService,
   ) {}
 
-  public async chat(user: User, dto: ChatDto): Promise<PersistedChatOutput> {
+  public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
     const prepared = await this.prepareChat(user, dto);
     await this.ensureConversationPersisted(prepared);
     const result = await this.llmService.chat(
@@ -125,7 +125,7 @@ export class ChatRecordsService {
 
   public async prepareStream(
     user: User,
-    dto: ChatDto,
+    dto: ChatInput,
     signal?: AbortSignal,
   ): Promise<AsyncIterable<ChatStreamEvent>> {
     const prepared = await this.prepareChat(user, dto);
@@ -235,7 +235,7 @@ export class ChatRecordsService {
       : characters.join('');
   }
 
-  private async prepareChat(user: User, dto: ChatDto): Promise<PreparedChat> {
+  private async prepareChat(user: User, dto: ChatInput): Promise<PreparedChat> {
     this.llmService.assertConfigured();
     const currentUserMessage = [...dto.messages]
       .reverse()

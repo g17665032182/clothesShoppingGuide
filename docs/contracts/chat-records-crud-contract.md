@@ -95,14 +95,14 @@
 
 ## 实现映射
 
-| 能力       | 复用实现                         | 新增内容                      |
-| ---------- | -------------------------------- | ----------------------------- |
-| Repository | MikroORM Nest 集成               | 两个 EntityRepository         |
-| DTO        | 全局 ValidationPipe              | 分页、管理员过滤、可选会话 ID |
-| 认证       | 全局 JWT Guard、`@CurrentUser()` | 无新 Guard                    |
-| 管理员授权 | `RolesGuard`、`@Roles()`         | 无新授权体系                  |
-| Migration  | MikroORM Migrator                | 两张表、索引、外键和角色检查  |
-| 内部事件   | 模块内事件写入适配器             | 内部事件表、索引、幂等约束    |
+| 能力       | 复用实现                         | 新增内容                             |
+| ---------- | -------------------------------- | ------------------------------------ |
+| Repository | MikroORM Nest 集成               | 两个 EntityRepository                |
+| DTO        | Zod schema + Nest 标准校验 Pipe  | 分页、管理员过滤、会话 ID 和聊天请求 |
+| 认证       | 全局 JWT Guard、`@CurrentUser()` | 无新 Guard                           |
+| 管理员授权 | `RolesGuard`、`@Roles()`         | 无新授权体系                         |
+| Migration  | MikroORM Migrator                | 两张表、索引、外键和角色检查         |
+| 内部事件   | 模块内事件写入适配器             | 内部事件表、索引、幂等约束           |
 
 ## 验收清单
 

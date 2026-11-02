@@ -3,31 +3,34 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ValidationPipe } from '@nestjs/common';
-import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
+import {
+  BadRequestException,
+  StandardSchemaValidationPipe,
+} from '@nestjs/common';
 
 import {
-  ChatDto,
   ChatMessageRole,
   MAX_CHAT_MESSAGE_LENGTH,
   MAX_CHAT_MESSAGES,
   MAX_CHAT_TOTAL_LENGTH,
+  chatSchema,
 } from '../dto/chat.dto.js';
+import { paginationSchema } from '../../chat-records/dto/pagination.dto.js';
+import { adminChatQuerySchema } from '../../chat-records/dto/admin-chat-query.dto.js';
 
-test('ChatDto 接受合法消息并去除内容首尾空白', async () => {
-  const dto = plainToInstance(ChatDto, {
+const validationPipe = new StandardSchemaValidationPipe();
+
+test('聊天 schema 接受合法消息并去除内容首尾空白', () => {
+  const result = chatSchema.safeParse({
     messages: [{ role: ChatMessageRole.USER, content: '  你好  ' }],
   });
 
-  const errors = await validate(dto);
-
-  assert.equal(errors.length, 0);
-  assert.equal(dto.messages[0]?.content, '你好');
+  assert.equal(result.success, true);
+  if (result.success) assert.equal(result.data.messages[0]?.content, '你好');
 });
 
-test('ChatDto 拒绝空消息、未知角色和超长内容', async () => {
-  const dto = plainToInstance(ChatDto, {
+test('聊天 schema 拒绝空消息、未知角色和超长内容', () => {
+  const result = chatSchema.safeParse({
     messages: [
       { role: 'unknown', content: 'hello' },
       {
@@ -37,26 +40,24 @@ test('ChatDto 拒绝空消息、未知角色和超长内容', async () => {
     ],
   });
 
-  const errors = await validate(dto);
-
-  assert.ok(errors.length > 0);
+  assert.equal(result.success, false);
 });
 
-test('ChatDto 拒绝空数组和超出消息数量上限', async () => {
-  const emptyDto = plainToInstance(ChatDto, { messages: [] });
-  const tooManyDto = plainToInstance(ChatDto, {
+test('聊天 schema 拒绝空数组和超出消息数量上限', () => {
+  const emptyResult = chatSchema.safeParse({ messages: [] });
+  const tooManyResult = chatSchema.safeParse({
     messages: Array.from({ length: MAX_CHAT_MESSAGES + 1 }, () => ({
       role: ChatMessageRole.USER,
       content: 'hello',
     })),
   });
 
-  assert.ok((await validate(emptyDto)).length > 0);
-  assert.ok((await validate(tooManyDto)).length > 0);
+  assert.equal(emptyResult.success, false);
+  assert.equal(tooManyResult.success, false);
 });
 
-test('ChatDto 拒绝超过总长度上限的消息集合', async () => {
-  const dto = plainToInstance(ChatDto, {
+test('聊天 schema 拒绝超过总长度上限的消息集合', () => {
+  const result = chatSchema.safeParse({
     messages: [
       {
         role: ChatMessageRole.USER,
@@ -69,23 +70,58 @@ test('ChatDto 拒绝超过总长度上限的消息集合', async () => {
     ],
   });
 
-  assert.ok((await validate(dto)).length > 0);
+  assert.equal(result.success, false);
 });
 
-test('全局校验配置拒绝请求中的未知字段', async () => {
-  const pipe = new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  });
-
+test('Nest 标准 schema pipe 拒绝请求中的未知字段并返回 400', async () => {
   await assert.rejects(
-    pipe.transform(
+    validationPipe.transform(
       {
         messages: [{ role: ChatMessageRole.USER, content: 'hello' }],
         model: 'client-controlled-model',
       },
-      { type: 'body', metatype: ChatDto },
+      { type: 'body', schema: chatSchema },
     ),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.getStatus() === 400,
+  );
+});
+
+test('分页 schema 转换数字参数并补充默认值', () => {
+  const result = paginationSchema.safeParse({ page: '3' });
+
+  assert.equal(result.success, true);
+  if (result.success) {
+    assert.equal(result.data.page, 3);
+    assert.equal(result.data.pageSize, 20);
+    assert.equal(result.data.offset, 40);
+  }
+});
+
+test('分页 schema 拒绝越界值和未知查询参数', () => {
+  assert.equal(paginationSchema.safeParse({ page: '0' }).success, false);
+  assert.equal(paginationSchema.safeParse({ pageSize: '101' }).success, false);
+  assert.equal(paginationSchema.safeParse({ unknown: 'value' }).success, false);
+});
+
+test('管理员查询 schema 支持分页和可选 UUID 用户过滤', () => {
+  const result = adminChatQuerySchema.safeParse({
+    page: '2',
+    userId: '9c2c6f3b-4d12-4a9e-8c0a-8d6d0a8b8c1e',
+  });
+
+  assert.equal(result.success, true);
+  if (result.success) {
+    assert.equal(result.data.page, 2);
+    assert.equal(result.data.pageSize, 20);
+    assert.equal(result.data.userId, '9c2c6f3b-4d12-4a9e-8c0a-8d6d0a8b8c1e');
+  }
+  assert.equal(
+    adminChatQuerySchema.safeParse({ userId: 'invalid' }).success,
+    false,
+  );
+  assert.equal(
+    adminChatQuerySchema.safeParse({ extra: 'value' }).success,
+    false,
   );
 });

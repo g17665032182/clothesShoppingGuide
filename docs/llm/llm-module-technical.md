@@ -282,7 +282,7 @@ type ChatOutput = {
 };
 ```
 
-这样可以避免将 `class-validator` DTO 泄漏到模块内部。
+这样可以避免将 HTTP 请求 DTO 泄漏到模块内部。
 
 ## `LlmService` 实现职责
 

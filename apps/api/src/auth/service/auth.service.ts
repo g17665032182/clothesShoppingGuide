@@ -11,9 +11,9 @@ import { EntityRepository } from '@mikro-orm/postgresql';
 import { compare, hash } from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 
-import { LoginDto } from '../dto/login.dto.js';
+import type { LoginInput } from '../dto/login.dto.js';
 import { CaptchaService } from '../captcha/service/captcha.service.js';
-import { RegisterDto } from '../dto/register.dto.js';
+import type { RegisterInput } from '../dto/register.dto.js';
 import { RefreshSession } from '../entity/refresh-session.entity.js';
 import { User, UserRole, UserStatus } from '../../users/entity/user.entity.js';
 import { UsersService } from '../../users/service/users.service.js';
@@ -34,7 +34,7 @@ export class AuthService {
     private readonly sessions: EntityRepository<RefreshSession>,
   ) {}
 
-  public async register(dto: RegisterDto): Promise<AuthSession> {
+  public async register(dto: RegisterInput): Promise<AuthSession> {
     const email = this.usersService.normalizeEmail(dto.email);
     await this.usersService.assertEmailAvailable(email);
     const displayName = dto.displayName.trim();
@@ -55,7 +55,7 @@ export class AuthService {
     return this.createAuthSession(user);
   }
 
-  public async login(dto: LoginDto): Promise<AuthSession> {
+  public async login(dto: LoginInput): Promise<AuthSession> {
     const captchaValid = await this.captchaService.verifyLoginAnswer(
       dto.captchaChallengeId,
       dto.captchaAnswer,

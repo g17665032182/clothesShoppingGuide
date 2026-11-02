@@ -153,7 +153,7 @@ Graph 节点应读取当前状态并返回状态更新，不直接修改原状�
 | `messages[].role`    | `system \| user \| assistant` | 是   | 仅允许已定义角色                           |
 | `messages[].content` | `string`                      | 是   | 去除首尾空白，不允许空字符串，限制单条长度 |
 
-请求 DTO 使用项目已有的全局 `ValidationPipe` 和 `class-validator`。省略模型名称、温度和 Token 上限等模型参数，第一版统一由服务端环境变量控制。
+请求 DTO 的 OpenAPI 元数据与 Zod 请求 schema 分离；schema 通过 Nest `StandardSchemaValidationPipe` 校验，拒绝未声明字段。省略模型名称、温度和 Token 上限等模型参数，第一版统一由服务端环境变量控制。
 
 ### 响应体
 

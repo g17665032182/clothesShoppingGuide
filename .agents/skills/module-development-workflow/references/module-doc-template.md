@@ -58,7 +58,16 @@
 
 ## 状态、流程或持久化
 
-## DTO、校验和错误映射
+## 请求 Schema、校验和错误映射
+
+- 每个 Body、Query、路由参数对应的 Zod schema 及所属模块路径
+- 输入类型与解析后类型（需要时分别记录 `z.input` / `z.output`）
+- 必填、可选、可空、边界、默认值和转换规则
+- 未知字段策略（对象请求默认拒绝）
+- Controller 参数装饰器的 schema 绑定方式
+- Nest `StandardSchemaValidationPipe` 的校验与错误状态码映射
+- Swagger DTO 的文档职责（不承担运行时校验）
+- schema 单元测试和 HTTP 400 行为测试
 
 ## 安全和可观测性
 

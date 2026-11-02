@@ -18,7 +18,7 @@ import { once } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { CurrentUser } from '../../auth/decorator/current-user.decorator.js';
-import { ChatDto } from '../../llm/dto/chat.dto.js';
+import { ChatDto, chatSchema } from '../../llm/dto/chat.dto.js';
 import type { User } from '../../users/entity/user.entity.js';
 import {
   ChatRecordsService,
@@ -34,7 +34,7 @@ export class LlmChatController {
   @Post('chat')
   public chat(
     @CurrentUser() user: User,
-    @Body() body: ChatDto,
+    @Body({ schema: chatSchema }) body: ChatDto,
   ): Promise<PersistedChatOutput> {
     return this.chatRecords.chat(user, body);
   }
@@ -55,7 +55,7 @@ export class LlmChatController {
   @ApiServiceUnavailableResponse({ description: '大模型服务尚未完成配置' })
   public async stream(
     @CurrentUser() user: User,
-    @Body() body: ChatDto,
+    @Body({ schema: chatSchema }) body: ChatDto,
     @Req() request: IncomingMessage,
     @Res() response: ServerResponse,
   ): Promise<void> {

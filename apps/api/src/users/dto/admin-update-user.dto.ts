@@ -1,13 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+import { z } from 'zod';
 
 import { UserRole, UserStatus } from '../entity/user.entity.js';
+
+export const adminUpdateUserSchema = z.strictObject({
+  displayName: z.string().min(1).max(100).optional(),
+  role: z.enum(UserRole).optional(),
+  status: z.enum(UserStatus).optional(),
+});
+
+export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
 
 export class AdminUpdateUserDto {
   @ApiPropertyOptional({
@@ -16,10 +18,6 @@ export class AdminUpdateUserDto {
     minLength: 1,
     maxLength: 100,
   })
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(100)
   public displayName?: string;
 
   @ApiPropertyOptional({
@@ -27,8 +25,6 @@ export class AdminUpdateUserDto {
     enum: UserRole,
     example: UserRole.USER,
   })
-  @IsOptional()
-  @IsEnum(UserRole)
   public role?: UserRole;
 
   @ApiPropertyOptional({
@@ -36,7 +32,5 @@ export class AdminUpdateUserDto {
     enum: UserStatus,
     example: UserStatus.ACTIVE,
   })
-  @IsOptional()
-  @IsEnum(UserStatus)
   public status?: UserStatus;
 }

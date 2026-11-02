@@ -44,7 +44,7 @@ apps/api/src/chat-records/
 
 - 复用现有 `LlmService`，不直接依赖 `ChatOpenAI` 或 LangGraph。
 - 复用全局 JWT Guard、`@CurrentUser()`、`RolesGuard` 和 `@Roles(UserRole.ADMIN)`。
-- 复用全局 `ValidationPipe`、`class-validator` 和 `class-transformer`。
+- 复用 Zod 请求 schema 与 Nest `StandardSchemaValidationPipe`。
 - 复用 MikroORM `EntityRepository` 和 `findAndCount`。
 - 使用 `js-tiktoken` 进行服务端 Token 估算；该包已由现有 LangChain 依赖带入，实施时提升为 `apps/api` 的直接依赖，避免依赖传递安装。
 
