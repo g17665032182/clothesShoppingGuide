@@ -123,6 +123,9 @@ git diff --check
 `LLM_ENABLE_LOCAL_TEST_TOOL=true` 启用 `local_echo_tool`，验证了模型调用工具、
 工具结果回传模型、事件持久化和公开历史接口隔离。验证完成后已删除临时用户和会话数据。
 
+后续本地工具和联网工具统一添加到
+`apps/api/src/llm/tools/tool-registry.ts`，无需修改 `LlmModule` 或 LangGraph 编排代码。
+
 ### 8. 交付记录
 
 主代理最终整理：

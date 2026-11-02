@@ -6,7 +6,7 @@ import { createLlmGraph } from './graph/llm.graph.js';
 import { LLM_CHAT_MODEL, LLM_GRAPH } from './graph/llm.tokens.js';
 import { LlmService } from './service/llm.service.js';
 import { ChatModelFactory } from './provider/chat-model.factory.js';
-import { createLocalEchoTool } from './tools/local-echo.tool.js';
+import { createConfiguredTools } from './tools/tool-registry.js';
 
 @Module({
   imports: [ConfigModule],
@@ -23,12 +23,7 @@ import { createLocalEchoTool } from './tools/local-echo.tool.js';
       provide: LLM_GRAPH,
       inject: [LLM_CHAT_MODEL, ConfigService],
       useFactory: (model: BaseChatModel, config: ConfigService) =>
-        createLlmGraph(
-          model,
-          config.get<string>('LLM_ENABLE_LOCAL_TEST_TOOL') === 'true'
-            ? [createLocalEchoTool()]
-            : [],
-        ),
+        createLlmGraph(model, createConfiguredTools(config)),
     },
     LlmService,
   ],

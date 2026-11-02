@@ -202,6 +202,14 @@ Graph 的输入只包含本次调用的消息，Graph 的输出包含最终消�
 `LLM_ENABLE_LOCAL_TEST_TOOL=true` 时，`LlmModule` 才将它注入 Graph；该工具只回显参数，
 不访问外部资源或修改数据。生产环境应保持关闭，业务工具由拥有对应业务能力的模块显式注入。
 
+工具统一从 `apps/api/src/llm/tools/tool-registry.ts` 注册。后续新增工具时：
+
+1. 在 `tools/` 下新增一个返回 LangChain Tool 的工厂函数。
+2. 按工具性质将工厂加入 `localToolFactories` 或 `remoteToolFactories`。
+3. 为联网工具配置自身的凭据、超时和脱敏策略，并通过 `LLM_ENABLE_REMOTE_TOOLS` 控制是否启用。
+
+`LlmModule` 不直接维护工具列表，Graph 和聊天记录链路也无需修改。
+
 ## Token 使用量标准化
 
 不同供应商可能将 Token 数据放在 `usage_metadata` 或 `response_metadata` 中。模块内部统一转换为：
@@ -341,7 +349,7 @@ export class LlmModule {}
 ```
 
 实际实现可根据 NestJS 类型推断调整 Provider 的类型声明，但不得让 Controller 直接依赖模型实例。
-Graph Provider 在 `LLM_ENABLE_LOCAL_TEST_TOOL=true` 时注入本地回显工具，否则传入空工具列表。
+Graph Provider 只调用工具注册入口；注册表按环境开关返回本次 Graph 使用的工具列表。
 
 ## Controller 和认证
 
