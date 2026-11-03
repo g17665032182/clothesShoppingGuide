@@ -1,8 +1,17 @@
 <script setup lang="ts">
-import { LogOut, Shirt, UserRound } from '@lucide/vue';
+import { BookOpen, ChevronDown, LogOut, Shirt, UserRound } from '@lucide/vue';
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { auth } from '@/lib/auth';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const route = useRoute();
 const router = useRouter();
@@ -25,23 +34,40 @@ function signOut() {
         <RouterLink v-if="auth.state.user" class="text-link" to="/chat"
           >聊天</RouterLink
         >
-        <RouterLink v-if="auth.state.user" class="text-link" to="/memories"
-          >我的记忆</RouterLink
-        >
-        <RouterLink v-if="auth.state.user" class="account-link" to="/account">
-          <UserRound :size="16" />
-          <span>{{ auth.state.user.displayName }}</span>
-        </RouterLink>
-        <button
-          v-if="auth.state.user"
-          class="icon-button"
-          aria-label="退出登录"
-          type="button"
-          title="退出登录"
-          @click="signOut"
-        >
-          <LogOut :size="17" />
-        </button>
+        <DropdownMenu v-if="auth.state.user">
+          <DropdownMenuTrigger as-child>
+            <Button aria-label="用户菜单" type="button" variant="ghost">
+              <UserRound aria-hidden="true" data-icon="inline-start" />
+              <span class="max-w-32 truncate">{{
+                auth.state.user.displayName
+              }}</span>
+              <ChevronDown aria-hidden="true" data-icon="inline-end" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" class="min-w-40">
+            <DropdownMenuGroup>
+              <DropdownMenuItem as-child>
+                <RouterLink to="/account">
+                  <UserRound aria-hidden="true" />
+                  个人资料
+                </RouterLink>
+              </DropdownMenuItem>
+              <DropdownMenuItem as-child>
+                <RouterLink to="/memories">
+                  <BookOpen aria-hidden="true" />
+                  我的记忆
+                </RouterLink>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem @select="signOut">
+                <LogOut aria-hidden="true" />
+                退出登录
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <RouterLink v-else class="text-link" to="/login">登录</RouterLink>
       </div>
     </header>
