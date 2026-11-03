@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { Send, Square } from '@lucide/vue';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { SendHorizontal, Square } from '@lucide/vue';
+import type { ChatContextUsage } from '@/api/types/chat';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from '@/components/ui/input-group';
+import ChatContextUsageIndicator from './ChatContextUsage.vue';
 
 defineProps<{
   canSend: boolean;
   draft: string;
   isSending: boolean;
+  context: ChatContextUsage | null;
+  contextIsPrevious: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -18,44 +26,52 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <form
-    class="mx-auto flex w-full max-w-3xl flex-col gap-2 rounded-2xl border border-border bg-card px-4 py-3"
-    @submit.prevent="emit('submit')"
-  >
-    <Textarea
-      :model-value="draft"
-      aria-label="输入消息"
-      class="min-h-12 resize-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-      maxlength="2000"
-      placeholder="描述你的场合、天气或已有单品…"
-      rows="2"
-      @keydown="emit('keydown', $event)"
-      @update:model-value="emit('update:draft', String($event))"
-    />
-    <div class="flex justify-end">
-      <Button
-        v-if="isSending"
-        aria-label="停止生成"
-        class="shrink-0 rounded-full"
-        size="icon"
-        title="停止生成"
-        type="button"
-        variant="outline"
-        @click="emit('stop')"
-      >
-        <Square aria-hidden="true" />
-      </Button>
-      <Button
-        v-else
-        :disabled="!canSend"
-        aria-label="发送消息"
-        class="shrink-0 rounded-full"
-        size="icon"
-        title="发送消息"
-        type="submit"
-      >
-        <Send aria-hidden="true" data-icon="inline-start" />
-      </Button>
-    </div>
+  <form class="mx-auto w-full max-w-3xl" @submit.prevent="emit('submit')">
+    <InputGroup>
+      <InputGroupTextarea
+        :model-value="draft"
+        aria-label="输入消息"
+        class="max-h-56 min-h-16 resize-none"
+        maxlength="2000"
+        placeholder="描述你的场合、天气或已有单品…"
+        rows="2"
+        @keydown="emit('keydown', $event)"
+        @update:model-value="emit('update:draft', String($event))"
+      />
+      <InputGroupAddon align="block-end">
+        <ChatContextUsageIndicator
+          :context="context"
+          :is-previous="contextIsPrevious"
+        />
+        <InputGroupButton
+          v-if="isSending"
+          aria-label="停止生成"
+          class="ml-auto shrink-0"
+          size="icon-sm"
+          title="停止生成"
+          type="button"
+          variant="outline"
+          @click="emit('stop')"
+        >
+          <Square
+            aria-hidden="true"
+            data-icon="inline-start"
+            fill="currentColor"
+          />
+        </InputGroupButton>
+        <InputGroupButton
+          v-else
+          :disabled="!canSend"
+          aria-label="发送消息"
+          class="ml-auto shrink-0"
+          size="icon-sm"
+          title="发送消息"
+          type="submit"
+          variant="default"
+        >
+          <SendHorizontal aria-hidden="true" data-icon="inline-start" />
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   </form>
 </template>

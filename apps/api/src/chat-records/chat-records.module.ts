@@ -13,6 +13,7 @@ import { ChatRecordsService } from './service/chat-records.service.js';
 import { ChatSummaryService } from './service/chat-summary.service.js';
 import { ChatTraceWriterService } from './trace/chat-trace-writer.service.js';
 import { LlmChatController } from './controller/llm-chat.controller.js';
+import { ChatDisplayService } from './display/chat-display.service.js';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { LlmChatController } from './controller/llm-chat.controller.js';
     ChatSummaryService,
     ChatTraceWriterService,
     ChatRecordsService,
+    ChatDisplayService,
   ],
 })
 export class ChatRecordsModule {}

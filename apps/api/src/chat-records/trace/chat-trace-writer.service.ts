@@ -128,6 +128,14 @@ function normalizeContent(content: string): string {
 }
 
 function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
+  if (
+    event.type === 'model_response' &&
+    typeof event.payload === 'object' &&
+    event.payload !== null &&
+    Object.hasOwn(event.payload, 'publicDisplay')
+  ) {
+    throw new Error('运行事件不能写入展示保留字段');
+  }
   const base: NormalizedEvent = {
     sequence: event.sequence,
     eventType: TRACE_EVENT_TYPES[event.type],
@@ -261,9 +269,23 @@ export class ChatTraceWriterService {
       existing.content === candidate.content &&
       existing.status === candidate.status &&
       existing.model === candidate.model &&
-      stableStringify(existing.payload) ===
-        stableStringify(candidate.payload) &&
+      stableStringify(this.identityPayload(existing)) ===
+        stableStringify(this.identityPayload(candidate)) &&
       stableStringify(existing.usage) === stableStringify(candidate.usage)
     );
+  }
+
+  private identityPayload(event: ChatTraceEvent): ChatTraceEvent['payload'] {
+    const payload = event.payload;
+    if (
+      event.eventType !== ChatTraceEventType.MODEL_RESPONSE ||
+      payload === null ||
+      Array.isArray(payload)
+    ) {
+      return payload;
+    }
+    // 绑定后无法区分原来的 null 和空对象，统一视作无原始字段；其余字段严格比较。
+    const { publicDisplay: _display, ...original } = payload;
+    return Object.keys(original).length === 0 ? null : original;
   }
 }

@@ -1,4 +1,11 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+} from 'vue';
 import { ApiError } from '@/api';
 import {
   deleteConversation as deleteConversationRequest,
@@ -8,55 +15,36 @@ import {
 } from '@/api/modules/chat';
 import type {
   ChatApiConversation,
-  ChatApiMessage,
   ChatMessage,
-  ChatStreamEvent,
   Conversation,
 } from '@/api/types/chat';
 import { auth } from '@/lib/auth';
+import {
+  applyTurnEvent,
+  createPendingMessage,
+  finishTurn,
+  toChatMessage,
+} from './chat-turn';
 
 type ChatPageStatus =
-  'idle' | 'loading' | 'streaming' | 'success' | 'error' | 'unknown';
+  'idle' | 'loading' | 'streaming' | 'success' | 'empty' | 'error' | 'unknown';
 type ConversationListStatus = 'loading' | 'success' | 'empty' | 'error';
-
-function formatChatTime(date: Date): string {
-  return date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatElapsedTime(startedAt: number): string {
-  const seconds = Math.floor((Date.now() - startedAt) / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return minutes > 0
-    ? `用时 ${minutes}分 ${remainingSeconds}秒`
-    : `用时 ${remainingSeconds}秒`;
-}
-
-async function waitForMessagePaint(): Promise<void> {
-  await nextTick();
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-}
+type PendingTurn = {
+  conversationId: string | null;
+  assistant: ChatMessage;
+  user: ChatMessage;
+  knownMessageIds: Set<string>;
+};
 
 function toConversation(item: ChatApiConversation): Conversation {
   return {
     id: item.id,
     title: item.title,
     preview: '',
-    updatedAt: formatChatTime(new Date(item.updatedAt)),
-  };
-}
-
-function toMessage(message: ChatApiMessage): ChatMessage {
-  return {
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    createdAt: message.createdAt,
+    updatedAt: new Date(item.updatedAt).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
   };
 }
 
@@ -70,24 +58,28 @@ export function useChatPage() {
   const hasMoreConversations = ref(false);
   const conversationPage = ref(1);
   const draft = ref('');
-  const messages = ref<ChatMessage[]>([]);
+  // 工具参数是递归 JSON，浅层引用避免 Vue 深解包，更新时替换消息及数组。
+  const messages = shallowRef<ChatMessage[]>([]);
   const status = ref<ChatPageStatus>('idle');
   const errorMessage = ref('');
   const streamDuration = ref<string | null>(null);
+  const historyError = ref('');
+  const firstLoadedPage = ref(1);
+  const isLoadingEarlierMessages = ref(false);
+  const uncertainTurns = new Map<string, PendingTurn>();
+  let currentTurn: PendingTurn | null = null;
   let abortController: AbortController | null = null;
+  let historyController: AbortController | null = null;
+  let listController: AbortController | null = null;
   let requestVersion = 0;
-  let uncertainTurn: { conversationId: string; userText: string } | null = null;
-  let streamStartedAt: number | null = null;
+  let listVersion = 0;
+  let pendingListUpdates: Set<string> | null = null;
   let streamTimer: number | undefined;
-  let streamingAssistantMessageId: string | null = null;
-  let conversationListRequestVersion = 0;
+  let streamStartedAt: number | null = null;
+  let disposed = false;
 
   const activeConversation = computed(() =>
-    activeConversationId.value
-      ? conversations.value.find(
-          (conversation) => conversation.id === activeConversationId.value,
-        )
-      : undefined,
+    conversations.value.find((item) => item.id === activeConversationId.value),
   );
   const hasActiveConversation = computed(
     () => activeConversationId.value !== null || messages.value.length > 0,
@@ -96,308 +88,362 @@ export function useChatPage() {
   const canSend = computed(
     () =>
       draft.value.trim().length > 0 &&
-      !isSending.value &&
-      status.value !== 'loading' &&
-      status.value !== 'unknown',
+      draft.value.length <= 2000 &&
+      !['streaming', 'loading', 'unknown'].includes(status.value),
   );
   const canDeleteConversations = computed(
     () =>
-      !isSending.value &&
-      status.value !== 'loading' &&
-      status.value !== 'unknown' &&
+      !['streaming', 'loading', 'unknown'].includes(status.value) &&
       deletingConversationId.value === null,
   );
+  const hasEarlierMessages = computed(() => firstLoadedPage.value > 1);
+  const context = computed(
+    () =>
+      [...messages.value]
+        .reverse()
+        .find((item) => item.role === 'assistant' && item.status === 'saved')
+        ?.context ?? null,
+  );
+  const contextIsPrevious = computed(() => isSending.value);
 
-  // 将生成耗时同步到当前助手消息，并在流结束或取消后保留最终值。
-  function updateStreamDuration() {
-    if (streamStartedAt === null) return;
-    const duration = formatElapsedTime(streamStartedAt);
-    streamDuration.value = duration;
-    if (!streamingAssistantMessageId) return;
-    const message = messages.value.find(
-      (item) => item.id === streamingAssistantMessageId,
+  function publishMessages() {
+    if (!currentTurn) return;
+    // 子组件按 Props 身份更新，不能仅触发浅引用后继续复用已修改的对象。
+    currentTurn.assistant = {
+      ...currentTurn.assistant,
+      activities: [...currentTurn.assistant.activities],
+      sources: [...currentTurn.assistant.sources],
+    };
+    currentTurn.user = { ...currentTurn.user };
+    const turn = currentTurn;
+    messages.value = messages.value.map((item) =>
+      item.id === turn.assistant.id
+        ? turn.assistant
+        : item.id === turn.user.id
+          ? turn.user
+          : item,
     );
-    if (message?.role === 'assistant') {
-      message.duration = duration;
-    }
-  }
-
-  function finishStreamDuration(): string | null {
-    if (streamStartedAt === null) return null;
-    const duration = formatElapsedTime(streamStartedAt);
-    streamDuration.value = duration;
-    const message = messages.value.find(
-      (item) => item.id === streamingAssistantMessageId,
-    );
-    if (message?.role === 'assistant') {
-      message.duration = duration;
-    }
-    if (streamTimer !== undefined) {
-      window.clearInterval(streamTimer);
-      streamTimer = undefined;
-    }
-    streamStartedAt = null;
-    return duration;
-  }
-
-  function cancelCurrentRequest() {
-    abortController?.abort();
-    abortController = null;
-    finishStreamDuration();
   }
 
   function upsertConversation(conversation: Conversation) {
-    conversationListStatus.value = 'success';
+    pendingListUpdates?.add(conversation.id);
     const index = conversations.value.findIndex(
       (item) => item.id === conversation.id,
     );
-    if (index === -1) {
-      conversations.value.unshift(conversation);
-      return;
-    }
-    conversations.value[index] = {
-      ...conversations.value[index],
-      ...conversation,
-    };
+    if (index < 0) conversations.value.unshift(conversation);
+    else
+      conversations.value[index] = {
+        ...conversations.value[index],
+        ...conversation,
+      };
+    conversationListStatus.value = 'success';
+  }
+
+  function updateDuration() {
+    if (streamStartedAt === null) return;
+    const seconds = Math.floor((Date.now() - streamStartedAt) / 1000);
+    const duration =
+      seconds >= 60
+        ? `用时 ${Math.floor(seconds / 60)}分 ${seconds % 60}秒`
+        : `用时 ${seconds}秒`;
+    streamDuration.value = duration;
+    if (currentTurn) currentTurn.assistant.duration = duration;
+    publishMessages();
+  }
+
+  function finishDuration() {
+    updateDuration();
+    if (streamTimer !== undefined) window.clearInterval(streamTimer);
+    streamTimer = undefined;
+    streamStartedAt = null;
+  }
+
+  function markUncertain() {
+    if (!currentTurn) return;
+    finishTurn(currentTurn.assistant, 'uncertain');
+    if (currentTurn.conversationId)
+      uncertainTurns.set(currentTurn.conversationId, currentTurn);
+    publishMessages();
+    status.value = currentTurn.conversationId ? 'unknown' : 'error';
+    errorMessage.value = currentTurn.conversationId
+      ? '生成已中断，尚无法确认本轮是否保存。请刷新核实后再继续'
+      : '生成已中断，尚未取得会话编号，无法核实保存状态';
+  }
+
+  function cancelCurrentRequest() {
+    if (isSending.value) markUncertain();
+    abortController?.abort();
+    abortController = null;
+    historyController?.abort();
+    historyController = null;
+    finishDuration();
+    isLoadingEarlierMessages.value = false;
   }
 
   async function loadConversations(page = 1, append = false) {
-    if (!auth.state.token) return;
-    if (append) {
-      if (isLoadingMoreConversations.value || !hasMoreConversations.value)
-        return;
-      isLoadingMoreConversations.value = true;
-    } else {
-      isLoadingMoreConversations.value = false;
-      conversationListStatus.value = 'loading';
-    }
-    const version = ++conversationListRequestVersion;
+    const token = auth.state.token;
+    if (
+      !token ||
+      (append &&
+        (isLoadingMoreConversations.value || !hasMoreConversations.value))
+    )
+      return;
+    listController?.abort();
+    const controller = new AbortController();
+    listController = controller;
+    const version = ++listVersion;
+    const updates = new Set<string>();
+    pendingListUpdates = updates;
+    isLoadingMoreConversations.value = append;
+    if (!append) conversationListStatus.value = 'loading';
     conversationListError.value = '';
     try {
-      const response = await listConversations(auth.state.token, page);
-      if (version !== conversationListRequestVersion) return;
+      const response = await listConversations(token, page, controller.signal);
+      if (disposed || version !== listVersion) return;
       const received = response.items.map(toConversation);
-      if (append) {
-        const existingIds = new Set(conversations.value.map((item) => item.id));
-        conversations.value.push(
-          ...received.filter((item) => !existingIds.has(item.id)),
-        );
-      } else {
-        conversations.value = received;
-      }
+      const existing = new Set(conversations.value.map((item) => item.id));
+      const updated = conversations.value.filter((item) =>
+        updates.has(item.id),
+      );
+      const updatedIds = new Set(updated.map((item) => item.id));
+      conversations.value = append
+        ? [
+            ...conversations.value,
+            ...received.filter((item) => !existing.has(item.id)),
+          ]
+        : [...updated, ...received.filter((item) => !updatedIds.has(item.id))];
       conversationPage.value = page;
       hasMoreConversations.value = response.page < response.totalPages;
-      conversationListStatus.value =
-        conversations.value.length > 0 ? 'success' : 'empty';
+      conversationListStatus.value = conversations.value.length
+        ? 'success'
+        : 'empty';
     } catch (error) {
-      if (version !== conversationListRequestVersion) return;
+      if (disposed || version !== listVersion || controller.signal.aborted)
+        return;
       conversationListStatus.value = 'error';
       conversationListError.value =
         error instanceof Error ? error.message : '会话列表加载失败';
     } finally {
-      if (version === conversationListRequestVersion) {
+      if (!disposed && version === listVersion)
         isLoadingMoreConversations.value = false;
-      }
+      if (version === listVersion) pendingListUpdates = null;
     }
   }
 
   function loadMoreConversations() {
-    if (!hasMoreConversations.value || isLoadingMoreConversations.value) return;
     void loadConversations(conversationPage.value + 1, true);
   }
 
-  async function removeConversation(conversationId: string) {
+  async function removeConversation(id: string) {
     const token = auth.state.token;
-    if (
-      !token ||
-      deletingConversationId.value ||
-      isSending.value ||
-      status.value === 'loading' ||
-      status.value === 'unknown'
-    ) {
-      return;
-    }
-
-    const conversation = conversations.value.find(
-      (item) => item.id === conversationId,
-    );
-    if (!conversation) return;
-
-    deletingConversationId.value = conversationId;
-    conversationListError.value = '';
+    if (!token || !canDeleteConversations.value) return;
+    deletingConversationId.value = id;
     try {
-      await deleteConversationRequest(token, conversationId);
+      await deleteConversationRequest(token, id);
+      if (disposed) return;
+      uncertainTurns.delete(id);
       conversations.value = conversations.value.filter(
-        (item) => item.id !== conversationId,
+        (item) => item.id !== id,
       );
-      if (activeConversationId.value === conversationId) {
-        startNewConversation();
-      }
+      if (activeConversationId.value === id) startNewConversation();
       await loadConversations();
     } catch (error) {
-      conversationListError.value =
-        error instanceof Error ? error.message : '删除会话失败';
+      if (!disposed)
+        conversationListError.value =
+          error instanceof Error ? error.message : '删除会话失败';
     } finally {
-      deletingConversationId.value = null;
+      if (!disposed) deletingConversationId.value = null;
     }
   }
 
   function startNewConversation() {
-    requestVersion += 1;
     cancelCurrentRequest();
-    uncertainTurn = null;
+    requestVersion += 1;
+    currentTurn = null;
     activeConversationId.value = null;
     messages.value = [];
     draft.value = '';
     errorMessage.value = '';
+    historyError.value = '';
+    firstLoadedPage.value = 1;
     status.value = 'idle';
   }
 
-  async function selectConversation(conversationId: string) {
-    if (!auth.state.token) return;
-    requestVersion += 1;
-    const version = requestVersion;
+  async function latestDetail(token: string, id: string, signal: AbortSignal) {
+    let detail = await getConversation(token, id, 1, signal);
+    let page = Math.max(1, detail.messages.totalPages);
+    if (page > 1) detail = await getConversation(token, id, page, signal);
+    // 读取期间若新一轮提交跨页，仅追赶一次，不进行后台轮询。
+    if (detail.messages.totalPages > page) {
+      page = detail.messages.totalPages;
+      detail = await getConversation(token, id, page, signal);
+    }
+    let items = detail.messages.items;
+    if (page > 1 && items.length < 2) {
+      const previous = await getConversation(token, id, page - 1, signal);
+      items = [...previous.messages.items, ...items];
+      page -= 1;
+    }
+    return { detail, items, page };
+  }
+
+  function reconcileUncertain(
+    turn: PendingTurn,
+    saved: ChatMessage[],
+  ): boolean {
+    const activityIds = new Set(
+      turn.assistant.activities.map((item) => item.id),
+    );
+    // 文本相同不能证明是同一轮；仅已持久化的新助手消息及稳定活动 ID 可佐证。
+    return (
+      activityIds.size > 0 &&
+      saved.some(
+        (item) =>
+          item.role === 'assistant' &&
+          !turn.knownMessageIds.has(item.id) &&
+          item.activities.some((activity) => activityIds.has(activity.id)),
+      )
+    );
+  }
+
+  async function selectConversation(id: string) {
+    const token = auth.state.token;
+    if (!token) return;
     cancelCurrentRequest();
-    uncertainTurn = null;
-    activeConversationId.value = conversationId;
+    const version = ++requestVersion;
+    const controller = new AbortController();
+    abortController = controller;
+    currentTurn = null;
+    activeConversationId.value = id;
     messages.value = [];
     draft.value = '';
     errorMessage.value = '';
+    historyError.value = '';
+    firstLoadedPage.value = 1;
     status.value = 'loading';
     try {
-      const response = await getConversation(auth.state.token, conversationId);
-      if (version !== requestVersion) return;
-      upsertConversation(toConversation(response));
-      messages.value = response.messages.items.map(toMessage);
-      status.value = 'success';
+      const { detail, items, page } = await latestDetail(
+        token,
+        id,
+        controller.signal,
+      );
+      if (version !== requestVersion || disposed) return;
+      upsertConversation(toConversation(detail));
+      const saved = items.map(toChatMessage);
+      const uncertain = uncertainTurns.get(id);
+      if (uncertain && !reconcileUncertain(uncertain, saved)) {
+        messages.value = [...saved, uncertain.user, uncertain.assistant];
+        status.value = 'unknown';
+        errorMessage.value =
+          '历史记录暂不能确认中断轮次是否保存，可以再次刷新核实';
+      } else {
+        uncertainTurns.delete(id);
+        messages.value = saved;
+        status.value = saved.length ? 'success' : 'empty';
+      }
+      firstLoadedPage.value = page;
     } catch (error) {
-      if (version !== requestVersion) return;
-      status.value = 'error';
+      if (version !== requestVersion || disposed || controller.signal.aborted)
+        return;
+      status.value = uncertainTurns.has(id) ? 'unknown' : 'error';
+      const uncertain = uncertainTurns.get(id);
+      if (uncertain) messages.value = [uncertain.user, uncertain.assistant];
       errorMessage.value =
         error instanceof Error ? error.message : '会话加载失败';
+    } finally {
+      if (version === requestVersion) abortController = null;
     }
   }
 
-  function applyStreamEvent(
-    event: ChatStreamEvent,
-    assistantMessageId: { value: string | null },
-  ) {
-    if (event.type === 'start') {
-      activeConversationId.value = event.conversationId;
-      upsertConversation({
-        id: event.conversationId,
-        title: event.title,
-        preview: '',
-        updatedAt: '刚刚',
-      });
+  async function loadEarlierMessages() {
+    const token = auth.state.token;
+    const id = activeConversationId.value;
+    if (
+      !token ||
+      !id ||
+      !hasEarlierMessages.value ||
+      isLoadingEarlierMessages.value ||
+      isSending.value
+    )
       return;
-    }
-    if (event.type === 'delta') {
-      if (!assistantMessageId.value) {
-        assistantMessageId.value = `stream-${requestVersion}`;
-        messages.value.push({
-          id: assistantMessageId.value,
-          role: 'assistant',
-          content: event.content,
-          createdAt: new Date().toISOString(),
-          ...(streamStartedAt !== null
-            ? { duration: formatElapsedTime(streamStartedAt) }
-            : {}),
-        });
-      } else {
-        const message = messages.value.find(
-          (item) => item.id === assistantMessageId.value,
-        );
-        if (message) message.content += event.content;
+    const version = requestVersion;
+    const controller = new AbortController();
+    historyController = controller;
+    isLoadingEarlierMessages.value = true;
+    historyError.value = '';
+    try {
+      const detail = await getConversation(
+        token,
+        id,
+        firstLoadedPage.value - 1,
+        controller.signal,
+      );
+      if (version !== requestVersion || disposed) return;
+      const existing = new Set(messages.value.map((item) => item.id));
+      messages.value = [
+        ...detail.messages.items
+          .filter((item) => !existing.has(item.id))
+          .map(toChatMessage),
+        ...messages.value,
+      ];
+      firstLoadedPage.value -= 1;
+    } catch (error) {
+      if (version !== requestVersion || disposed || controller.signal.aborted)
+        return;
+      historyError.value =
+        error instanceof Error ? error.message : '更早消息加载失败';
+    } finally {
+      if (version === requestVersion && !disposed) {
+        isLoadingEarlierMessages.value = false;
+        historyController = null;
       }
-      return;
-    }
-    if (event.type === 'error') {
-      errorMessage.value = event.message;
     }
   }
 
   async function refreshUncertainTurn() {
-    if (!auth.state.token || !uncertainTurn) return;
-    const { conversationId, userText } = uncertainTurn;
-    status.value = 'loading';
-    try {
-      const detail = await getConversation(auth.state.token, conversationId);
-      activeConversationId.value = conversationId;
-      upsertConversation(toConversation(detail));
-      messages.value = detail.messages.items.map(toMessage);
-      status.value = 'success';
-      errorMessage.value = '已从历史记录核实本轮状态';
-      uncertainTurn = null;
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        messages.value = messages.value.filter(
-          (message) => !message.id.startsWith('pending-'),
-        );
-        draft.value = userText;
-        status.value = 'error';
-        errorMessage.value = '历史记录中没有本轮内容，可以重新发送';
-        uncertainTurn = null;
-        return;
-      }
-      status.value = 'unknown';
-      errorMessage.value = '暂时无法核实保存状态，请稍后重试刷新';
-    }
+    if (activeConversationId.value && status.value === 'unknown')
+      await selectConversation(activeConversationId.value);
   }
 
   async function sendMessage() {
-    const content = draft.value.trim();
     const token = auth.state.token;
-    if (!content || !token || isSending.value || status.value === 'unknown') {
-      return;
-    }
-
-    requestVersion += 1;
-    const version = requestVersion;
+    if (!token || !canSend.value) return;
+    const content = draft.value.trim();
     cancelCurrentRequest();
-    uncertainTurn = null;
-    abortController = new AbortController();
-    const controller = abortController;
-    const assistantMessageId = { value: null as string | null };
-    streamStartedAt = Date.now();
-    streamDuration.value = formatElapsedTime(streamStartedAt);
-    streamingAssistantMessageId = `stream-${version}`;
-    streamTimer = window.setInterval(updateStreamDuration, 1000);
-    messages.value.push({
-      id: `pending-user-${version}`,
-      role: 'user',
-      content,
-      createdAt: new Date().toISOString(),
-    });
+    const version = ++requestVersion;
+    const controller = new AbortController();
+    abortController = controller;
+    const turn: PendingTurn = {
+      conversationId: activeConversationId.value,
+      user: createPendingMessage(`pending-user-${version}`, 'user', content),
+      assistant: createPendingMessage(
+        `pending-assistant-${version}`,
+        'assistant',
+      ),
+      knownMessageIds: new Set(messages.value.map((item) => item.id)),
+    };
+    currentTurn = turn;
+    messages.value = [...messages.value, turn.user, turn.assistant];
     draft.value = '';
     errorMessage.value = '';
     status.value = 'streaming';
-    let receivedStart = false;
+    streamStartedAt = Date.now();
+    updateDuration();
+    streamTimer = window.setInterval(updateDuration, 1000);
     let receivedDone = false;
-
+    let receivedError = false;
+    let receivedStart = false;
     try {
       const request = {
         messages: [{ role: 'user' as const, content }],
-        ...(activeConversationId.value
-          ? { conversationId: activeConversationId.value }
-          : {}),
+        ...(turn.conversationId ? { conversationId: turn.conversationId } : {}),
       };
       for await (const event of streamChat(token, request, controller.signal)) {
-        if (version !== requestVersion) return;
+        if (version !== requestVersion || controller.signal.aborted || disposed)
+          return;
         if (event.type === 'start') {
           receivedStart = true;
-        }
-        applyStreamEvent(event, assistantMessageId);
-        if (event.type === 'error') {
-          status.value = 'error';
-          return;
-        }
-        if (event.type === 'delta') {
-          await waitForMessagePaint();
-        }
-        if (event.type === 'done') {
-          receivedDone = true;
-          const duration = finishStreamDuration();
+          turn.conversationId = event.conversationId;
           activeConversationId.value = event.conversationId;
           upsertConversation({
             id: event.conversationId,
@@ -405,60 +451,114 @@ export function useChatPage() {
             preview: content,
             updatedAt: '刚刚',
           });
-          const detail = await getConversation(token, event.conversationId);
-          if (version !== requestVersion) return;
-          const lastAssistantIndex = detail.messages.items.reduce(
-            (index, message, currentIndex) =>
-              message.role === 'assistant' ? currentIndex : index,
-            -1,
-          );
-          messages.value = detail.messages.items.map((message, index) => ({
-            ...toMessage(message),
-            ...(index === lastAssistantIndex && duration ? { duration } : {}),
-          }));
-          status.value = 'success';
         }
+        applyTurnEvent(turn.assistant, event);
+        publishMessages();
+        if (event.type === 'error') {
+          receivedError = true;
+          finishTurn(turn.assistant, 'failed');
+          finishTurn(turn.user, 'failed');
+          status.value = 'error';
+          errorMessage.value = event.message;
+          publishMessages();
+          return;
+        }
+        if (event.type === 'done') {
+          receivedDone = true;
+          finishDuration();
+          finishTurn(turn.user, 'saved');
+          status.value = 'success';
+          const { detail, items, page } = await latestDetail(
+            token,
+            event.conversationId,
+            controller.signal,
+          );
+          if (
+            version !== requestVersion ||
+            controller.signal.aborted ||
+            disposed
+          )
+            return;
+          upsertConversation(toConversation(detail));
+          const saved = items.map(toChatMessage);
+          const renderedKeys = new Map(
+            messages.value.map((item) => [item.id, item.renderKey]),
+          );
+          for (const item of saved) item.renderKey = renderedKeys.get(item.id);
+          const last = [...saved]
+            .reverse()
+            .find((item) => item.role === 'assistant');
+          if (last && last.content === turn.assistant.content) {
+            last.renderKey = turn.assistant.id;
+            if (turn.assistant.duration)
+              last.duration = turn.assistant.duration;
+            const previous = saved[saved.indexOf(last) - 1];
+            if (previous?.role === 'user' && previous.content === content)
+              previous.renderKey = turn.user.id;
+          }
+          const receivedIds = new Set(saved.map((item) => item.id));
+          const earlier = messages.value.filter(
+            (item) =>
+              item.status === 'saved' &&
+              item.id !== turn.user.id &&
+              item.id !== turn.assistant.id &&
+              !receivedIds.has(item.id),
+          );
+          messages.value = [...earlier, ...saved];
+          firstLoadedPage.value = earlier.length
+            ? Math.min(firstLoadedPage.value, page)
+            : page;
+        }
+        if (event.type === 'delta') await nextTick();
       }
+      if (
+        !receivedDone &&
+        !receivedError &&
+        version === requestVersion &&
+        !controller.signal.aborted
+      )
+        markUncertain();
     } catch (error) {
-      if (version !== requestVersion || controller.signal.aborted) return;
+      if (version !== requestVersion || disposed || controller.signal.aborted)
+        return;
       if (receivedDone) {
         status.value = 'success';
         errorMessage.value = '回复已保存，但历史记录刷新失败';
-      } else if (receivedStart && activeConversationId.value) {
-        uncertainTurn = {
-          conversationId: activeConversationId.value,
-          userText: content,
-        };
-        status.value = 'unknown';
-        errorMessage.value =
-          '连接中断，无法确认本轮是否已保存。请刷新核实后再继续';
-      } else {
+      } else if (
+        turn.conversationId &&
+        (receivedStart || !(error instanceof ApiError && error.status > 0))
+      )
+        markUncertain();
+      else {
+        finishTurn(turn.assistant, 'failed');
+        finishTurn(turn.user, 'failed');
         status.value = 'error';
         errorMessage.value =
           error instanceof Error ? error.message : '聊天请求失败';
+        publishMessages();
       }
     } finally {
-      finishStreamDuration();
-      if (version === requestVersion) {
+      // 旧请求结束时不能清理新一轮的计时器、控制器或页面状态。
+      if (version === requestVersion && !disposed) {
+        finishDuration();
         abortController = null;
-        if (status.value === 'streaming') {
-          status.value = 'error';
-          errorMessage.value = '聊天流未正常结束，请刷新会话确认状态';
-        }
+        currentTurn = null;
       }
     }
   }
 
   function stopGeneration() {
+    if (!isSending.value) return;
     cancelCurrentRequest();
-    if (status.value === 'streaming') {
-      status.value = 'error';
-      errorMessage.value = '已停止生成；请刷新会话确认是否已保存';
-    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (
+      event.key === 'Enter' &&
+      !event.shiftKey &&
+      !event.isComposing &&
+      event.keyCode !== 229
+    ) {
       event.preventDefault();
       void sendMessage();
     }
@@ -467,10 +567,12 @@ export function useChatPage() {
   onMounted(() => {
     void loadConversations();
   });
-
   onBeforeUnmount(() => {
-    requestVersion += 1;
     cancelCurrentRequest();
+    disposed = true;
+    requestVersion += 1;
+    listVersion += 1;
+    listController?.abort();
   });
 
   return {
@@ -499,5 +601,11 @@ export function useChatPage() {
     status,
     streamDuration,
     stopGeneration,
+    context,
+    contextIsPrevious,
+    hasEarlierMessages,
+    isLoadingEarlierMessages,
+    historyError,
+    loadEarlierMessages,
   };
 }

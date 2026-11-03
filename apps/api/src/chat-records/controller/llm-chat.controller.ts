@@ -43,7 +43,7 @@ export class LlmChatController {
   @ApiProduces('text/event-stream')
   @ApiOkResponse({
     description:
-      'SSE 事件流：start、delta、done；响应开始后的失败通过 error 事件返回。',
+      'SSE 事件流：start（含上下文窗口）、delta、activity、sources、done（含最终调用用量）；事务提交后发送 done，响应开始后的失败通过 error 事件返回。',
     content: {
       'text/event-stream': {
         schema: { type: 'string' },
@@ -86,21 +86,8 @@ export class LlmChatController {
 
       for await (const event of events) {
         if (abortController.signal.aborted || response.destroyed) return;
-        const frame = `event: ${event.type}\ndata: ${JSON.stringify(
-          event.type === 'start'
-            ? {
-                conversationId: event.conversationId,
-                title: event.title,
-              }
-            : event.type === 'delta'
-              ? { content: event.content }
-              : {
-                  conversationId: event.conversationId,
-                  title: event.title,
-                  model: event.model,
-                  usage: event.usage,
-                },
-        )}\n\n`;
+        const { type, ...payload } = event;
+        const frame = `event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`;
         if (!response.write(frame)) {
           await once(response, 'drain', { signal: abortController.signal });
         }

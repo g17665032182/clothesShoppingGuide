@@ -1,45 +1,59 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
-import { ChevronRight } from '@lucide/vue';
-import { cn } from '@/lib/utils';
-import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { computed } from 'vue';
+import { ArrowUp, RotateCw } from '@lucide/vue';
+import { Bubble, BubbleContent } from '@/components/ui/bubble';
+import { Button } from '@/components/ui/button';
+import { Message, MessageContent } from '@/components/ui/message';
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/components/ui/message-scroller';
+import { Spinner } from '@/components/ui/spinner';
 import type { ChatMessage } from '@/api/types/chat';
+import ChatAssistantMessage from './ChatAssistantMessage.vue';
 
-const props = defineProps<{
-  isSending: boolean;
-  messages: ChatMessage[];
-  streamDuration: string | null;
-}>();
-
-const messageList = ref<HTMLElement | null>(null);
-const sessionGapMs = 5 * 60 * 1000;
-
-// 首个增量内容到达后，直接展示助手消息，避免思考提示和空消息气泡重复。
-const showThinkingIndicator = computed(
-  () => props.isSending && props.messages.at(-1)?.role !== 'assistant',
+const props = withDefaults(
+  defineProps<{
+    isSending: boolean;
+    messages: ChatMessage[];
+    streamDuration: string | null;
+    hasEarlierMessages?: boolean;
+    isLoadingEarlierMessages?: boolean;
+    historyError?: string;
+  }>(),
+  {
+    hasEarlierMessages: false,
+    isLoadingEarlierMessages: false,
+    historyError: '',
+  },
 );
 
+const emit = defineEmits<{
+  (event: 'loadEarlier'): void;
+  (event: 'retryHistory'): void;
+}>();
+
+const sessionGapMs = 5 * 60 * 1000;
 const messagesWithSessionTime = computed(() => {
   let lastAssistantAt: number | null = null;
 
   return props.messages.map((message) => {
     const currentTime = Date.parse(message.createdAt);
-    const shouldShow =
+    const showSessionTime =
       message.role === 'user' &&
       (lastAssistantAt === null ||
         (Number.isFinite(currentTime) &&
           currentTime - lastAssistantAt > sessionGapMs));
 
-    // 用 AI 回复时间作为基准，衡量用户隔了多久再次发起对话。
+    // 用助手回复时间衡量会话间隔，不复制消息中的递归工具参数。
     if (message.role === 'assistant' && Number.isFinite(currentTime)) {
       lastAssistantAt = currentTime;
     }
-
-    return {
-      ...message,
-      showSessionTime: shouldShow,
-    };
+    return { message, showSessionTime };
   });
 });
 
@@ -49,103 +63,102 @@ function formatSessionTime(createdAt: string): string {
     minute: '2-digit',
   });
 }
-
-async function scrollToLatestMessage() {
-  await nextTick();
-  messageList.value?.lastElementChild?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'end',
-  });
-}
-
-watch(
-  () => [props.messages.length, props.isSending],
-  () => {
-    void scrollToLatestMessage();
-  },
-  { flush: 'post' },
-);
 </script>
 
 <template>
-  <ScrollArea class="h-full">
-    <div
-      ref="messageList"
-      class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-0 py-5 sm:py-6"
-    >
-      <div v-for="message in messagesWithSessionTime" :key="message.id">
+  <MessageScrollerProvider auto-scroll default-scroll-position="end">
+    <MessageScroller class="h-full min-h-0">
+      <MessageScrollerViewport aria-label="聊天消息" preserve-scroll-on-prepend>
         <div
-          v-if="message.showSessionTime"
-          class="flex justify-center py-1 text-xs text-muted-foreground"
-          role="separator"
+          v-if="hasEarlierMessages || historyError"
+          class="mx-auto flex w-full max-w-3xl flex-col items-center gap-2 pt-4"
         >
-          <time
-            class="rounded-full bg-muted/70 px-2.5 py-1"
-            :datetime="message.createdAt"
-          >
-            {{ formatSessionTime(message.createdAt) }}
-          </time>
-        </div>
-        <div
-          :class="
-            cn(
-              'flex w-full items-end gap-3',
-              message.role === 'user' && 'justify-end',
-            )
-          "
-        >
-          <div
-            :class="
-              cn(
-                'flex min-w-0 flex-col gap-1',
-                message.role === 'assistant'
-                  ? 'w-full'
-                  : 'max-w-[min(78%,38rem)] items-end',
-              )
-            "
-          >
-            <p
-              v-if="message.role === 'assistant' && message.duration"
-              class="flex items-center gap-1 px-1 text-xs text-muted-foreground"
-              aria-live="polite"
-            >
-              {{ message.duration }}
-              <ChevronRight aria-hidden="true" />
-            </p>
-            <div
-              :class="
-                cn(
-                  'min-w-0 px-1 py-1',
-                  message.role === 'user'
-                    ? 'rounded-xl bg-muted px-4 py-3 text-foreground'
-                    : 'w-full text-foreground',
-                )
-              "
-            >
-              <MarkdownRenderer :markdown="message.content" />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div
-        v-if="showThinkingIndicator"
-        class="flex w-full items-end gap-3"
-        aria-live="polite"
-      >
-        <div class="flex w-full flex-col gap-1">
-          <p
-            v-if="streamDuration"
-            class="flex items-center gap-1 px-1 text-xs text-muted-foreground"
-            aria-live="polite"
-          >
-            {{ streamDuration }}
-            <ChevronRight aria-hidden="true" />
+          <p v-if="historyError" class="text-sm text-destructive" role="alert">
+            {{ historyError }}
           </p>
-          <div class="px-1 py-1 text-sm text-muted-foreground">
-            正在整理建议…
-          </div>
+          <Button
+            :disabled="isLoadingEarlierMessages"
+            size="sm"
+            type="button"
+            variant="ghost"
+            @click="historyError ? emit('retryHistory') : emit('loadEarlier')"
+          >
+            <Spinner v-if="isLoadingEarlierMessages" data-icon="inline-start" />
+            <RotateCw
+              v-else-if="historyError"
+              aria-hidden="true"
+              data-icon="inline-start"
+            />
+            <ArrowUp v-else aria-hidden="true" data-icon="inline-start" />
+            {{
+              isLoadingEarlierMessages
+                ? '正在加载'
+                : historyError
+                  ? '重试加载'
+                  : '加载更早消息'
+            }}
+          </Button>
         </div>
-      </div>
-    </div>
-  </ScrollArea>
+        <MessageScrollerContent
+          :aria-busy="isSending"
+          class="mx-auto w-full max-w-3xl gap-5 px-0 py-5 sm:py-6"
+        >
+          <MessageScrollerItem
+            v-for="{ message, showSessionTime } in messagesWithSessionTime"
+            :key="message.renderKey ?? message.id"
+            :message-id="message.id"
+            :scroll-anchor="message.role === 'user'"
+            class="min-w-0"
+          >
+            <div
+              v-if="showSessionTime"
+              class="flex justify-center pb-4 text-xs text-muted-foreground"
+              role="separator"
+            >
+              <time :datetime="message.createdAt">
+                {{ formatSessionTime(message.createdAt) }}
+              </time>
+            </div>
+            <Message v-if="message.role === 'user'" align="end">
+              <MessageContent>
+                <Bubble align="end" variant="muted">
+                  <BubbleContent
+                    class="whitespace-pre-wrap [overflow-wrap:anywhere]"
+                  >
+                    {{ message.content }}
+                  </BubbleContent>
+                </Bubble>
+              </MessageContent>
+            </Message>
+            <ChatAssistantMessage
+              v-else
+              :message="message"
+              :stream-duration="
+                isSending && message.id === messages.at(-1)?.id
+                  ? streamDuration
+                  : null
+              "
+            />
+          </MessageScrollerItem>
+          <MessageScrollerItem
+            v-if="isSending && messages.at(-1)?.role !== 'assistant'"
+            message-id="pending-assistant"
+          >
+            <Message>
+              <MessageContent>
+                <p
+                  class="flex items-center gap-2 text-muted-foreground"
+                  role="status"
+                >
+                  <Spinner aria-hidden="true" />
+                  正在生成回复
+                </p>
+              </MessageContent>
+            </Message>
+          </MessageScrollerItem>
+        </MessageScrollerContent>
+      </MessageScrollerViewport>
+      <MessageScrollerButton aria-label="回到最新消息" title="回到最新消息" />
+    </MessageScroller>
+  </MessageScrollerProvider>
 </template>

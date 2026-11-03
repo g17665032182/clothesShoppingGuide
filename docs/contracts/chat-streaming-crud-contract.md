@@ -2,13 +2,13 @@
 
 ## 状态与上下文
 
-- 状态：已确认
+- 状态：现有契约及 2026-11-03 AI Elements 设计关联扩展已确认。
 - 资源名称：流式聊天传输
 - 业务目的：通过流式响应逐段展示大模型回复，并在完整生成后复用现有聊天记录规则保存本轮消息。
 - 关联设计文档：[流式聊天模块设计文档](../chat-streaming/chat-streaming-design.md)
 - 所属应用：`apps/api`、`apps/web`
 - 关联模块：`chat-records`、`llm`、`auth`
-- 最后更新：2026-10-28
+- 最后更新：2026-11-03（设计关联扩展已确认，尚未实现）。
 
 ## 范围
 
@@ -61,6 +61,33 @@ data: <JSON object>
 - 新会话在发送 `start` 前创建会话记录，以满足运行期间写入内部 trace 的外键约束。
 - 服务端不发送内部 Prompt、API Key、数据库连接信息或上游原始错误。
 - 不增加独立结束标记；缓存控制响应头按技术文档设置，不发送心跳事件。
+
+### 2026-11-03 AI Elements 扩展（已确认）
+
+确认依据：2026-11-03 用户回复“确认设计文档”，以下为该设计关联的接口扩展；须继续通过技术及实施文档审批后才能修改 API：
+
+- `start` 新增 `contextWindowTokens: number`。
+- 新增 `activity`：`{ activity: ChatActivity }`，只包含公开投影，不直接发送内部事件。
+- `ChatActivity` 工具项：`{ type: "tool", id, toolName, status, input, output }`；
+  status 为 `running | success | error | interrupted`，input 为安全 JSON 或 null，output 为安全字符串或 null。
+- `ChatActivity` 推理项：`{ type: "reasoning", id, summary }`，仅包含供应商明确给出的公开摘要。
+- 新增 `sources`：`{ sources: ChatSource[] }`，是本轮来源列表的完整快照，前端替换本轮列表。
+- `ChatSource`：`{ id: string, title: string, url: string }`。id 在本轮内稳定，title 和 url 为非空字符串。
+  仅采集真实工具结果或供应商结构化引用，按有效 URL 去重并保留首次出现顺序，不从正文自动提取。
+  URL 只允许 HTTP/HTTPS 外部链接，不允许用户名密码或其他协议；不自动抓取链接内容。
+- 没有真实来源时不发送虚假占位项，前端隐藏 Sources；不新增搜索能力或行内引用编号。
+- `done` 新增 `context: { contextWindowTokens, inputTokens, outputTokens, usedTokens }`。
+  Token 字段允许 null；最近一次最终模型调用的输入和输出均已知才计算 usedTokens，不累加工具循环或历史轮次。
+- 工具调用和结果用同一 id 更新；正文仍通过 `delta` 逐片发送，工具调用块和原始 reasoning 不作为正文。
+- 工具参数/结果经独立白名单投影，未知工具不公开原始参数或结果，失败只给安全错误。
+- 本扩展取代此前“工具仅用于内部审计”的展示限制，系统指令、记忆上下文、内部错误及原始供应商对象仍不公开。
+- 成功保存时拟在最后模型 trace 的 `payload.publicDisplay` 同事务绑定 assistantMessageId、activities、sources 和 context，供历史恢复；本扩展不提议新增 Entity 或 Migration。
+  容量和查询可行性在技术阶段核验；若必须修改数据结构，先回到设计和契约确认。
+- 所有新事件遵守取消、背压、旧请求隔离、唯一 done 与错误终止规则。
+- 活动、来源和正文均属于同一轮运行；错误、取消或断流后，未完成工具不能继续显示运行中，临时数据不得当作已保存记录。
+- Confirmation、Plan 和 Stack Trace 不在本期范围，不新增工具审批、计划事件或面向用户的堆栈输出。
+
+关联 [AI Elements 设计文档](../chat-streaming/ai-elements-design.md)及[技术文档](../chat-streaming/ai-elements-technical.md)。设计阶段已确认，技术文档确认后再编写实施文档，实施文档确认后才能改代码。
 
 ## HTTP 错误与流内错误
 

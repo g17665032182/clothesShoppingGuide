@@ -1,0 +1,49 @@
+<script setup lang="ts">
+import type { PrimitiveProps } from 'reka-ui';
+
+import type { HTMLAttributes } from 'vue';
+import type { ButtonVariants } from '@/components/ui/button';
+import { CheckIcon, CopyIcon } from '@lucide/vue';
+import { useClipboard } from '@vueuse/core';
+import { cn } from 'cn';
+import { Button } from '@/components/ui/button';
+
+defineOptions({ inheritAttrs: false });
+
+const props = withDefaults(
+  defineProps<
+    PrimitiveProps & {
+      value: string;
+      variant?: ButtonVariants['variant'];
+      size?: ButtonVariants['size'];
+      class?: HTMLAttributes['class'];
+    }
+  >(),
+  {
+    as: 'button',
+    variant: 'ghost',
+    size: 'icon-xs',
+  },
+);
+
+const { copy, copied } = useClipboard({ copiedDuring: 2000, legacy: true });
+</script>
+
+<template>
+  <Button
+    v-bind="$attrs"
+    data-slot="code-block-copy-button"
+    :data-copied="copied || undefined"
+    :as="as"
+    :as-child="asChild"
+    :variant="variant"
+    :size="size"
+    :aria-label="copied ? '已复制' : '复制代码'"
+    :class="cn('', props.class)"
+    @click="copy(props.value)"
+  >
+    <CheckIcon v-if="copied" aria-hidden="true" data-icon="inline-start" />
+    <CopyIcon v-else aria-hidden="true" data-icon="inline-start" />
+  </Button>
+  <span aria-live="polite" class="sr-only">{{ copied ? '已复制' : '' }}</span>
+</template>

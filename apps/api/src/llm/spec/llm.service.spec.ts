@@ -154,7 +154,7 @@ test('LlmService 按顺序产出流式 chunk，并在结束时聚合完整结果
     chunks.push(next.value);
   }
 
-  assert.deepEqual(chunks, ['春日通勤穿搭']);
+  assert.deepEqual(chunks, ['春日', '通勤', '穿搭']);
   assert.equal(model.calls[0]?.[0]?.content, SYSTEM_CONTEXT);
   assert.deepEqual(result.value, {
     content: '春日通勤穿搭',

@@ -9,7 +9,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   AIMessage,
   BaseMessage,
-  type BaseMessageChunk,
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
@@ -20,6 +19,15 @@ import { LLM_GRAPH } from '../graph/llm.tokens.js';
 import type { LlmStateValue, LlmUsage } from '../graph/llm.state.js';
 import type { LlmTraceContext } from '../trace/llm-trace.types.js';
 import { SYSTEM_CONTEXT } from '../context/system-context.js';
+import { visibleMessageContent } from '../stream/llm-visible-content.js';
+import {
+  isStreamEnvelope,
+  LlmStreamLifecycle,
+} from '../stream/llm-stream-envelope.js';
+import type {
+  LlmEventStreamResult,
+  LlmStreamEvent,
+} from '../stream/llm-stream.types.js';
 
 export type UserChatInput = {
   messages: Array<{
@@ -73,44 +81,9 @@ function isTimeoutError(error: unknown): boolean {
 }
 
 function normalizeContent(content: unknown): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    const text = content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        const record = asRecord(part);
-        return typeof record.text === 'string' ? record.text : '';
-      })
-      .join('');
-    if (text.length > 0) {
-      return text;
-    }
-  }
-
+  const text = visibleMessageContent(content);
+  if (text || typeof content === 'string') return text;
   throw new BadGatewayException('上游大模型返回内容无法解析');
-}
-
-function normalizeChunkContent(content: unknown): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        const record = asRecord(part);
-        return typeof record.text === 'string' ? record.text : '';
-      })
-      .join('');
-  }
-  return '';
 }
 
 function toLangChainMessage(
@@ -187,7 +160,7 @@ export class LlmService {
     return {
       content: normalizeContent(response.content),
       model,
-      usage: result.usage ?? null,
+      usage: normalizeUsage(response) ?? null,
     };
   }
 
@@ -213,36 +186,73 @@ export class LlmService {
     signal?: AbortSignal,
     traceContext?: LlmTraceContext,
   ): AsyncGenerator<string, LlmStreamResult> {
-    const model = this.assertConfigured();
-
-    let fullMessage: BaseMessage | undefined;
+    const events = this.streamEventsPrepared(input, signal, traceContext);
     try {
+      while (true) {
+        const next = await events.next();
+        if (next.done) {
+          const { content, model, usage } = next.value;
+          return { content, model, usage };
+        }
+        if (next.value.type === 'delta') yield next.value.content;
+      }
+    } finally {
+      await events.return(undefined as never);
+    }
+  }
+
+  public async *streamEventsPrepared(
+    input: ChatInput,
+    signal?: AbortSignal,
+    traceContext?: LlmTraceContext,
+  ): AsyncGenerator<LlmStreamEvent, LlmEventStreamResult> {
+    const model = this.assertConfigured();
+    const controller = new AbortController();
+    const lifecycle = new LlmStreamLifecycle();
+    const abort = () => controller.abort(signal?.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    let iterator: AsyncIterator<[string, unknown]> | undefined;
+    let fullMessage: BaseMessage | undefined;
+    let finalTraceSequence: number | null = null;
+    let content = '';
+    try {
+      controller.signal.throwIfAborted();
       const stream = await this.graph.stream(
         { messages: input.messages.map(toLangChainMessage) },
         {
-          streamMode: 'values',
+          streamMode: ['custom', 'values'],
+          signal: controller.signal,
           context: {
             ...(traceContext ?? {}),
             streaming: true,
-            ...(signal ? { signal } : {}),
+            eventStreaming: true,
+            streamLifecycle: lifecycle,
+            signal: controller.signal,
           } as any,
         },
       );
-      let previousMessageCount = 0;
-      for await (const state of stream) {
-        if (signal?.aborted) {
-          throw new DOMException('The operation was aborted', 'AbortError');
+      iterator = stream[Symbol.asyncIterator]();
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) break;
+        controller.signal.throwIfAborted();
+        const [mode, value] = next.value;
+        if (mode === 'custom' && isStreamEnvelope(value)) {
+          if (value.event.type === 'delta') content += value.event.content;
+          yield value.event;
+          // HTTP 调用方完成本次写入并继续拉取后，才允许模型继续生产。
+          value.acknowledge();
+          continue;
         }
+        if (mode !== 'values') continue;
+        const state = value as LlmStateValue;
+        finalTraceSequence = state.finalTraceSequence ?? null;
         const response = state.messages.at(-1);
         if (!response || response.type !== 'ai') continue;
         const toolCalls = asRecord(response).tool_calls;
         const hasToolCalls = Array.isArray(toolCalls) && toolCalls.length > 0;
-        if (!hasToolCalls && state.messages.length > previousMessageCount) {
-          const text = normalizeChunkContent(response.content);
-          if (text) yield text;
-          fullMessage = response as BaseMessageChunk;
-        }
-        previousMessageCount = state.messages.length;
+        if (!hasToolCalls) fullMessage = response;
       }
     } catch (error) {
       if (
@@ -252,16 +262,26 @@ export class LlmService {
         throw error;
       }
       this.rethrowMappedError(error);
+    } finally {
+      // return() 同样取消正在等待确认的节点，避免关闭流时互相等待。
+      controller.abort();
+      signal?.removeEventListener('abort', abort);
+      try {
+        await iterator?.return?.();
+      } finally {
+        await lifecycle.waitForIdle();
+      }
     }
 
-    if (!fullMessage) {
+    if (!fullMessage || !content.trim()) {
       throw new BadGatewayException('上游大模型未返回内容');
     }
 
     return {
-      content: normalizeContent(fullMessage.content),
+      content,
       model,
       usage: normalizeUsage(fullMessage) ?? null,
+      finalTraceSequence,
     };
   }
 

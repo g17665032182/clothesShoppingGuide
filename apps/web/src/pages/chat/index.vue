@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { Sparkles } from '@lucide/vue';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import ChatComposer from './components/ChatComposer.vue';
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessageList from './components/ChatMessageList.vue';
@@ -32,6 +34,12 @@ const {
   loadConversations,
   loadMoreConversations,
   removeConversation,
+  context,
+  contextIsPrevious,
+  hasEarlierMessages,
+  isLoadingEarlierMessages,
+  historyError,
+  loadEarlierMessages,
 } = useChatPage();
 </script>
 
@@ -62,10 +70,32 @@ const {
             @new="startNewConversation"
           />
           <div class="min-h-0 flex-1 overflow-hidden">
+            <div
+              v-if="status === 'loading'"
+              class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-8"
+              role="status"
+              aria-label="正在加载聊天记录"
+            >
+              <Skeleton class="h-5 w-2/3" />
+              <Skeleton class="h-20 w-full" />
+              <Skeleton class="h-5 w-1/2" />
+            </div>
+            <Empty v-else-if="status === 'empty'" class="h-full">
+              <EmptyHeader>
+                <EmptyTitle>暂无消息</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
             <ChatMessageList
+              v-else
+              :key="activeConversationId ?? 'new'"
               :is-sending="isSending"
               :messages="messages"
               :stream-duration="streamDuration"
+              :has-earlier-messages="hasEarlierMessages"
+              :is-loading-earlier-messages="isLoadingEarlierMessages"
+              :history-error="historyError"
+              @load-earlier="loadEarlierMessages"
+              @retry-history="loadEarlierMessages"
             />
           </div>
           <div
@@ -82,12 +112,31 @@ const {
             >
               刷新核实
             </button>
+            <button
+              v-else-if="status === 'error' && activeConversationId"
+              class="ml-2 underline underline-offset-4"
+              type="button"
+              @click="selectConversation(activeConversationId)"
+            >
+              重新加载
+            </button>
+            <button
+              v-else-if="status === 'success' && activeConversationId"
+              class="ml-2 underline underline-offset-4"
+              type="button"
+              @click="selectConversation(activeConversationId)"
+            >
+              刷新记录
+            </button>
           </div>
           <div class="shrink-0 px-4 pb-4 sm:px-6 sm:pb-6">
             <ChatComposer
+              :key="activeConversationId ?? 'new'"
               :can-send="canSend"
               :draft="draft"
               :is-sending="isSending"
+              :context="context"
+              :context-is-previous="contextIsPrevious"
               @keydown="handleKeydown"
               @stop="stopGeneration"
               @submit="sendMessage"
@@ -131,9 +180,12 @@ const {
           </div>
           <div class="shrink-0 px-4 pb-4 sm:px-6 sm:pb-6">
             <ChatComposer
+              key="new"
               :can-send="canSend"
               :draft="draft"
               :is-sending="isSending"
+              :context="context"
+              :context-is-previous="contextIsPrevious"
               @keydown="handleKeydown"
               @submit="sendMessage"
               @stop="stopGeneration"

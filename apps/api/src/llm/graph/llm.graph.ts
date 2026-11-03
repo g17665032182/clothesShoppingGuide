@@ -34,6 +34,12 @@ import type {
   LlmTraceContext,
   LlmTraceEvent,
 } from '../trace/llm-trace.types.js';
+import { visibleMessageContent } from '../stream/llm-visible-content.js';
+import {
+  writeStreamEvent,
+  type LlmStreamLifecycle,
+} from '../stream/llm-stream-envelope.js';
+import type { LlmStreamEvent } from '../stream/llm-stream.types.js';
 
 type UnknownRecord = Record<string, unknown>;
 export type GraphTraceContext = {
@@ -43,6 +49,8 @@ export type GraphTraceContext = {
   model?: string;
   signal?: AbortSignal;
   streaming?: boolean;
+  eventStreaming?: boolean;
+  streamLifecycle?: LlmStreamLifecycle;
 };
 
 function asRecord(value: unknown): UnknownRecord {
@@ -52,7 +60,9 @@ function asRecord(value: unknown): UnknownRecord {
 }
 
 function asNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
 }
 
 function pickNumber(source: UnknownRecord, keys: string[]): number | null {
@@ -74,6 +84,8 @@ const LlmTraceContextSchema = new StateSchema({
   model: z.string().optional(),
   signal: z.custom<AbortSignal>().optional(),
   streaming: z.boolean().optional(),
+  eventStreaming: z.boolean().optional(),
+  streamLifecycle: z.custom<LlmStreamLifecycle>().optional(),
 });
 
 function routeAfterChatModel(state: LlmStateValue): 'tools' | typeof END {
@@ -139,16 +151,19 @@ function toolCalls(message: BaseMessage): Array<{
     : [];
 }
 
-function normalizeMessageContent(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .map((part) => {
-      if (typeof part === 'string') return part;
-      const value = asRecord(part);
-      return typeof value.text === 'string' ? value.text : '';
-    })
-    .join('');
+const normalizeMessageContent = visibleMessageContent;
+
+async function emitEvent(
+  runtime: Runtime<Record<string, unknown>>,
+  event: LlmStreamEvent,
+): Promise<void> {
+  const context = runtime.context as GraphTraceContext | undefined;
+  if (!context?.eventStreaming) return;
+  await writeStreamEvent(
+    runtime.writer,
+    event,
+    context.signal ?? runtime.signal,
+  );
 }
 
 function toAiMessage(chunk: AIMessageChunk): AIMessage {
@@ -245,38 +260,45 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
     runtime: Runtime<Record<string, unknown>>,
   ): Promise<LlmStateUpdate> => {
     const context = runtime.context as unknown as GraphTraceContext | undefined;
-    // 流式路径先在服务端聚合完整 AI 消息，确认没有工具调用后才允许向外层发送文本。
+    // 正文增量立即发送；工具参数仍聚合为完整消息后才进入工具节点。
     if (context?.streaming) {
-      let aggregate: AIMessageChunk | undefined;
-      const stream = (await modelWithTools.stream(
-        state.messages,
-        context.signal ? { signal: context.signal } : undefined,
-      )) as AsyncIterable<BaseMessageChunk>;
-      for await (const rawChunk of stream) {
-        if (context.signal?.aborted) {
-          throw new DOMException('The operation was aborted', 'AbortError');
+      const finish = context.streamLifecycle?.begin();
+      try {
+        let aggregate: AIMessageChunk | undefined;
+        const stream = (await modelWithTools.stream(
+          state.messages,
+          context.signal ? { signal: context.signal } : undefined,
+        )) as AsyncIterable<BaseMessageChunk>;
+        for await (const rawChunk of stream) {
+          if (context.signal?.aborted) {
+            throw new DOMException('The operation was aborted', 'AbortError');
+          }
+          const aiChunk = AIMessageChunk.isInstance(rawChunk)
+            ? rawChunk
+            : new AIMessageChunk({
+                content: rawChunk.content,
+                additional_kwargs: rawChunk.additional_kwargs,
+                response_metadata: rawChunk.response_metadata,
+              });
+          aggregate = aggregate ? aggregate.concat(aiChunk) : aiChunk;
+          const content = visibleMessageContent(aiChunk.content);
+          if (content) await emitEvent(runtime, { type: 'delta', content });
         }
-        const aiChunk = AIMessageChunk.isInstance(rawChunk)
-          ? rawChunk
-          : new AIMessageChunk({
-              content: rawChunk.content,
-              additional_kwargs: rawChunk.additional_kwargs,
-              response_metadata: rawChunk.response_metadata,
-            });
-        aggregate = aggregate ? aggregate.concat(aiChunk) : aiChunk;
+        if (!aggregate) {
+          throw new Error('上游大模型未返回内容');
+        }
+        const response = toAiMessage(aggregate);
+        const usage = normalizeUsage(response);
+        return { messages: [response], usage };
+      } finally {
+        finish?.();
       }
-      if (!aggregate) {
-        throw new Error('上游大模型未返回内容');
-      }
-      const response = toAiMessage(aggregate);
-      const usage = normalizeUsage(response);
-      return usage ? { messages: [response], usage } : { messages: [response] };
     }
 
     // 非流式路径保持 invoke，兼容不实现 _streamResponseChunks 的模型。
     const response = await modelWithTools.invoke(state.messages);
     const usage = normalizeUsage(response);
-    return usage ? { messages: [response], usage } : { messages: [response] };
+    return { messages: [response], usage };
   };
 
   const persistModelEvent = async (
@@ -287,7 +309,15 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
     const response = state.messages.at(-1);
     if (!response || response.type !== 'ai') return {};
     const calls = toolCalls(response);
+    if (
+      (Array.isArray(asRecord(response).invalid_tool_calls) &&
+        (asRecord(response).invalid_tool_calls as unknown[]).length > 0) ||
+      calls.some((call) => !call.id || !call.name)
+    ) {
+      throw new Error('上游工具调用参数无效');
+    }
     let sequence = nextSequence(state);
+    const modelSequence = sequence;
     const events: LlmTraceEvent[] = [
       {
         sequence,
@@ -312,7 +342,21 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
       sequence += 1;
     }
     await writeTraceEvents(runtime, events);
-    return { traceSequence: sequence };
+    for (const call of calls) {
+      await emitEvent(runtime, {
+        type: 'tool-call',
+        id: call.id!,
+        toolName: call.name!,
+        input: call.args ?? {},
+      });
+    }
+    return {
+      traceSequence: sequence,
+      finalTraceSequence:
+        context?.writer && context.conversationId && context.runId
+          ? modelSequence
+          : null,
+    };
   };
 
   const persistToolEvent = async (
@@ -340,6 +384,19 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
       return event;
     });
     await writeTraceEvents(runtime, events);
+    for (const event of events) {
+      if (event.type !== 'tool_result') continue;
+      await emitEvent(runtime, {
+        type: 'tool-result',
+        id: event.toolCallId,
+        toolName: event.toolName ?? '',
+        status: event.status === 'failed' ? 'error' : 'success',
+        output: event.content,
+      });
+    }
+    if (messages.some((message) => message.status === 'error')) {
+      throw new Error('工具执行失败');
+    }
     return { traceSequence: sequence };
   };
 

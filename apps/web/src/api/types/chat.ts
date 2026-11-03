@@ -1,12 +1,44 @@
 export type MessageRole = 'assistant' | 'user';
 
+export type JsonValue =
+  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+export type ChatActivity =
+  | {
+      type: 'tool';
+      id: string;
+      toolName: string;
+      status: 'running' | 'success' | 'error' | 'interrupted';
+      input: JsonValue;
+      output: string | null;
+    }
+  | { type: 'reasoning'; id: string; summary: string };
+
+export type ChatSource = { id: string; title: string; url: string };
+
+export type ChatContextUsage = {
+  contextWindowTokens: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  usedTokens: number | null;
+};
+
+export type ChatTurnStatus =
+  'submitted' | 'streaming' | 'saved' | 'failed' | 'interrupted' | 'uncertain';
+
 export interface ChatMessage {
   id: string;
+  /** 保存后沿用临时消息的 DOM，避免服务器 ID 替换触发滚动跳转。 */
+  renderKey?: string;
   role: MessageRole;
   content: string;
   createdAt: string;
   /** AI 回复生成耗时，仅前端当前会话展示。 */
   duration?: string;
+  activities: ChatActivity[];
+  sources: ChatSource[];
+  context: ChatContextUsage | null;
+  status: ChatTurnStatus;
 }
 
 export interface Conversation {
@@ -26,6 +58,9 @@ export interface ChatApiMessage {
   outputTokens: number | null;
   totalTokens: number | null;
   createdAt: string;
+  activities?: ChatActivity[];
+  sources?: ChatSource[];
+  context?: ChatContextUsage | null;
 }
 
 export interface ChatApiConversation {
@@ -49,7 +84,7 @@ export interface ChatConversationDetail extends ChatApiConversation {
 }
 
 export interface ChatRequestMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'user' | 'assistant';
   content: string;
 }
 
@@ -63,6 +98,7 @@ export type ChatStreamEvent =
       type: 'start';
       conversationId: string;
       title: string;
+      contextWindowTokens?: number;
     }
   | {
       type: 'delta';
@@ -78,7 +114,10 @@ export type ChatStreamEvent =
         outputTokens: number | null;
         totalTokens: number | null;
       } | null;
+      context?: ChatContextUsage | null;
     }
+  | { type: 'activity'; activity: ChatActivity }
+  | { type: 'sources'; sources: ChatSource[] }
   | {
       type: 'error';
       message: string;

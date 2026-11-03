@@ -183,3 +183,85 @@ test('不可序列化的循环 payload 被拒绝', async () => {
   );
   assert.equal(rows.length, 0);
 });
+
+test('模型事件后加公开展示绑定仍可幂等重放，保留绑定且原始字段差异仍冲突', async () => {
+  const { writer, rows } = createWriter();
+  const event = {
+    sequence: 1,
+    type: 'model_response' as const,
+    messageId: 'langchain-message',
+    content: '完成',
+    model: 'model',
+    usage: null,
+    payload: { toolCalls: [] },
+  };
+  await writer.writeEvents(context, [event]);
+  const publicDisplay = { version: 1, assistantMessageId: 'display-message' };
+  rows[0]!.payload = { ...event.payload, publicDisplay };
+  await writer.writeEvents(context, [event]);
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0]!.payload, { ...event.payload, publicDisplay });
+  assert.equal(rows[0]!.messageId, 'langchain-message');
+  await assert.rejects(
+    writer.writeEvents(context, [
+      { ...event, payload: { toolCalls: [], extra: true } },
+    ]),
+    /幂等冲突/u,
+  );
+});
+
+test('原始空 payload 与仅含公开展示的模型 payload 重放保持幂等', async () => {
+  const { writer, rows } = createWriter();
+  const event = {
+    sequence: 1,
+    type: 'model_response' as const,
+    messageId: 'langchain-message',
+    content: '完成',
+    model: 'model',
+    usage: null,
+  };
+  await writer.writeEvents(context, [event]);
+  rows[0]!.payload = { publicDisplay: { version: 1 } };
+  await writer.writeEvents(context, [event]);
+  assert.deepEqual(rows[0]!.payload, { publicDisplay: { version: 1 } });
+});
+
+test('运行时模型事件禁止占用公开展示保留字段', async () => {
+  const { writer, rows } = createWriter();
+  await assert.rejects(
+    writer.writeEvents(context, [
+      {
+        sequence: 1,
+        type: 'model_response',
+        messageId: 'langchain-message',
+        content: '完成',
+        model: 'model',
+        usage: null,
+        payload: { publicDisplay: { private: 'sensitive' } },
+      },
+    ]),
+    /安全保存要求/u,
+  );
+  assert.equal(rows.length, 0);
+});
+
+test('空对象模型 payload 绑定公开展示后可重复重放，不能混入其他原始字段', async () => {
+  const { writer, rows } = createWriter();
+  const event = {
+    sequence: 1,
+    type: 'model_response' as const,
+    messageId: 'langchain-message',
+    content: '完成',
+    model: 'model',
+    usage: null,
+    payload: {},
+  };
+  await writer.writeEvents(context, [event]);
+  rows[0]!.payload = { publicDisplay: { version: 1 } };
+  await writer.writeEvents(context, [event]);
+  assert.deepEqual(rows[0]!.payload, { publicDisplay: { version: 1 } });
+  await assert.rejects(
+    writer.writeEvents(context, [{ ...event, payload: { extra: true } }]),
+    /幂等冲突/u,
+  );
+});

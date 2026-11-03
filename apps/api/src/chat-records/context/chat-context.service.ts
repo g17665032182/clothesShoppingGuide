@@ -256,11 +256,11 @@ export class ChatContextService {
     }
   }
 
-  private getContextWindow(): number {
+  public getContextWindow(): number {
     const value = Number(
       this.configService.get<string>('LLM_CONTEXT_WINDOW_TOKENS'),
     );
-    if (!Number.isInteger(value) || value <= 0) {
+    if (!Number.isSafeInteger(value) || value <= 0) {
       throw new ServiceUnavailableException(
         'LLM_CONTEXT_WINDOW_TOKENS 配置无效',
       );

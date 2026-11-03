@@ -64,3 +64,36 @@ test('旧聊天消息映射为普通 LangChain 消息', () => {
   assert.equal(messages[1]?.message instanceof AIMessage, true);
   assert.equal(messages[0]?.message.id, 'user-1');
 });
+
+test('公开展示元数据不进入下一轮模型历史且不替换 LangChain 消息 ID', () => {
+  const base = {
+    eventType: 'model_response' as const,
+    sequence: 2,
+    messageId: 'langchain-message',
+    content: '已找到服装',
+    payload: {
+      toolCalls: [{ id: 'call-1', name: 'lookup', args: { query: 'coat' } }],
+    },
+  };
+  const withoutDisplay = mapTraceEventsToMessages([base]);
+  const withDisplay = mapTraceEventsToMessages([
+    {
+      ...base,
+      payload: {
+        ...base.payload,
+        publicDisplay: {
+          assistantMessageId: 'public-message-uuid',
+          activities: [{ type: 'reasoning', summary: 'display-only-summary' }],
+          sources: [{ url: 'https://example.com/display-only-source' }],
+          context: { usedTokens: 999 },
+        },
+      },
+    },
+  ]);
+  assert.deepEqual(withDisplay, withoutDisplay);
+  assert.equal(withDisplay[0]?.message.id, 'langchain-message');
+  assert.equal(
+    JSON.stringify(withDisplay).includes('display-only-summary'),
+    false,
+  );
+});

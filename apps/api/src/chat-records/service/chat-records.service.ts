@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
@@ -26,6 +27,12 @@ import type { PaginationDto } from '../dto/pagination.dto.js';
 import { UserMemoryReaderService } from '../../user-memory/service/user-memory-reader.service.js';
 import { UserMemoryTaskService } from '../../user-memory/service/user-memory-task.service.js';
 import { UserMemoryLifecycleService } from '../../user-memory/service/user-memory-lifecycle.service.js';
+import { ChatDisplayService } from '../display/chat-display.service.js';
+import type {
+  ChatDisplayData,
+  ChatDisplayEvent,
+} from '../display/chat-display.types.js';
+import type { LlmEventStreamResult } from '../../llm/stream/llm-stream.types.js';
 
 export type Page<T> = {
   items: T[];
@@ -43,7 +50,7 @@ export type ConversationResponse = {
   updatedAt: string;
 };
 
-export type MessageResponse = {
+export type MessageResponse = ChatDisplayData & {
   id: string;
   conversationId: string;
   role: ChatRecordMessageRole;
@@ -65,10 +72,12 @@ export type PersistedChatOutput = ChatOutput & {
 };
 
 export type ChatStreamEvent =
+  | ChatDisplayEvent
   | {
       type: 'start';
       conversationId: string;
       title: string;
+      contextWindowTokens: number;
     }
   | {
       type: 'delta';
@@ -80,6 +89,7 @@ export type ChatStreamEvent =
       title: string;
       model: string;
       usage: ChatOutput['usage'];
+      context: ChatDisplayData['context'];
     };
 
 type PreparedChat = {
@@ -92,6 +102,7 @@ type PreparedChat = {
   nextContextSummary: string | null | undefined;
   nextSummaryThroughMessageId: string | null | undefined;
   memoryContext: string;
+  contextWindowTokens: number;
 };
 
 @Injectable()
@@ -110,6 +121,7 @@ export class ChatRecordsService {
     private readonly memoryReader: UserMemoryReaderService,
     private readonly memoryTasks: UserMemoryTaskService,
     private readonly memoryLifecycle: UserMemoryLifecycleService,
+    private readonly displayService: ChatDisplayService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -149,37 +161,53 @@ export class ChatRecordsService {
     await this.ensureConversationPersisted(prepared);
     let persistedMessages = false;
     try {
+      const display = this.displayService.create(prepared.contextWindowTokens);
       yield {
         type: 'start',
         conversationId: prepared.persistedConversation.id,
         title: prepared.persistedConversation.title,
+        contextWindowTokens: prepared.contextWindowTokens,
       };
       if (signal?.aborted) {
         throw new DOMException('The operation was aborted', 'AbortError');
       }
 
-      const resultIterator = this.llmService.streamPrepared(
+      const resultIterator = this.llmService.streamEventsPrepared(
         { messages: prepared.plan.messages },
         signal,
         this.traceContext(prepared, signal),
       );
-      let result: ChatOutput | undefined;
-      while (true) {
-        const next = await resultIterator.next();
-        if (next.done) {
-          result = next.value;
-          break;
+      let result: LlmEventStreamResult | undefined;
+      try {
+        while (true) {
+          const next = await resultIterator.next();
+          if (next.done) {
+            result = next.value;
+            break;
+          }
+          if (next.value.type === 'delta') {
+            yield next.value;
+          } else {
+            const event = this.displayService.apply(display, next.value);
+            if (event) yield event;
+          }
         }
-        if (next.value) {
-          yield { type: 'delta', content: next.value };
-        }
+      } finally {
+        await resultIterator.return(undefined as never);
       }
 
       if (!result || signal?.aborted) {
         throw new DOMException('The operation was aborted', 'AbortError');
       }
 
-      await this.persistChat(prepared, result);
+      if (result.finalTraceSequence === null) {
+        throw new ServiceUnavailableException('最终模型记录缺失，无法保存回复');
+      }
+      this.displayService.complete(display, result.usage);
+      await this.persistChat(prepared, result, {
+        data: display,
+        sequence: result.finalTraceSequence,
+      });
       persistedMessages = true;
       yield {
         type: 'done',
@@ -187,6 +215,7 @@ export class ChatRecordsService {
         title: prepared.persistedConversation.title,
         model: result.model,
         usage: result.usage,
+        context: display.context,
       };
     } finally {
       if (
@@ -365,6 +394,7 @@ export class ChatRecordsService {
       nextContextSummary,
       nextSummaryThroughMessageId,
       memoryContext,
+      contextWindowTokens: this.contextService.getContextWindow(),
     };
   }
 
@@ -398,6 +428,7 @@ export class ChatRecordsService {
   private async persistChat(
     prepared: PreparedChat,
     result: ChatOutput,
+    display?: { data: ChatDisplayData; sequence: number },
   ): Promise<void> {
     const persistedConversation = prepared.persistedConversation;
     persistedConversation.updatedAt = new Date();
@@ -428,6 +459,15 @@ export class ChatRecordsService {
       await transactionalEntityManager.flush();
       transactionalEntityManager.persist([userMessage, assistantMessage]);
       await transactionalEntityManager.flush();
+      if (display) {
+        await this.displayService.bind(transactionalEntityManager, {
+          conversationId: persistedConversation.id,
+          runId: prepared.runId,
+          sequence: display.sequence,
+          assistantMessageId: assistantMessage.id,
+          data: display.data,
+        });
+      }
       await this.memoryTasks.enqueueInTransaction(transactionalEntityManager, {
         userId: persistedConversation.userId,
         conversationId: persistedConversation.id,
@@ -471,10 +511,19 @@ export class ChatRecordsService {
         offset: pagination.offset,
       },
     );
+    const displays = await this.displayService.read(
+      conversation.id,
+      messages
+        .filter((message) => message.role === ChatRecordMessageRole.ASSISTANT)
+        .map((message) => message.id),
+    );
     return {
       ...this.toConversationResponse(conversation),
       messages: {
-        items: messages.map((item) => this.toMessageResponse(item)),
+        items: messages.map((item) => ({
+          ...this.toMessageResponse(item),
+          ...(displays.get(item.id) ?? {}),
+        })),
         total,
         page: pagination.normalizedPage,
         pageSize: pagination.normalizedPageSize,
@@ -517,6 +566,9 @@ export class ChatRecordsService {
       outputTokens: message.outputTokens,
       totalTokens: message.totalTokens,
       createdAt: message.createdAt.toISOString(),
+      activities: [],
+      sources: [],
+      context: null,
     };
   }
 }

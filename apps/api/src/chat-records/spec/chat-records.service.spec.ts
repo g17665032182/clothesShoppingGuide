@@ -1,17 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { ChatOutput, LlmService } from '../../llm/service/llm.service.js';
+import type { LlmService } from '../../llm/service/llm.service.js';
+import type {
+  LlmEventStreamResult,
+  LlmStreamEvent,
+} from '../../llm/stream/llm-stream.types.js';
+import { ChatDisplayService } from '../display/chat-display.service.js';
 import { ChatRecordsService } from '../service/chat-records.service.js';
 import { ChatContextService } from '../context/chat-context.service.js';
 import { ChatConversation } from '../entity/chat-conversation.entity.js';
 import { ChatMessage } from '../entity/chat-message.entity.js';
 import { PaginationDto } from '../dto/pagination.dto.js';
 
-function createService(options: { failFlush?: boolean } = {}) {
+function createService(
+  options: {
+    failFlush?: boolean;
+    failBind?: boolean;
+    missingTrace?: boolean;
+    tools?: boolean;
+  } = {},
+) {
   const persisted: unknown[] = [];
   const removed: unknown[] = [];
   const modelInputs: unknown[] = [];
+  const bindings: unknown[] = [];
   let flushCount = 0;
   const manager = {
     persist(value: unknown) {
@@ -48,17 +61,37 @@ function createService(options: { failFlush?: boolean } = {}) {
       modelInputs.push(input);
       return { content: '回复', model: 'fake-model', usage: null };
     },
-    async *streamPrepared(): AsyncGenerator<string, ChatOutput> {
-      yield '第一段';
-      yield '第二段';
+    async *streamEventsPrepared(): AsyncGenerator<
+      LlmStreamEvent,
+      LlmEventStreamResult
+    > {
+      yield { type: 'delta', content: '第一段' };
+      if (options.tools) {
+        yield {
+          type: 'tool-call',
+          id: 'call-1',
+          toolName: 'local_echo_tool',
+          input: { secret: 'private' },
+        };
+        yield {
+          type: 'tool-result',
+          id: 'call-1',
+          toolName: 'local_echo_tool',
+          status: 'success',
+          output: 'private',
+        };
+      }
+      yield { type: 'delta', content: '第二段' };
       return {
         content: '第一段第二段',
         model: 'fake-model',
         usage: null,
+        finalTraceSequence: options.missingTrace ? null : 4,
       };
     },
   };
   const contextService = {
+    getContextWindow: () => 8192,
     truncateToTokens: (content: string) => content,
     prepare: () => ({
       messages: [
@@ -76,6 +109,12 @@ function createService(options: { failFlush?: boolean } = {}) {
   const memoryReader = { readContext: async () => '' };
   const memoryTasks = { enqueueInTransaction: async () => undefined };
   const memoryLifecycle = { markConversationDeleted: async () => undefined };
+  const displayService = new ChatDisplayService({} as never);
+  displayService.bind = async (transaction, input) => {
+    assert.equal(transaction, manager);
+    if (options.failBind) throw new Error('display binding failed');
+    bindings.push(input);
+  };
   const service = new ChatRecordsService(
     conversationRepository as never,
     messageRepository as never,
@@ -87,9 +126,10 @@ function createService(options: { failFlush?: boolean } = {}) {
     memoryReader as never,
     memoryTasks as never,
     memoryLifecycle as never,
+    displayService,
   );
 
-  return { service, persisted, removed, modelInputs };
+  return { service, persisted, removed, modelInputs, bindings };
 }
 
 test('持久化聊天仅将系统上下文传给模型，不写入消息或响应', async () => {
@@ -219,4 +259,56 @@ test('流式聊天事务失败时不会发送 done', async () => {
     /database failure/u,
   );
   assert.deepEqual(received, ['start', 'delta', 'delta']);
+});
+
+test('工具展示按稳定 ID 更新，最终模型事件绑定与正文保存共用事务', async () => {
+  const { service, bindings } = createService({ tools: true });
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '你好' }],
+    } as never,
+  );
+  const received = [];
+  for await (const event of events) {
+    received.push(event);
+    if (event.type === 'done') assert.equal(bindings.length, 1);
+  }
+  assert.deepEqual(
+    received.map((event) => event.type),
+    ['start', 'delta', 'activity', 'activity', 'delta', 'done'],
+  );
+  assert.equal(JSON.stringify(received).includes('private'), false);
+  assert.equal((bindings[0] as { sequence: number }).sequence, 4);
+  const done = received.at(-1);
+  assert.equal(
+    done?.type === 'done' && done.context?.contextWindowTokens,
+    8192,
+  );
+  assert.equal(done?.type === 'done' && done.context?.usedTokens, null);
+});
+
+test('展示绑定失败或最终 trace 缺失时拒绝完成，不发 done', async () => {
+  for (const options of [{ failBind: true }, { missingTrace: true }]) {
+    const { service } = createService(options);
+    const events = await service.prepareStream(
+      { id: 'user-1' } as never,
+      {
+        messages: [{ role: 'user', content: '你好' }],
+      } as never,
+    );
+    const received: string[] = [];
+    await assert.rejects(async () => {
+      for await (const event of events) received.push(event.type);
+    });
+    assert.equal(received.includes('done'), false);
+  }
+});
+
+test('归属校验失败时不查询消息或公开展示元数据', async () => {
+  const { service } = createService();
+  await assert.rejects(
+    service.getForUser('other-user', 'missing-id', new PaginationDto()),
+    { status: 404 },
+  );
 });

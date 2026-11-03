@@ -13,6 +13,7 @@ export const LlmState = new StateSchema({
   messages: MessagesValue,
   usage: LlmUsageSchema.optional(),
   traceSequence: z.number().default(0),
+  finalTraceSequence: z.number().nullable().optional(),
 });
 
 export type LlmStateValue = typeof LlmState.State;

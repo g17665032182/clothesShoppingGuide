@@ -1,9 +1,13 @@
 import { ApiError, apiRequest, apiStreamRequest } from '@/api';
 import type {
   ChatApiConversation,
+  ChatActivity,
+  ChatContextUsage,
   ChatConversationDetail,
   ChatRequest,
   ChatStreamEvent,
+  ChatSource,
+  JsonValue,
   PageResponse,
 } from '@/api/types/chat';
 
@@ -13,21 +17,37 @@ const messagePageSize = 100;
 export function listConversations(
   token: string,
   page = 1,
+  signal?: AbortSignal,
 ): Promise<PageResponse<ChatApiConversation>> {
   return apiRequest<PageResponse<ChatApiConversation>>(
     `/chat/conversations?page=${page}&pageSize=${conversationPageSize}`,
-    { token },
+    { token, signal },
   );
 }
 
-export function getConversation(
+export async function getConversation(
   token: string,
   conversationId: string,
+  page = 1,
+  signal?: AbortSignal,
 ): Promise<ChatConversationDetail> {
-  return apiRequest<ChatConversationDetail>(
-    `/chat/conversations/${conversationId}?page=1&pageSize=${messagePageSize}`,
-    { token },
+  const detail = await apiRequest<ChatConversationDetail>(
+    `/chat/conversations/${conversationId}?page=${page}&pageSize=${messagePageSize}`,
+    { token, signal },
   );
+  // 旧记录或无效展示元数据不能影响正文读取，也不能以断言绕过边界校验。
+  return {
+    ...detail,
+    messages: {
+      ...detail.messages,
+      items: detail.messages.items.map((message) => ({
+        ...message,
+        activities: isActivities(message.activities) ? message.activities : [],
+        sources: isSources(message.sources) ? message.sources : [],
+        context: isContext(message.context) ? message.context : null,
+      })),
+    },
+  };
 }
 
 export function deleteConversation(
@@ -40,7 +60,7 @@ export function deleteConversation(
   });
 }
 
-function parseEventFrame(frame: string): ChatStreamEvent | null {
+export function parseEventFrame(frame: string): ChatStreamEvent | null {
   let eventName = '';
   const dataLines: string[] = [];
   for (const line of frame.split(/\r?\n/u)) {
@@ -53,7 +73,12 @@ function parseEventFrame(frame: string): ChatStreamEvent | null {
     if (field === 'data') dataLines.push(value);
   }
   if (!eventName || dataLines.length === 0) return null;
-  if (!['start', 'delta', 'done', 'error'].includes(eventName)) return null;
+  if (
+    !['start', 'delta', 'activity', 'sources', 'done', 'error'].includes(
+      eventName,
+    )
+  )
+    return null;
 
   let data: unknown;
   try {
@@ -66,11 +91,26 @@ function parseEventFrame(frame: string): ChatStreamEvent | null {
     if (!hasString(data, 'conversationId') || !hasString(data, 'title')) {
       throw new ApiError('聊天流 start 事件格式无效', 0);
     }
+    if (
+      data.contextWindowTokens !== undefined &&
+      !isPositiveInteger(data.contextWindowTokens)
+    ) {
+      throw new ApiError('聊天流窗口数据无效', 0);
+    }
     return {
       type: 'start',
       conversationId: data.conversationId,
       title: data.title,
+      ...(data.contextWindowTokens === undefined
+        ? {}
+        : { contextWindowTokens: data.contextWindowTokens as number }),
     };
+  }
+  if (eventName === 'activity' && isRecord(data) && isActivity(data.activity)) {
+    return { type: 'activity', activity: data.activity };
+  }
+  if (eventName === 'sources' && isRecord(data) && isSources(data.sources)) {
+    return { type: 'sources', sources: data.sources };
   }
   if (eventName === 'delta' && isRecord(data)) {
     if (!hasString(data, 'content')) {
@@ -87,6 +127,13 @@ function parseEventFrame(frame: string): ChatStreamEvent | null {
     ) {
       throw new ApiError('聊天流 done 事件格式无效', 0);
     }
+    if (
+      data.context !== undefined &&
+      data.context !== null &&
+      !isContext(data.context)
+    ) {
+      throw new ApiError('聊天流上下文用量无效', 0);
+    }
     return {
       type: 'done',
       conversationId: data.conversationId,
@@ -96,10 +143,11 @@ function parseEventFrame(frame: string): ChatStreamEvent | null {
         data.usage === null
           ? null
           : {
-              inputTokens: asNullableNumber(data.usage.inputTokens),
-              outputTokens: asNullableNumber(data.usage.outputTokens),
-              totalTokens: asNullableNumber(data.usage.totalTokens),
+              inputTokens: data.usage.inputTokens,
+              outputTokens: data.usage.outputTokens,
+              totalTokens: data.usage.totalTokens,
             },
+      context: isContext(data.context) ? data.context : null,
     };
   }
   if (eventName === 'error' && isRecord(data)) {
@@ -108,7 +156,7 @@ function parseEventFrame(frame: string): ChatStreamEvent | null {
     }
     return { type: 'error', message: data.message };
   }
-  return null;
+  throw new ApiError(`聊天流 ${eventName} 事件格式无效`, 0);
 }
 
 export async function* streamChat(
@@ -125,6 +173,7 @@ export async function* streamChat(
     headers: { Accept: 'text/event-stream' },
   });
   if (!response.contentType.toLowerCase().includes('text/event-stream')) {
+    await response.stream.cancel().catch(() => undefined);
     throw new ApiError('聊天接口未返回流式响应', 0);
   }
 
@@ -141,8 +190,9 @@ export async function* streamChat(
       for (const frame of frames) {
         const event = parseEventFrame(frame);
         if (!event) continue;
-        if (event.type === 'done') completed = true;
+        if (event.type === 'done' || event.type === 'error') completed = true;
         yield event;
+        if (completed) return;
       }
       if (done) break;
     }
@@ -151,11 +201,12 @@ export async function* streamChat(
     if (buffer.trim()) {
       const event = parseEventFrame(buffer);
       if (event) {
-        if (event.type === 'done') completed = true;
+        if (event.type === 'done' || event.type === 'error') completed = true;
         yield event;
       }
     }
   } finally {
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 
@@ -183,12 +234,100 @@ function isUsage(value: unknown): value is null | {
   if (value === null) return true;
   if (!isRecord(value)) return false;
   return ['inputTokens', 'outputTokens', 'totalTokens'].every(
-    (key) =>
-      value[key] === null ||
-      (typeof value[key] === 'number' && Number.isFinite(value[key])),
+    (key) => value[key] === null || isTokenNumber(value[key]),
   );
 }
 
-function asNullableNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+function isTokenNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return isTokenNumber(value) && value > 0;
+}
+
+function isContext(value: unknown): value is ChatContextUsage {
+  if (!isRecord(value) || !isPositiveInteger(value.contextWindowTokens))
+    return false;
+  if (
+    !['inputTokens', 'outputTokens', 'usedTokens'].every(
+      (key) => value[key] === null || isTokenNumber(value[key]),
+    )
+  )
+    return false;
+  return value.inputTokens !== null && value.outputTokens !== null
+    ? value.usedTokens ===
+        Number(value.inputTokens) + Number(value.outputTokens)
+    : value.usedTokens === null;
+}
+
+function isJson(value: unknown, depth = 0): value is JsonValue {
+  if (depth > 20) return false;
+  if (value === null || typeof value === 'string' || typeof value === 'boolean')
+    return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value))
+    return value.every((item) => isJson(item, depth + 1));
+  return (
+    isRecord(value) &&
+    Object.values(value).every((item) => isJson(item, depth + 1))
+  );
+}
+
+function isActivity(value: unknown): value is ChatActivity {
+  if (!isRecord(value) || !hasString(value, 'id') || !value.id) return false;
+  if (value.type === 'reasoning')
+    return hasString(value, 'summary') && Boolean(value.summary.trim());
+  return (
+    value.type === 'tool' &&
+    hasString(value, 'toolName') &&
+    Boolean(value.toolName.trim()) &&
+    ['running', 'success', 'error', 'interrupted'].includes(
+      String(value.status),
+    ) &&
+    isJson(value.input) &&
+    (value.output === null || typeof value.output === 'string')
+  );
+}
+
+function isActivities(value: unknown): value is ChatActivity[] {
+  return (
+    Array.isArray(value) &&
+    value.every(isActivity) &&
+    new Set(value.map((item) => item.id)).size === value.length
+  );
+}
+
+function isSources(value: unknown): value is ChatSource[] {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  const urls = new Set<string>();
+  return value.every((item) => {
+    if (
+      !isRecord(item) ||
+      !hasString(item, 'id') ||
+      !item.id ||
+      !hasString(item, 'title') ||
+      !item.title.trim() ||
+      !hasString(item, 'url')
+    )
+      return false;
+    try {
+      const url = new URL(item.url);
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        !url.hostname ||
+        ids.has(item.id) ||
+        urls.has(url.href)
+      )
+        return false;
+      ids.add(item.id);
+      urls.add(url.href);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
