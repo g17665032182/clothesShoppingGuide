@@ -23,12 +23,13 @@ const shortText = (max: number) =>
     .max(max)
     .refine((value) => !/[\u0000-\u001f]/u.test(value));
 
+// 预设代码与自定义短文本共用结构，保留旧记录及模型候选的兼容性。
 const sizeValueSchema = z.strictObject({
   category: z.literal('size'),
   value: z.strictObject({
-    garment: z.enum(['top', 'bottom', 'dress', 'outerwear', 'unknown']),
+    garment: shortText(32),
     label: shortText(32),
-    system: z.enum(['CN', 'US', 'EU', 'UK', 'INT', 'OTHER']).optional(),
+    system: shortText(32).optional(),
   }),
 });
 
@@ -36,15 +37,15 @@ const shoeSizeValueSchema = z.strictObject({
   category: z.literal('shoe_size'),
   value: z.strictObject({
     value: z.number().min(20).max(60),
-    system: z.enum(['CN', 'US', 'EU', 'UK']),
-    width: z.enum(['narrow', 'regular', 'wide']).optional(),
+    system: shortText(32),
+    width: shortText(32).optional(),
   }),
 });
 
 const fitValueSchema = z.strictObject({
   category: z.literal('fit'),
   value: z.strictObject({
-    preference: z.enum(['loose', 'regular', 'slim']),
+    preference: shortText(32),
     notes: z.string().trim().max(80).optional(),
   }),
 });
@@ -52,22 +53,7 @@ const fitValueSchema = z.strictObject({
 const styleValueSchema = z.strictObject({
   category: z.literal('style'),
   value: z.strictObject({
-    items: z
-      .array(
-        z.enum([
-          'minimal',
-          'commute',
-          'street',
-          'casual',
-          'formal',
-          'sporty',
-          'vintage',
-          'outdoor',
-          'other',
-        ]),
-      )
-      .min(1)
-      .max(5),
+    items: z.array(shortText(32)).min(1).max(5),
   }),
 });
 
@@ -82,22 +68,7 @@ const colorValueSchema = z.strictObject({
 const occasionValueSchema = z.strictObject({
   category: z.literal('occasion'),
   value: z.strictObject({
-    items: z
-      .array(
-        z.enum([
-          'commute',
-          'casual',
-          'formal',
-          'outdoor',
-          'travel',
-          'sport',
-          'home',
-          'party',
-          'other',
-        ]),
-      )
-      .min(1)
-      .max(5),
+    items: z.array(shortText(32)).min(1).max(5),
   }),
 });
 
@@ -126,21 +97,7 @@ const avoidanceValueSchema = z.strictObject({
 const purchasePreferenceValueSchema = z.strictObject({
   category: z.literal('purchase_preference'),
   value: z.strictObject({
-    items: z
-      .array(
-        z.enum([
-          'quality',
-          'price',
-          'easy_care',
-          'sustainable',
-          'online',
-          'offline',
-          'durable',
-          'other',
-        ]),
-      )
-      .min(1)
-      .max(6),
+    items: z.array(shortText(32)).min(1).max(6),
   }),
 });
 

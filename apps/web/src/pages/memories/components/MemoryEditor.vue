@@ -1,9 +1,21 @@
 <script setup lang="ts">
+import { computed, useId } from 'vue';
 import { Save, X } from '@lucide/vue';
-
 import type { MemoryEditorState } from '../page';
+import {
+  fitPresets,
+  garmentPresets,
+  itemLimit,
+  itemPresets,
+  systemPresets,
+  textPresets,
+  widthPresets,
+} from '../preference-options';
+import PresetTextInput from './PresetTextInput.vue';
+import PreferenceItemsInput from './PreferenceItemsInput.vue';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
   NativeSelect,
   NativeSelectOption,
@@ -15,12 +27,55 @@ const props = defineProps<{
   pending: boolean;
   error: string;
 }>();
-
 const emit = defineEmits<{
   'update:modelValue': [value: MemoryEditorState];
   submit: [];
   cancel: [];
 }>();
+const id = useId();
+const presets = computed(() => itemPresets[props.modelValue.category] ?? []);
+const itemsLabel = computed(() => {
+  switch (props.modelValue.category) {
+    case 'style':
+      return '风格';
+    case 'occasion':
+      return '穿着场景';
+    case 'color':
+      return '颜色';
+    case 'avoidance':
+      return '避开内容';
+    default:
+      return '购买偏好';
+  }
+});
+const sizePresets = textPresets(['XS', 'S', 'M', 'L', 'XL', 'XXL', '均码']);
+const shoePresets = textPresets([
+  '35',
+  '36',
+  '37',
+  '38',
+  '39',
+  '40',
+  '41',
+  '42',
+  '43',
+  '44',
+]);
+const budgetPresets = textPresets([
+  '0',
+  '100',
+  '300',
+  '500',
+  '1000',
+  '2000',
+  '5000',
+]);
+const notePresets = textPresets([
+  '方便活动',
+  '适合叠穿',
+  '优先舒适',
+  '面料亲肤',
+]);
 
 function setField<Key extends keyof MemoryEditorState>(
   field: Key,
@@ -31,314 +86,255 @@ function setField<Key extends keyof MemoryEditorState>(
 </script>
 
 <template>
-  <form class="flex flex-col gap-5" @submit.prevent="emit('submit')">
-    <div class="flex flex-wrap items-start justify-end gap-3">
-      <label class="flex min-h-8 items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          :checked="modelValue.isPrimary"
+  <form class="flex min-w-0 flex-col gap-6" @submit.prevent="emit('submit')">
+    <FieldGroup>
+      <Field>
+        <FieldLabel :for="`${id}-category`">类别</FieldLabel>
+        <NativeSelect
+          :id="`${id}-category`"
+          :model-value="modelValue.category"
           :disabled="pending"
-          @change="
-            setField('isPrimary', ($event.target as HTMLInputElement).checked)
+          @update:model-value="
+            setField(
+              'category',
+              String($event) as MemoryEditorState['category'],
+            )
           "
-        />
-        设为主要偏好
-      </label>
-    </div>
+        >
+          <NativeSelectOption value="size">服装尺码</NativeSelectOption>
+          <NativeSelectOption value="shoe_size">鞋码</NativeSelectOption>
+          <NativeSelectOption value="fit">版型</NativeSelectOption>
+          <NativeSelectOption value="style">风格</NativeSelectOption>
+          <NativeSelectOption value="color">颜色</NativeSelectOption>
+          <NativeSelectOption value="occasion">穿着场景</NativeSelectOption>
+          <NativeSelectOption value="budget">预算</NativeSelectOption>
+          <NativeSelectOption value="avoidance">避开偏好</NativeSelectOption>
+          <NativeSelectOption value="purchase_preference"
+            >购买偏好</NativeSelectOption
+          >
+        </NativeSelect>
+      </Field>
 
-    <label class="grid gap-1.5 text-sm font-medium">
-      类别
-      <NativeSelect
-        :model-value="modelValue.category"
-        :disabled="pending"
-        @update:model-value="
-          setField('category', String($event) as MemoryEditorState['category'])
-        "
+      <FieldGroup
+        v-if="modelValue.category === 'size'"
+        class="grid gap-4 sm:grid-cols-3"
       >
-        <NativeSelectOption value="size">服装尺码</NativeSelectOption>
-        <NativeSelectOption value="shoe_size">鞋码</NativeSelectOption>
-        <NativeSelectOption value="fit">版型</NativeSelectOption>
-        <NativeSelectOption value="style">风格</NativeSelectOption>
-        <NativeSelectOption value="color">颜色</NativeSelectOption>
-        <NativeSelectOption value="occasion">穿着场景</NativeSelectOption>
-        <NativeSelectOption value="budget">预算</NativeSelectOption>
-        <NativeSelectOption value="avoidance">避开偏好</NativeSelectOption>
-        <NativeSelectOption value="purchase_preference"
-          >购买偏好</NativeSelectOption
-        >
-      </NativeSelect>
-    </label>
+        <Field>
+          <FieldLabel :for="`${id}-garment`">服装类型</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-garment`"
+            :model-value="modelValue.garment"
+            :presets="garmentPresets"
+            :disabled="pending"
+            @update:model-value="setField('garment', $event)"
+          />
+        </Field>
+        <Field>
+          <FieldLabel :for="`${id}-size`">尺码</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-size`"
+            :model-value="modelValue.label"
+            :presets="sizePresets"
+            :disabled="pending"
+            placeholder="例如：L 或 165/88A"
+            @update:model-value="setField('label', $event)"
+          />
+        </Field>
+        <Field>
+          <FieldLabel :for="`${id}-system`">尺码体系</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-system`"
+            :model-value="modelValue.sizeSystem"
+            :presets="systemPresets"
+            :disabled="pending"
+            @update:model-value="setField('sizeSystem', $event)"
+          />
+        </Field>
+      </FieldGroup>
 
-    <div
-      v-if="modelValue.category === 'size'"
-      class="grid gap-4 sm:grid-cols-3"
-    >
-      <label class="grid gap-1.5 text-sm font-medium">
-        服装类型
-        <NativeSelect
-          :model-value="modelValue.garment"
-          :disabled="pending"
-          @update:model-value="
-            setField('garment', String($event) as MemoryEditorState['garment'])
-          "
-        >
-          <NativeSelectOption value="top">上装</NativeSelectOption>
-          <NativeSelectOption value="bottom">下装</NativeSelectOption>
-          <NativeSelectOption value="dress">连衣裙</NativeSelectOption>
-          <NativeSelectOption value="outerwear">外套</NativeSelectOption>
-          <NativeSelectOption value="unknown">未指定</NativeSelectOption>
-        </NativeSelect>
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        尺码
-        <Input
-          :model-value="modelValue.label"
-          maxlength="32"
-          placeholder="例如：L"
-          :disabled="pending"
-          @update:model-value="setField('label', String($event))"
-        />
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        尺码体系
-        <NativeSelect
-          :model-value="modelValue.sizeSystem"
-          :disabled="pending"
-          @update:model-value="
-            setField(
-              'sizeSystem',
-              String($event) as MemoryEditorState['sizeSystem'],
-            )
-          "
-        >
-          <NativeSelectOption value="CN">CN</NativeSelectOption>
-          <NativeSelectOption value="US">US</NativeSelectOption>
-          <NativeSelectOption value="EU">EU</NativeSelectOption>
-          <NativeSelectOption value="UK">UK</NativeSelectOption>
-          <NativeSelectOption value="INT">INT</NativeSelectOption>
-          <NativeSelectOption value="OTHER">其他</NativeSelectOption>
-        </NativeSelect>
-      </label>
-    </div>
+      <FieldGroup
+        v-else-if="modelValue.category === 'shoe_size'"
+        class="grid gap-4 sm:grid-cols-3"
+      >
+        <Field>
+          <FieldLabel :for="`${id}-shoe`">鞋码</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-shoe`"
+            type="number"
+            :min="20"
+            :max="60"
+            :step="0.5"
+            :model-value="modelValue.shoeSize"
+            :presets="shoePresets"
+            :disabled="pending"
+            placeholder="例如：38"
+            @update:model-value="setField('shoeSize', $event)"
+          />
+        </Field>
+        <Field>
+          <FieldLabel :for="`${id}-shoe-system`">尺码体系</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-shoe-system`"
+            :model-value="modelValue.shoeSystem"
+            :presets="systemPresets"
+            :disabled="pending"
+            @update:model-value="setField('shoeSystem', $event)"
+          />
+        </Field>
+        <Field>
+          <FieldLabel :for="`${id}-width`">鞋宽</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-width`"
+            :model-value="modelValue.shoeWidth"
+            :presets="widthPresets"
+            :disabled="pending"
+            @update:model-value="setField('shoeWidth', $event)"
+          />
+        </Field>
+      </FieldGroup>
 
-    <div
-      v-else-if="modelValue.category === 'shoe_size'"
-      class="grid gap-4 sm:grid-cols-3"
-    >
-      <label class="grid gap-1.5 text-sm font-medium">
-        鞋码
-        <Input
-          type="number"
-          min="20"
-          max="60"
-          step="0.5"
-          :model-value="modelValue.shoeSize"
-          placeholder="例如：38"
-          :disabled="pending"
-          @update:model-value="setField('shoeSize', String($event))"
-        />
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        尺码体系
-        <NativeSelect
-          :model-value="modelValue.shoeSystem"
-          :disabled="pending"
-          @update:model-value="
-            setField(
-              'shoeSystem',
-              String($event) as MemoryEditorState['shoeSystem'],
-            )
-          "
-        >
-          <NativeSelectOption value="CN">CN</NativeSelectOption>
-          <NativeSelectOption value="US">US</NativeSelectOption>
-          <NativeSelectOption value="EU">EU</NativeSelectOption>
-          <NativeSelectOption value="UK">UK</NativeSelectOption>
-        </NativeSelect>
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        鞋宽
-        <NativeSelect
-          :model-value="modelValue.shoeWidth"
-          :disabled="pending"
-          @update:model-value="
-            setField(
-              'shoeWidth',
-              String($event) as MemoryEditorState['shoeWidth'],
-            )
-          "
-        >
-          <NativeSelectOption value="narrow">偏窄</NativeSelectOption>
-          <NativeSelectOption value="regular">标准</NativeSelectOption>
-          <NativeSelectOption value="wide">偏宽</NativeSelectOption>
-        </NativeSelect>
-      </label>
-    </div>
+      <FieldGroup
+        v-else-if="modelValue.category === 'fit'"
+        class="grid gap-4 sm:grid-cols-2"
+      >
+        <Field>
+          <FieldLabel :for="`${id}-fit`">版型偏好</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-fit`"
+            :model-value="modelValue.fitPreference"
+            :presets="fitPresets"
+            :disabled="pending"
+            @update:model-value="setField('fitPreference', $event)"
+          />
+        </Field>
+        <Field>
+          <FieldLabel :for="`${id}-notes`">补充说明</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-notes`"
+            :model-value="modelValue.fitNotes"
+            :presets="notePresets"
+            :maxlength="80"
+            :disabled="pending"
+            placeholder="可选"
+            @update:model-value="setField('fitNotes', $event)"
+          />
+        </Field>
+      </FieldGroup>
 
-    <div
-      v-else-if="modelValue.category === 'fit'"
-      class="grid gap-4 sm:grid-cols-2"
-    >
-      <label class="grid gap-1.5 text-sm font-medium">
-        版型偏好
-        <NativeSelect
-          :model-value="modelValue.fitPreference"
-          :disabled="pending"
-          @update:model-value="
-            setField(
-              'fitPreference',
-              String($event) as MemoryEditorState['fitPreference'],
-            )
-          "
-        >
-          <NativeSelectOption value="loose">宽松</NativeSelectOption>
-          <NativeSelectOption value="regular">合身</NativeSelectOption>
-          <NativeSelectOption value="slim">修身</NativeSelectOption>
-        </NativeSelect>
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        补充说明
-        <Input
-          :model-value="modelValue.fitNotes"
-          maxlength="80"
-          placeholder="可选"
-          :disabled="pending"
-          @update:model-value="setField('fitNotes', String($event))"
-        />
-      </label>
-    </div>
+      <FieldGroup
+        v-else-if="modelValue.category === 'budget'"
+        class="grid gap-4 sm:grid-cols-3"
+      >
+        <Field>
+          <FieldLabel :for="`${id}-currency`">货币</FieldLabel>
+          <NativeSelect
+            :id="`${id}-currency`"
+            :model-value="modelValue.currency"
+            :disabled="pending"
+            @update:model-value="
+              setField(
+                'currency',
+                String($event) as MemoryEditorState['currency'],
+              )
+            "
+          >
+            <NativeSelectOption value="CNY">人民币</NativeSelectOption>
+            <NativeSelectOption value="USD">美元</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <Field>
+          <FieldLabel :for="`${id}-min`">最低预算</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-min`"
+            type="number"
+            :min="0"
+            :step="1"
+            :model-value="modelValue.budgetMin"
+            :presets="budgetPresets"
+            :disabled="pending"
+            placeholder="不限"
+            @update:model-value="setField('budgetMin', $event)"
+          />
+        </Field>
+        <Field>
+          <FieldLabel :for="`${id}-max`">最高预算</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-max`"
+            type="number"
+            :min="0"
+            :step="1"
+            :model-value="modelValue.budgetMax"
+            :presets="budgetPresets"
+            :disabled="pending"
+            placeholder="不限"
+            @update:model-value="setField('budgetMax', $event)"
+          />
+        </Field>
+      </FieldGroup>
 
-    <div
-      v-else-if="modelValue.category === 'color'"
-      class="grid gap-4 sm:grid-cols-[180px_minmax(0,1fr)]"
-    >
-      <label class="grid gap-1.5 text-sm font-medium">
-        偏好类型
-        <NativeSelect
-          :model-value="modelValue.colorMode"
-          :disabled="pending"
-          @update:model-value="
-            setField(
-              'colorMode',
-              String($event) as MemoryEditorState['colorMode'],
-            )
-          "
-        >
-          <NativeSelectOption value="prefer">喜欢</NativeSelectOption>
-          <NativeSelectOption value="avoid">避免</NativeSelectOption>
-        </NativeSelect>
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        颜色
-        <Input
+      <template v-else>
+        <Field v-if="modelValue.category === 'color'">
+          <FieldLabel :for="`${id}-color-mode`">偏好类型</FieldLabel>
+          <NativeSelect
+            :id="`${id}-color-mode`"
+            :model-value="modelValue.colorMode"
+            :disabled="pending"
+            @update:model-value="
+              setField(
+                'colorMode',
+                String($event) as MemoryEditorState['colorMode'],
+              )
+            "
+          >
+            <NativeSelectOption value="prefer">喜欢</NativeSelectOption>
+            <NativeSelectOption value="avoid">避免</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <PreferenceItemsInput
+          :key="modelValue.category"
           :model-value="modelValue.items"
-          maxlength="260"
-          placeholder="用顿号或逗号分隔"
+          :presets="presets"
+          :label="itemsLabel"
+          :limit="itemLimit(modelValue.category)"
           :disabled="pending"
-          @update:model-value="setField('items', String($event))"
+          @update:model-value="setField('items', $event)"
         />
-      </label>
-    </div>
+        <Field v-if="modelValue.category === 'avoidance'">
+          <FieldLabel :for="`${id}-reason`">原因</FieldLabel>
+          <PresetTextInput
+            :id="`${id}-reason`"
+            :model-value="modelValue.avoidanceReason"
+            :presets="notePresets"
+            :maxlength="80"
+            :disabled="pending"
+            placeholder="可选"
+            @update:model-value="setField('avoidanceReason', $event)"
+          />
+        </Field>
+      </template>
 
-    <div
-      v-else-if="modelValue.category === 'budget'"
-      class="grid gap-4 sm:grid-cols-3"
-    >
-      <label class="grid gap-1.5 text-sm font-medium">
-        货币
-        <NativeSelect
-          :model-value="modelValue.currency"
+      <Field orientation="horizontal">
+        <Checkbox
+          :id="`${id}-primary`"
+          :model-value="modelValue.isPrimary"
           :disabled="pending"
-          @update:model-value="
-            setField(
-              'currency',
-              String($event) as MemoryEditorState['currency'],
-            )
-          "
-        >
-          <NativeSelectOption value="CNY">人民币</NativeSelectOption>
-          <NativeSelectOption value="USD">美元</NativeSelectOption>
-        </NativeSelect>
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        最低预算
-        <Input
-          type="number"
-          min="0"
-          step="1"
-          :model-value="modelValue.budgetMin"
-          placeholder="可留空"
-          :disabled="pending"
-          @update:model-value="setField('budgetMin', String($event))"
+          @update:model-value="setField('isPrimary', $event === true)"
         />
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        最高预算
-        <Input
-          type="number"
-          min="0"
-          step="1"
-          :model-value="modelValue.budgetMax"
-          placeholder="可留空"
-          :disabled="pending"
-          @update:model-value="setField('budgetMax', String($event))"
-        />
-      </label>
-    </div>
-
-    <div v-else-if="modelValue.category === 'avoidance'" class="grid gap-4">
-      <label class="grid gap-1.5 text-sm font-medium">
-        避开内容
-        <Input
-          :model-value="modelValue.items"
-          maxlength="260"
-          placeholder="用顿号或逗号分隔"
-          :disabled="pending"
-          @update:model-value="setField('items', String($event))"
-        />
-      </label>
-      <label class="grid gap-1.5 text-sm font-medium">
-        原因
-        <Input
-          :model-value="modelValue.avoidanceReason"
-          maxlength="80"
-          placeholder="可选"
-          :disabled="pending"
-          @update:model-value="setField('avoidanceReason', String($event))"
-        />
-      </label>
-    </div>
-
-    <label v-else class="grid gap-1.5 text-sm font-medium">
-      {{
-        modelValue.category === 'style'
-          ? '风格'
-          : modelValue.category === 'occasion'
-            ? '场景'
-            : '购买偏好'
-      }}
-      <Input
-        :model-value="modelValue.items"
-        maxlength="260"
-        placeholder="用顿号或逗号分隔"
-        :disabled="pending"
-        @update:model-value="setField('items', String($event))"
-      />
-    </label>
+        <FieldLabel :for="`${id}-primary`">设为主要偏好</FieldLabel>
+      </Field>
+    </FieldGroup>
 
     <p v-if="error" role="alert" class="text-sm text-destructive">
       {{ error }}
     </p>
-
-    <div class="flex flex-wrap justify-end gap-2">
+    <div class="flex justify-end gap-2">
       <Button
         type="button"
         variant="outline"
         :disabled="pending"
         @click="emit('cancel')"
       >
-        <X data-icon="inline-start" />
-        取消
+        <X data-icon="inline-start" />取消
       </Button>
       <Button type="submit" :disabled="pending">
         <Spinner v-if="pending" data-icon="inline-start" />

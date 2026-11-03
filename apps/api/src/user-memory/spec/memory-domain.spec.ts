@@ -64,7 +64,7 @@ test('模型候选必须符合严格结构和类别值 schema', () => {
           {
             operation: 'upsert',
             category: 'fit',
-            value: { preference: 'unknown' },
+            value: { preference: 'a'.repeat(33) },
             explicit: true,
           },
         ],

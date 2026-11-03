@@ -124,6 +124,40 @@ test('手动创建会拒绝自由文本中的敏感信息', async () => {
   assert.equal(records.length, 0);
 });
 
+test('自定义场景可创建及更新并隔离用户，敏感文本仍被拒绝', async () => {
+  const { service } = createService();
+  const input = {
+    category: 'occasion' as const,
+    value: { items: ['home', '参加婚礼'] },
+    isPrimary: false,
+  };
+  const first = await service.create('user-1', input);
+  const duplicate = await service.create('user-1', input);
+  assert.equal(duplicate.id, first.id);
+  const other = await service.create('user-2', input);
+  assert.notEqual(other.id, first.id);
+  const updated = await service.update('user-1', first.id, {
+    value: { items: ['出差见客户', 'home'] },
+  });
+  assert.deepEqual(updated.value, { items: ['出差见客户', 'home'] });
+  await assert.rejects(
+    service.update('user-1', first.id, { value: { items: ['a'.repeat(33)] } }),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.getStatus() === 400,
+  );
+  await assert.rejects(
+    service.update('user-2', first.id, { value: { items: ['通勤'] } }),
+    NotFoundException,
+  );
+  await assert.rejects(
+    service.create('user-1', {
+      ...input,
+      value: { items: ['联系 13800138000'] },
+    }),
+    BadRequestException,
+  );
+});
+
 test('更新和删除只能访问当前用户拥有的活动记忆', async () => {
   const now = new Date('2026-11-03T00:00:00.000Z');
   const { service, records } = createService([

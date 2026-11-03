@@ -91,6 +91,9 @@ export class UserMemoryController {
   }
 
   @Post()
+  @ApiBadRequestResponse({
+    description: '偏好值超出数量、长度、数值范围或包含不允许保存的信息',
+  })
   @ApiBody({
     schema: {
       oneOf: [
@@ -118,6 +121,9 @@ export class UserMemoryController {
   }
 
   @Patch(':id')
+  @ApiBadRequestResponse({
+    description: '偏好值超出数量、长度、数值范围或包含不允许保存的信息',
+  })
   @ApiOkResponse({ description: '更新后的记忆' })
   public update(
     @CurrentUser() user: User,

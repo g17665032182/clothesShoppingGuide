@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { z } from 'zod';
+import { BadRequestException } from '@nestjs/common';
 
 import {
   memoryCategorySchema,
@@ -113,7 +114,10 @@ export class CreateMemoryDto {
   @ApiProperty({ enum: memoryCategorySchema.options })
   public category!: MemoryCategory;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      '按类别填写的偏好值。文本字段支持预设代码及自定义短文本（1–32 字符）；风格/场景最多 5 项、购买偏好 6 项、颜色/避开内容 8 项。鞋码 20–60；预算为非负整数。',
+  })
   public value!: unknown;
 
   @ApiPropertyOptional({ default: false })
@@ -121,5 +125,15 @@ export class CreateMemoryDto {
 }
 
 export function toMemoryValue(category: MemoryCategory, value: unknown) {
-  return parseMemoryValue(category, value);
+  try {
+    return parseMemoryValue(category, value);
+  } catch (error) {
+    // 局部更新需要读取原类别后再校验，校验失败仍使用与创建一致的 400 语义。
+    if (error instanceof z.ZodError) {
+      throw new BadRequestException(
+        '偏好值不符合要求，请检查数量、长度和数值范围',
+      );
+    }
+    throw error;
+  }
 }

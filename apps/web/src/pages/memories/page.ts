@@ -1,4 +1,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
+import {
+  categoryLabel,
+  formatMemoryValue,
+  memoryCategories,
+} from './preference-display';
+export { formatMemoryValue, memoryCategories } from './preference-display';
 
 import {
   createMemory,
@@ -16,6 +23,18 @@ import type {
   UpdateMemoryPayload,
 } from '@/api/types/memories';
 import { auth } from '@/lib/auth';
+import { ApiError } from '@/api';
+import {
+  fitPresets,
+  garmentPresets,
+  itemLimit,
+  itemPresets,
+  normalizePreferenceItems,
+  presetLabel,
+  presetValue,
+  systemPresets,
+  widthPresets,
+} from './preference-options';
 
 export type MemoryPageStatus =
   'idle' | 'loading' | 'success' | 'empty' | 'error';
@@ -23,13 +42,13 @@ export type MemoryPageStatus =
 export type MemoryEditorState = {
   category: MemoryCategory;
   isPrimary: boolean;
-  garment: 'top' | 'bottom' | 'dress' | 'outerwear' | 'unknown';
+  garment: string;
   label: string;
-  sizeSystem: 'CN' | 'US' | 'EU' | 'UK' | 'INT' | 'OTHER';
+  sizeSystem: string;
   shoeSize: string;
-  shoeSystem: 'CN' | 'US' | 'EU' | 'UK';
-  shoeWidth: 'narrow' | 'regular' | 'wide';
-  fitPreference: 'loose' | 'regular' | 'slim';
+  shoeSystem: string;
+  shoeWidth: string;
+  fitPreference: string;
   fitNotes: string;
   items: string;
   colorMode: 'prefer' | 'avoid';
@@ -41,32 +60,17 @@ export type MemoryEditorState = {
 
 const pageSize = 20;
 
-export const memoryCategories: Array<{
-  value: MemoryCategory;
-  label: string;
-}> = [
-  { value: 'size', label: '服装尺码' },
-  { value: 'shoe_size', label: '鞋码' },
-  { value: 'fit', label: '版型' },
-  { value: 'style', label: '风格' },
-  { value: 'color', label: '颜色' },
-  { value: 'occasion', label: '穿着场景' },
-  { value: 'budget', label: '预算' },
-  { value: 'avoidance', label: '避开偏好' },
-  { value: 'purchase_preference', label: '购买偏好' },
-];
-
 export function createEmptyMemoryEditor(): MemoryEditorState {
   return {
     category: 'size',
     isPrimary: false,
-    garment: 'top',
+    garment: '上装',
     label: '',
-    sizeSystem: 'CN',
+    sizeSystem: '中国码',
     shoeSize: '',
-    shoeSystem: 'CN',
-    shoeWidth: 'regular',
-    fitPreference: 'loose',
+    shoeSystem: '中国码',
+    shoeWidth: '标准鞋宽',
+    fitPreference: '宽松',
     fitNotes: '',
     items: '',
     colorMode: 'prefer',
@@ -77,21 +81,21 @@ export function createEmptyMemoryEditor(): MemoryEditorState {
   };
 }
 
-function splitItems(value: string): string[] {
-  return [...new Set(value.split(/[,，、\n]/u).map((item) => item.trim()))]
-    .filter(Boolean)
-    .slice(0, 8);
-}
-
 export function editorToValue(editor: MemoryEditorState): MemoryValue | null {
-  const items = splitItems(editor.items);
+  if (validateMemoryEditor(editor)) return null;
+  const items = normalizePreferenceItems(
+    editor.items,
+    itemPresets[editor.category] ?? [],
+  );
   switch (editor.category) {
     case 'size':
       return editor.label.trim()
         ? {
-            garment: editor.garment,
+            garment: presetValue(editor.garment, garmentPresets),
             label: editor.label.trim(),
-            ...(editor.sizeSystem ? { system: editor.sizeSystem } : {}),
+            ...(editor.sizeSystem.trim()
+              ? { system: presetValue(editor.sizeSystem, systemPresets) }
+              : {}),
           }
         : null;
     case 'shoe_size': {
@@ -99,14 +103,16 @@ export function editorToValue(editor: MemoryEditorState): MemoryValue | null {
       return Number.isFinite(value)
         ? {
             value,
-            system: editor.shoeSystem,
-            width: editor.shoeWidth,
+            system: presetValue(editor.shoeSystem, systemPresets),
+            ...(editor.shoeWidth.trim()
+              ? { width: presetValue(editor.shoeWidth, widthPresets) }
+              : {}),
           }
         : null;
     }
     case 'fit':
       return {
-        preference: editor.fitPreference,
+        preference: presetValue(editor.fitPreference, fitPresets),
         ...(editor.fitNotes.trim() ? { notes: editor.fitNotes.trim() } : {}),
       };
     case 'style':
@@ -148,25 +154,87 @@ export function editorToValue(editor: MemoryEditorState): MemoryValue | null {
   }
 }
 
-function editorFromMemory(memory: MemoryRecord): MemoryEditorState {
+export function validateMemoryEditor(editor: MemoryEditorState): string {
+  const validText = (text: string) =>
+    text.trim().length >= 1 &&
+    text.trim().length <= 32 &&
+    !/[\u0000-\u001f]/u.test(text.trim());
+  switch (editor.category) {
+    case 'size':
+      return !validText(editor.garment) ||
+        !validText(editor.label) ||
+        (editor.sizeSystem.trim() && !validText(editor.sizeSystem))
+        ? '请填写服装类型和尺码，每项不超过 32 个字符。'
+        : '';
+    case 'shoe_size':
+      if (
+        !editor.shoeSize.trim() ||
+        !Number.isFinite(Number(editor.shoeSize)) ||
+        Number(editor.shoeSize) < 20 ||
+        Number(editor.shoeSize) > 60
+      )
+        return '鞋码请输入 20 到 60 之间的数字。';
+      return !validText(editor.shoeSystem) ||
+        (editor.shoeWidth.trim() && !validText(editor.shoeWidth))
+        ? '请填写尺码体系，文本每项不超过 32 个字符。'
+        : '';
+    case 'fit':
+      return !validText(editor.fitPreference) ||
+        editor.fitNotes.trim().length > 80
+        ? '请填写版型（最多 32 个字符），补充说明最多 80 个字符。'
+        : '';
+    case 'budget': {
+      const min = editor.budgetMin.trim()
+        ? Number(editor.budgetMin)
+        : undefined;
+      const max = editor.budgetMax.trim()
+        ? Number(editor.budgetMax)
+        : undefined;
+      return (min === undefined && max === undefined) ||
+        [min, max].some(
+          (value) =>
+            value !== undefined && (!Number.isInteger(value) || value < 0),
+        ) ||
+        (min !== undefined && max !== undefined && min > max)
+        ? '预算至少填写一项非负整数，且最低预算不能高于最高预算。'
+        : '';
+    }
+    default: {
+      const items = normalizePreferenceItems(
+        editor.items,
+        itemPresets[editor.category] ?? [],
+      );
+      if (!items.length) return '请至少选择或填写一项偏好。';
+      if (items.length > itemLimit(editor.category))
+        return `最多填写 ${itemLimit(editor.category)} 项偏好，请删除多余内容后保存。`;
+      if (items.some((item) => !validText(item)))
+        return '每项偏好最多 32 个字符，不能包含控制字符。';
+      if (
+        editor.category === 'avoidance' &&
+        editor.avoidanceReason.trim().length > 80
+      )
+        return '原因最多 80 个字符。';
+      return '';
+    }
+  }
+}
+
+export function editorFromMemory(memory: MemoryRecord): MemoryEditorState {
   const editor = createEmptyMemoryEditor();
   const value = memory.value as Record<string, unknown>;
   editor.category = memory.category;
   editor.isPrimary = memory.isPrimary;
 
   if (memory.category === 'size') {
-    editor.garment = value.garment as MemoryEditorState['garment'];
+    editor.garment = presetLabel(String(value.garment), garmentPresets);
     editor.label = String(value.label ?? '');
-    editor.sizeSystem =
-      (value.system as MemoryEditorState['sizeSystem']) ?? 'CN';
+    editor.sizeSystem = presetLabel(String(value.system ?? ''), systemPresets);
   } else if (memory.category === 'shoe_size') {
     editor.shoeSize = String(value.value ?? '');
-    editor.shoeSystem = value.system as MemoryEditorState['shoeSystem'];
-    editor.shoeWidth =
-      (value.width as MemoryEditorState['shoeWidth']) ?? 'regular';
+    editor.shoeSystem = presetLabel(String(value.system), systemPresets);
+    editor.shoeWidth = presetLabel(String(value.width ?? ''), widthPresets);
   } else if (memory.category === 'fit') {
-    editor.fitPreference =
-      value.preference as MemoryEditorState['fitPreference'];
+    editor.fitPreference = presetLabel(String(value.preference), fitPresets);
     editor.fitNotes = String(value.notes ?? '');
   } else if (memory.category === 'budget') {
     editor.currency = value.currency as MemoryEditorState['currency'];
@@ -174,47 +242,34 @@ function editorFromMemory(memory: MemoryRecord): MemoryEditorState {
     editor.budgetMax = value.max === undefined ? '' : String(value.max);
   } else if (memory.category === 'color') {
     editor.colorMode = value.mode as MemoryEditorState['colorMode'];
-    editor.items = Array.isArray(value.items) ? value.items.join('、') : '';
+    editor.items = Array.isArray(value.items)
+      ? value.items
+          .map((item) =>
+            presetLabel(String(item), itemPresets[memory.category] ?? []),
+          )
+          .join('、')
+      : '';
   } else if (memory.category === 'avoidance') {
     editor.items = Array.isArray(value.terms) ? value.terms.join('、') : '';
     editor.avoidanceReason = String(value.reason ?? '');
   } else {
-    editor.items = Array.isArray(value.items) ? value.items.join('、') : '';
+    editor.items = Array.isArray(value.items)
+      ? value.items
+          .map((item) =>
+            presetLabel(String(item), itemPresets[memory.category] ?? []),
+          )
+          .join('、')
+      : '';
   }
   return editor;
 }
 
-function categoryLabel(category: MemoryCategory): string {
-  return memoryCategories.find((item) => item.value === category)?.label ?? '';
-}
-
-export function formatMemoryValue(memory: MemoryRecord): string {
-  const value = memory.value as Record<string, unknown>;
-  if (memory.category === 'size') {
-    return `${categoryLabel(memory.category)} · ${String(value.label)}${value.system ? ` ${String(value.system)}` : ''}`;
-  }
-  if (memory.category === 'shoe_size') {
-    return `${String(value.value)} ${String(value.system)} · ${String(value.width ?? 'regular')}`;
-  }
-  if (memory.category === 'fit') {
-    return `${String(value.preference)}${value.notes ? ` · ${String(value.notes)}` : ''}`;
-  }
-  if (memory.category === 'budget') {
-    const minimum = value.min === undefined ? '不限' : String(value.min);
-    const maximum = value.max === undefined ? '不限' : String(value.max);
-    return `${minimum} - ${maximum} ${String(value.currency)}`;
-  }
-  if (memory.category === 'avoidance') {
-    return `${(value.terms as string[]).join('、')}${value.reason ? ` · ${String(value.reason)}` : ''}`;
-  }
-  const items = Array.isArray(value.items) ? value.items.join('、') : '';
-  return memory.category === 'color'
-    ? `${value.mode === 'avoid' ? '避免' : '偏好'}${items}`
-    : items;
-}
-
 export function useMemoriesPage() {
-  const activeView = ref<'preferences' | 'document'>('preferences');
+  const route = useRoute();
+  // 使用地址参数区分菜单入口；非法值回退到原有偏好视图。
+  const activeView = computed(() =>
+    route.query.view === 'document' ? 'document' : 'preferences',
+  );
   const records = ref<MemoryRecord[]>([]);
   const status = ref<MemoryPageStatus>('idle');
   const error = ref('');
@@ -314,7 +369,8 @@ export function useMemoriesPage() {
     if (!token || submitting.value) return;
     const value = editorToValue(editor.value);
     if (!value) {
-      submitError.value = '请检查必填项和数值范围。';
+      submitError.value =
+        validateMemoryEditor(editor.value) || '请检查必填项和数值范围。';
       return;
     }
 
@@ -341,7 +397,13 @@ export function useMemoriesPage() {
       await loadMemories(1);
     } catch (cause) {
       submitError.value =
-        cause instanceof Error ? cause.message : '保存记忆失败。';
+        cause instanceof ApiError &&
+        cause.status === 400 &&
+        /Invalid|expected|value\./u.test(cause.message)
+          ? '偏好内容不符合要求，请检查每项长度、数量和数值范围。'
+          : cause instanceof Error
+            ? cause.message
+            : '保存偏好失败，请稍后重试。';
     } finally {
       submitting.value = false;
     }

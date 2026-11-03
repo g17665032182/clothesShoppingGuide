@@ -2,16 +2,16 @@
 import {
   ChevronLeft,
   ChevronRight,
-  LogOut,
+  ChevronUp,
   MessageSquare,
   Shirt,
   SquarePen,
   Trash2,
 } from '@lucide/vue';
-import { useRouter } from 'vue-router';
 import { ref } from 'vue';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import AccountMenu from '@/components/shared/AccountMenu.vue';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +45,6 @@ const emit = defineEmits<{
   (event: 'retry'): void;
 }>();
 
-const router = useRouter();
 const isCollapsed = ref(false);
 const isDeleteDialogOpen = ref(false);
 const conversationPendingDelete = ref<Conversation | null>(null);
@@ -59,11 +58,6 @@ function confirmDelete() {
   if (!conversationPendingDelete.value) return;
   emit('delete', conversationPendingDelete.value.id);
   conversationPendingDelete.value = null;
-}
-
-function signOut() {
-  auth.signOut();
-  void router.push('/login');
 }
 
 function toggleCollapsed() {
@@ -291,47 +285,35 @@ function handleConversationScroll(event: Event) {
     <div
       :class="cn('flex flex-col gap-1 p-4', isCollapsed && 'items-center px-2')"
     >
-      <RouterLink
-        :aria-label="auth.state.user?.displayName ?? '我的账户'"
-        :title="auth.state.user?.displayName ?? '我的账户'"
-        :class="
-          cn(
-            'flex items-center gap-3 rounded-lg px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-            isCollapsed ? 'justify-center px-0' : 'px-2',
-          )
-        "
-        to="/account"
-      >
-        <span
-          class="flex size-7 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground"
+      <AccountMenu align="start" side="top">
+        <Button
+          aria-label="用户菜单"
+          :title="auth.state.user?.displayName ?? '我的账户'"
+          :class="
+            cn(
+              'h-11',
+              isCollapsed ? 'size-11 px-0' : 'w-full justify-start gap-3 px-2',
+            )
+          "
+          type="button"
+          variant="ghost"
         >
-          {{ auth.state.user?.displayName?.slice(0, 1) ?? '我' }}
-        </span>
-        <span v-if="!isCollapsed" class="min-w-0 flex-1 truncate">{{
-          auth.state.user?.displayName ?? '我的账户'
-        }}</span>
-      </RouterLink>
-      <Button
-        :aria-label="isCollapsed ? '退出登录' : undefined"
-        :title="isCollapsed ? '退出登录' : undefined"
-        :class="
-          cn(
-            'text-muted-foreground',
-            isCollapsed
-              ? 'size-10 rounded-lg px-0'
-              : 'h-10 w-full justify-start gap-3 rounded-lg px-2 text-xs',
-          )
-        "
-        type="button"
-        variant="ghost"
-        @click="signOut"
-      >
-        <LogOut
-          aria-hidden="true"
-          :data-icon="isCollapsed ? undefined : 'inline-start'"
-        />
-        <span v-if="!isCollapsed">退出登录</span>
-      </Button>
+          <span
+            aria-hidden="true"
+            class="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground"
+          >
+            {{ auth.state.user?.displayName?.slice(0, 1) ?? '我' }}
+          </span>
+          <span v-if="!isCollapsed" class="min-w-0 flex-1 truncate">{{
+            auth.state.user?.displayName ?? '我的账户'
+          }}</span>
+          <ChevronUp
+            v-if="!isCollapsed"
+            aria-hidden="true"
+            data-icon="inline-end"
+          />
+        </Button>
+      </AccountMenu>
     </div>
 
     <AlertDialog v-model:open="isDeleteDialogOpen">

@@ -1,26 +1,13 @@
 <script setup lang="ts">
-import { BookOpen, ChevronDown, LogOut, Shirt, UserRound } from '@lucide/vue';
+import { ChevronDown, Shirt, UserRound } from '@lucide/vue';
 import { computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { auth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import AccountMenu from '@/components/shared/AccountMenu.vue';
 
 const route = useRoute();
-const router = useRouter();
 const isChatPage = computed(() => route.name === 'chat');
-
-function signOut() {
-  auth.signOut();
-  void router.push('/login');
-}
 </script>
 
 <template>
@@ -34,40 +21,15 @@ function signOut() {
         <RouterLink v-if="auth.state.user" class="text-link" to="/chat"
           >聊天</RouterLink
         >
-        <DropdownMenu v-if="auth.state.user">
-          <DropdownMenuTrigger as-child>
-            <Button aria-label="用户菜单" type="button" variant="ghost">
-              <UserRound aria-hidden="true" data-icon="inline-start" />
-              <span class="max-w-32 truncate">{{
-                auth.state.user.displayName
-              }}</span>
-              <ChevronDown aria-hidden="true" data-icon="inline-end" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="min-w-40">
-            <DropdownMenuGroup>
-              <DropdownMenuItem as-child>
-                <RouterLink to="/account">
-                  <UserRound aria-hidden="true" />
-                  个人资料
-                </RouterLink>
-              </DropdownMenuItem>
-              <DropdownMenuItem as-child>
-                <RouterLink to="/memories">
-                  <BookOpen aria-hidden="true" />
-                  我的记忆
-                </RouterLink>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem @select="signOut">
-                <LogOut aria-hidden="true" />
-                退出登录
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <AccountMenu v-if="auth.state.user">
+          <Button aria-label="用户菜单" type="button" variant="ghost">
+            <UserRound aria-hidden="true" data-icon="inline-start" />
+            <span class="max-w-32 truncate">{{
+              auth.state.user.displayName
+            }}</span>
+            <ChevronDown aria-hidden="true" data-icon="inline-end" />
+          </Button>
+        </AccountMenu>
         <RouterLink v-else class="text-link" to="/login">登录</RouterLink>
       </div>
     </header>

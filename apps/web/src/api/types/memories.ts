@@ -11,17 +11,17 @@ export type MemoryCategory =
 
 export type MemoryValue =
   | {
-      garment: 'top' | 'bottom' | 'dress' | 'outerwear' | 'unknown';
+      garment: string;
       label: string;
-      system?: 'CN' | 'US' | 'EU' | 'UK' | 'INT' | 'OTHER';
+      system?: string;
     }
   | {
       value: number;
-      system: 'CN' | 'US' | 'EU' | 'UK';
-      width?: 'narrow' | 'regular' | 'wide';
+      system: string;
+      width?: string;
     }
   | {
-      preference: 'loose' | 'regular' | 'slim';
+      preference: string;
       notes?: string;
     }
   | {
