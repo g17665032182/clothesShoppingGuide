@@ -214,6 +214,7 @@ export function formatMemoryValue(memory: MemoryRecord): string {
 }
 
 export function useMemoriesPage() {
+  const activeView = ref<'preferences' | 'document'>('preferences');
   const records = ref<MemoryRecord[]>([]);
   const status = ref<MemoryPageStatus>('idle');
   const error = ref('');
@@ -249,7 +250,7 @@ export function useMemoriesPage() {
     () => page.value < totalPages.value && status.value !== 'loading',
   );
   const editingTitle = computed(() =>
-    editingId.value ? '编辑记忆' : '添加记忆',
+    editingId.value ? '编辑偏好' : '添加偏好',
   );
 
   async function loadMemories(targetPage = page.value) {
@@ -428,6 +429,7 @@ export function useMemoriesPage() {
   });
 
   return {
+    activeView,
     busy,
     canGoBack,
     canGoForward,
