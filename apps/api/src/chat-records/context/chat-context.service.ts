@@ -256,6 +256,18 @@ export class ChatContextService {
     }
   }
 
+  public composeLongTermContext(preferences: string, memory: string): string {
+    // 偏好排在前面；包装、分隔符和消息开销共同占用同一个预算。
+    let content = this.truncateToTokens(
+      [preferences, memory].filter(Boolean).join('\n\n'),
+      508,
+    );
+    while (content && this.countText([content]) > 512) {
+      content = Array.from(content).slice(0, -1).join('');
+    }
+    return content;
+  }
+
   public getContextWindow(): number {
     const value = Number(
       this.configService.get<string>('LLM_CONTEXT_WINDOW_TOKENS'),

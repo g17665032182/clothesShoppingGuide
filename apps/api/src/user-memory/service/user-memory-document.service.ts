@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import type { EntityManager } from '@mikro-orm/core';
+import { LockMode, type EntityManager } from '@mikro-orm/core';
 import { EntityRepository } from '@mikro-orm/postgresql';
 import { createHash } from 'node:crypto';
 
@@ -19,6 +19,10 @@ import type { UserMemoryDocumentResponse } from '../dto/user-memory-document.dto
 import { UserMemoryDocumentState } from '../entity/user-memory-document-state.entity.js';
 import { UserMemoryDocumentTaskResult } from '../entity/user-memory-document-task-result.entity.js';
 import { UserMemorySetting } from '../entity/user-memory-setting.entity.js';
+import {
+  UserMemoryTask,
+  UserMemoryTaskStatus,
+} from '../entity/user-memory-task.entity.js';
 import { UserMemoryDocumentCleanupService } from './user-memory-document-cleanup.service.js';
 import { UserMemoryDocumentStoreService } from './user-memory-document-store.service.js';
 
@@ -80,66 +84,106 @@ export class UserMemoryDocumentService {
     userId: string;
     taskId: string;
     documentGeneration: number;
+    taskAttempts: number;
+    taskLockedAt: Date;
     operations: MemoryDocumentOperation[];
   }): Promise<void> {
     if (input.operations.length === 0) return;
-    await this.withLockedState(input.userId, async (entityManager, state) => {
-      const setting = await entityManager
-        .getRepository(UserMemorySetting)
-        .findOne({ userId: input.userId });
-      if (setting?.enabled === false) return;
-      if (state.documentGeneration !== input.documentGeneration) return;
+    await this.withLockedState(
+      input.userId,
+      async (entityManager, state) => {
+        const setting = await entityManager
+          .getRepository(UserMemorySetting)
+          .findOne({ userId: input.userId });
+        if (setting?.enabled === false) return;
+        if (state.documentGeneration !== input.documentGeneration) return;
 
-      const existingContent = await this.readCurrentContent(state);
-      let nextContent = existingContent;
-      const pendingResults: UserMemoryDocumentTaskResult[] = [];
-      const pendingKeys = new Set<string>();
+        const existingContent = await this.readCurrentContent(state);
+        let nextContent = existingContent;
+        const pendingResults: UserMemoryDocumentTaskResult[] = [];
+        const pendingKeys = new Set<string>();
 
-      for (const operation of input.operations) {
-        const operationKey = this.operationKey(operation);
-        if (pendingKeys.has(operationKey)) continue;
-        const existing = await entityManager
-          .getRepository(UserMemoryDocumentTaskResult)
-          .findOne({ taskId: input.taskId, operationKey });
-        if (existing) continue;
+        for (const operation of input.operations) {
+          const operationKey = this.operationKey(operation);
+          if (pendingKeys.has(operationKey)) continue;
+          const existing = await entityManager
+            .getRepository(UserMemoryDocumentTaskResult)
+            .findOne({ taskId: input.taskId, operationKey });
+          if (existing) continue;
 
-        const candidateContent = this.applyOperation(nextContent, operation);
-        if (!memoryDocumentContentSchema.safeParse(candidateContent).success) {
-          continue;
+          const candidateContent = this.applyOperation(nextContent, operation);
+          if (
+            !memoryDocumentContentSchema.safeParse(candidateContent).success
+          ) {
+            continue;
+          }
+          nextContent = candidateContent;
+          const result = entityManager
+            .getRepository(UserMemoryDocumentTaskResult)
+            .create({
+              taskId: input.taskId,
+              operationKey,
+              appliedAt: new Date(),
+            });
+          pendingResults.push(result);
+          pendingKeys.add(operationKey);
         }
-        nextContent = candidateContent;
-        const result = entityManager
-          .getRepository(UserMemoryDocumentTaskResult)
-          .create({
-            taskId: input.taskId,
-            operationKey,
-            appliedAt: new Date(),
-          });
-        pendingResults.push(result);
-        pendingKeys.add(operationKey);
-      }
 
-      if (nextContent !== existingContent) {
-        if (nextContent === '') {
-          await this.clearContent(entityManager, state);
-        } else {
-          await this.replaceContent(entityManager, state, nextContent);
+        if (nextContent !== existingContent) {
+          if (nextContent === '') {
+            await this.clearContent(entityManager, state);
+          } else {
+            await this.replaceContent(entityManager, state, nextContent);
+          }
         }
-      }
-      for (const result of pendingResults) entityManager.persist(result);
-      if (pendingResults.length > 0) await entityManager.flush();
-    });
+        for (const result of pendingResults) entityManager.persist(result);
+        if (pendingResults.length > 0) await entityManager.flush();
+      },
+      input,
+    );
   }
 
+  private withLockedState<T>(
+    userId: string,
+    callback: (
+      entityManager: EntityManager,
+      state: UserMemoryDocumentState,
+    ) => Promise<T>,
+  ): Promise<T>;
+  private withLockedState(
+    userId: string,
+    callback: (
+      entityManager: EntityManager,
+      state: UserMemoryDocumentState,
+    ) => Promise<void>,
+    lease: { taskId: string; taskAttempts: number; taskLockedAt: Date },
+  ): Promise<void>;
   private async withLockedState<T>(
     userId: string,
     callback: (
       entityManager: EntityManager,
       state: UserMemoryDocumentState,
     ) => Promise<T>,
-  ): Promise<T> {
-    const entityManager = this.states.getEntityManager();
+    lease?: { taskId: string; taskAttempts: number; taskLockedAt: Date },
+  ): Promise<T | void> {
+    const entityManager = this.states.getEntityManager().fork();
     return entityManager.transactional(async (transactionalEm) => {
+      await transactionalEm
+        .getConnection()
+        .execute(
+          "set local statement_timeout = '15s'",
+          [],
+          'run',
+          transactionalEm.getTransactionContext(),
+        );
+      await transactionalEm
+        .getConnection()
+        .execute(
+          "set local lock_timeout = '5s'",
+          [],
+          'run',
+          transactionalEm.getTransactionContext(),
+        );
       await transactionalEm
         .getConnection()
         .execute(
@@ -149,6 +193,21 @@ export class UserMemoryDocumentService {
           transactionalEm.getTransactionContext(),
         );
 
+      // 先验证执行租约，再读写设置和资源，过期 worker 不能提交补丁。
+      if (lease) {
+        const task = await transactionalEm.findOne(
+          UserMemoryTask,
+          {
+            id: lease.taskId,
+            userId,
+            attempts: lease.taskAttempts,
+            lockedAt: lease.taskLockedAt,
+            status: UserMemoryTaskStatus.PROCESSING,
+          },
+          { lockMode: LockMode.PESSIMISTIC_WRITE },
+        );
+        if (!task) return;
+      }
       const repository = transactionalEm.getRepository(UserMemoryDocumentState);
       let state = await repository.findOne({ userId });
       if (!state) {
@@ -190,6 +249,15 @@ export class UserMemoryDocumentService {
     state: UserMemoryDocumentState,
   ): Promise<void> {
     state.documentGeneration += 1;
+    // 清空立即擦除旧代次候选，避免任务历史继续保存已清空的正文片段。
+    await entityManager.nativeUpdate(
+      UserMemoryTask,
+      {
+        userId: state.userId,
+        documentGeneration: { $lt: state.documentGeneration },
+      },
+      { candidateOperations: null },
+    );
     await this.clearContent(entityManager, state);
   }
 

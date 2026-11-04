@@ -9,13 +9,14 @@ import {
   Trash2,
 } from '@lucide/vue';
 
-import MemoryEditor from './components/MemoryEditor.vue';
+import PreferenceEditor from './components/PreferenceEditor.vue';
 import MemoryDocument from './components/MemoryDocument.vue';
 import PreferencesTable from './components/PreferencesTable.vue';
 import { useMemoriesPage } from './page';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
   Empty,
@@ -63,14 +64,15 @@ const {
   editorOpen,
   editingTitle,
   enabled,
+  memoryDocument,
   error,
-  loadMemories,
-  memoryCategories,
+  loadPreferences,
+  preferenceCategories,
   page,
   records,
-  removeAllMemories,
-  removeMemory,
-  saveMemory,
+  removeAllPreferences,
+  removePreference,
+  savePreference,
   selectedCategory,
   startCreate,
   startEdit,
@@ -81,6 +83,9 @@ const {
   total,
   totalPages,
   settingPending,
+  settingsStatus,
+  settingError,
+  loadSettings,
 } = useMemoriesPage();
 
 function handleEditorOpenChange(open: boolean) {
@@ -103,23 +108,49 @@ function handleEditorOpenChange(open: boolean) {
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          :disabled="settingPending"
-          @click="toggleEnabled(!enabled)"
-        >
-          <span
-            class="size-2 rounded-full"
-            :class="enabled ? 'bg-primary' : 'bg-muted-foreground'"
+        <Spinner v-if="settingsStatus === 'loading'" />
+        <Field orientation="horizontal">
+          <Checkbox
+            :id="`${activeView}-enabled`"
+            :model-value="enabled === true"
+            :disabled="settingPending || settingsStatus !== 'success'"
+            @update:model-value="toggleEnabled($event === true)"
           />
-          {{ enabled ? '记忆已开启' : '记忆已关闭' }}
-        </Button>
+          <FieldLabel :for="`${activeView}-enabled`">
+            {{ activeView === 'document' ? '自动记忆' : '自动偏好' }}
+          </FieldLabel>
+        </Field>
+        <Button
+          v-if="settingsStatus === 'error'"
+          variant="outline"
+          size="icon"
+          aria-label="重新读取设置"
+          title="重新读取设置"
+          @click="loadSettings"
+          ><RefreshCw
+        /></Button>
       </div>
     </header>
 
+    <Alert v-if="settingError" variant="destructive">
+      <AlertTriangle />
+      <AlertTitle>设置未更新</AlertTitle>
+      <AlertDescription>{{ settingError }}</AlertDescription>
+    </Alert>
+
     <!-- 菜单切换只停用文档实例，保留未保存的草稿。 -->
     <KeepAlive>
-      <MemoryDocument v-if="activeView === 'document'" />
+      <MemoryDocument
+        v-if="activeView === 'document'"
+        :state="memoryDocument"
+        @update:draft="memoryDocument.updateDraft"
+        @update:preview="memoryDocument.preview = $event"
+        @update:clear-open="memoryDocument.clearOpen = $event"
+        @load="memoryDocument.loadDocument"
+        @save="memoryDocument.save"
+        @clear="memoryDocument.clearDocument"
+        @use-latest="memoryDocument.useLatestAsBase"
+      />
     </KeepAlive>
     <div
       v-show="activeView === 'preferences'"
@@ -148,7 +179,7 @@ function handleEditorOpenChange(open: boolean) {
             >
               <NativeSelectOption value="">全部类别</NativeSelectOption>
               <NativeSelectOption
-                v-for="category in memoryCategories"
+                v-for="category in preferenceCategories"
                 :key="category.value"
                 :value="category.value"
               >
@@ -175,7 +206,7 @@ function handleEditorOpenChange(open: boolean) {
             size="icon"
             aria-label="刷新偏好"
             title="刷新偏好"
-            @click="loadMemories(1)"
+            @click="loadPreferences(1)"
           >
             <Spinner v-if="status === 'loading'" data-icon="inline-start" />
             <RefreshCw v-else data-icon="inline-start" />
@@ -207,7 +238,7 @@ function handleEditorOpenChange(open: boolean) {
           <EmptyDescription>{{ error }}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button variant="outline" @click="loadMemories(1)">
+          <Button variant="outline" @click="loadPreferences(1)">
             <RefreshCw data-icon="inline-start" />
             重试
           </Button>
@@ -242,7 +273,7 @@ function handleEditorOpenChange(open: boolean) {
           :deleting-id="deletingId"
           :busy="busy"
           @edit="startEdit"
-          @delete="removeMemory"
+          @delete="removePreference"
         />
 
         <footer
@@ -279,7 +310,10 @@ function handleEditorOpenChange(open: boolean) {
     </div>
   </section>
 
-  <Dialog :open="editorOpen" @update:open="handleEditorOpenChange">
+  <Dialog
+    :open="activeView === 'preferences' && editorOpen"
+    @update:open="handleEditorOpenChange"
+  >
     <DialogContent
       class="max-h-[90vh] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-2xl"
     >
@@ -287,17 +321,20 @@ function handleEditorOpenChange(open: boolean) {
         <DialogTitle>{{ editingTitle }}</DialogTitle>
         <DialogDescription> 仅填写与服装选择有关的偏好。 </DialogDescription>
       </DialogHeader>
-      <MemoryEditor
+      <PreferenceEditor
         v-model="editor"
         :pending="submitting"
         :error="submitError"
-        @submit="saveMemory"
+        @submit="savePreference"
         @cancel="cancelEdit"
       />
     </DialogContent>
   </Dialog>
 
-  <AlertDialog v-model:open="deleteAllDialogOpen">
+  <AlertDialog
+    :open="activeView === 'preferences' && deleteAllDialogOpen"
+    @update:open="deleteAllDialogOpen = $event"
+  >
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>删除全部偏好？</AlertDialogTitle>
@@ -310,7 +347,7 @@ function handleEditorOpenChange(open: boolean) {
         <AlertDialogAction
           class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           :disabled="deletingAll"
-          @click.prevent="removeAllMemories"
+          @click.prevent="removeAllPreferences"
         >
           <Spinner v-if="deletingAll" data-icon="inline-start" />
           <Trash2 v-else data-icon="inline-start" />

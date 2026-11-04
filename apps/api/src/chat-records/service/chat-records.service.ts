@@ -3,7 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
+  Inject,
+  Logger,
 } from '@nestjs/common';
+import {
+  DriverException,
+  TransactionPropagation,
+  type EntityManager,
+} from '@mikro-orm/core';
 import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
@@ -24,9 +31,20 @@ import { ChatTraceEvent } from '../entity/chat-trace-event.entity.js';
 import { ChatTraceWriterService } from '../trace/chat-trace-writer.service.js';
 import type { AdminChatQueryDto } from '../dto/admin-chat-query.dto.js';
 import type { PaginationDto } from '../dto/pagination.dto.js';
-import { UserMemoryReaderService } from '../../user-memory/service/user-memory-reader.service.js';
-import { UserMemoryTaskService } from '../../user-memory/service/user-memory-task.service.js';
-import { UserMemoryLifecycleService } from '../../user-memory/service/user-memory-lifecycle.service.js';
+import {
+  USER_MEMORY_READER,
+  USER_MEMORY_TASKS,
+  type UserMemoryReader,
+  type UserMemoryTasks,
+} from '../../user-memory/index.js';
+import {
+  USER_PREFERENCES_READER,
+  USER_PREFERENCES_TASKS,
+  USER_PREFERENCES_LIFECYCLE,
+  type UserPreferencesReader,
+  type UserPreferencesTasks,
+  type UserPreferencesLifecycle,
+} from '../../user-preferences/index.js';
 import { ChatDisplayService } from '../display/chat-display.service.js';
 import type {
   ChatDisplayData,
@@ -107,6 +125,8 @@ type PreparedChat = {
 
 @Injectable()
 export class ChatRecordsService {
+  private readonly logger = new Logger(ChatRecordsService.name);
+
   public constructor(
     @InjectRepository(ChatConversation)
     private readonly conversations: EntityRepository<ChatConversation>,
@@ -118,10 +138,17 @@ export class ChatRecordsService {
     private readonly contextService: ChatContextService,
     private readonly summaryService: ChatSummaryService,
     private readonly traceWriter: ChatTraceWriterService,
-    private readonly memoryReader: UserMemoryReaderService,
-    private readonly memoryTasks: UserMemoryTaskService,
-    private readonly memoryLifecycle: UserMemoryLifecycleService,
+    @Inject(USER_MEMORY_READER)
+    private readonly memoryReader: UserMemoryReader,
+    @Inject(USER_MEMORY_TASKS)
+    private readonly memoryTasks: UserMemoryTasks,
+    @Inject(USER_PREFERENCES_LIFECYCLE)
+    private readonly preferenceLifecycle: UserPreferencesLifecycle,
     private readonly displayService: ChatDisplayService,
+    @Inject(USER_PREFERENCES_READER)
+    private readonly preferenceReader: UserPreferencesReader,
+    @Inject(USER_PREFERENCES_TASKS)
+    private readonly preferenceTasks: UserPreferencesTasks,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -260,9 +287,10 @@ export class ChatRecordsService {
     const conversation = await this.getOwnedConversation(userId, id);
     const entityManager = this.conversations.getEntityManager();
     await entityManager.transactional(async (transactionalEntityManager) => {
-      await this.memoryLifecycle.markConversationDeleted(
-        conversation.id,
+      await this.preferenceLifecycle.markConversationDeleted(
         transactionalEntityManager,
+        conversation.id,
+        userId,
       );
       transactionalEntityManager.remove(conversation);
       await transactionalEntityManager.flush();
@@ -285,9 +313,20 @@ export class ChatRecordsService {
     if (!currentUserMessage) {
       throw new BadRequestException('聊天请求至少需要一条 user 消息');
     }
-    const memoryContext = this.contextService.truncateToTokens(
-      await this.memoryReader.readContext(user.id, currentUserMessage.content),
-      512,
+    const sources = await Promise.allSettled([
+      this.preferenceReader.readContext(user.id, currentUserMessage.content),
+      this.memoryReader.readContext(user.id, currentUserMessage.content),
+    ]);
+    const [preference, memory] = sources.map((source, index) => {
+      if (source.status === 'fulfilled') return source.value;
+      this.logger.warn(
+        `${index === 0 ? 'PREFERENCES' : 'MEMORY'}_CONTEXT_UNAVAILABLE`,
+      );
+      return '';
+    });
+    const memoryContext = this.contextService.composeLongTermContext(
+      preference ?? '',
+      memory ?? '',
     );
 
     const conversation = dto.conversationId
@@ -468,13 +507,52 @@ export class ChatRecordsService {
           data: display.data,
         });
       }
-      await this.memoryTasks.enqueueInTransaction(transactionalEntityManager, {
+      const taskInput = {
         userId: persistedConversation.userId,
         conversationId: persistedConversation.id,
         userMessageId: userMessage.id,
         assistantMessageId: assistantMessage.id,
-      });
+      };
+      // 同一连接按固定顺序登记，局部 SQL 错误先回滚 savepoint 再继续另一领域。
+      await this.enqueueDomain(
+        transactionalEntityManager,
+        'PREFERENCES',
+        (transaction) =>
+          this.preferenceTasks.enqueueInTransaction(transaction, taskInput),
+      );
+      await this.enqueueDomain(
+        transactionalEntityManager,
+        'MEMORY',
+        (transaction) =>
+          this.memoryTasks.enqueueInTransaction(transaction, taskInput),
+      );
     });
+  }
+
+  private async enqueueDomain(
+    entityManager: EntityManager,
+    domain: 'PREFERENCES' | 'MEMORY',
+    enqueue: (transaction: EntityManager) => Promise<void>,
+  ): Promise<void> {
+    try {
+      await entityManager.transactional(enqueue, {
+        propagation: TransactionPropagation.NESTED,
+      });
+    } catch (error) {
+      // 连接故障与未知程序错误交给外层回滚，避免将整个数据库故障误报为已隔离。
+      const sqlState =
+        error instanceof DriverException
+          ? error.code
+          : error instanceof Error &&
+              'code' in error &&
+              typeof error.code === 'string'
+            ? error.code
+            : undefined;
+      if (!/^(22|23|42)[0-9A-Z]{3}$/u.test(sqlState ?? '')) {
+        throw error;
+      }
+      this.logger.warn(`${domain}_ENQUEUE_FAILED`);
+    }
   }
 
   private async list(

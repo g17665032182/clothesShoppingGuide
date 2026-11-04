@@ -19,12 +19,14 @@ function createService(
     failBind?: boolean;
     missingTrace?: boolean;
     tools?: boolean;
+    failedReader?: 'preferences' | 'memory';
   } = {},
 ) {
   const persisted: unknown[] = [];
   const removed: unknown[] = [];
   const modelInputs: unknown[] = [];
   const bindings: unknown[] = [];
+  const contextInputs: Array<{ memoryContext?: string }> = [];
   let flushCount = 0;
   const manager = {
     persist(value: unknown) {
@@ -93,20 +95,38 @@ function createService(
   const contextService = {
     getContextWindow: () => 8192,
     truncateToTokens: (content: string) => content,
-    prepare: () => ({
-      messages: [
-        { role: 'system' as const, content: '服务端上下文' },
-        { role: 'user' as const, content: '你好' },
-      ],
-      needsSummary: false,
-      summarySource: [],
-      lastIncludedMessageId: null,
-      hardLimit: 100,
-    }),
+    composeLongTermContext: (preferences: string, memory: string) =>
+      [preferences, memory].filter(Boolean).join('\n\n'),
+    prepare: (input: { memoryContext?: string }) => {
+      contextInputs.push(input);
+      return {
+        messages: [
+          { role: 'system' as const, content: '服务端上下文' },
+          { role: 'user' as const, content: '你好' },
+        ],
+        needsSummary: false,
+        summarySource: [],
+        lastIncludedMessageId: null,
+        hardLimit: 100,
+      };
+    },
   };
   const summaryService = { summarize: async () => null };
   const traceWriter = { writeEvents: async () => undefined };
-  const memoryReader = { readContext: async () => '' };
+  const memoryReader = {
+    readContext: async () => {
+      if (options.failedReader === 'memory')
+        throw new Error('controlled memory failure');
+      return options.failedReader ? '可用文档' : '';
+    },
+  };
+  const preferenceReader = {
+    readContext: async () => {
+      if (options.failedReader === 'preferences')
+        throw new Error('controlled preference failure');
+      return options.failedReader ? '可用偏好' : '';
+    },
+  };
   const memoryTasks = { enqueueInTransaction: async () => undefined };
   const memoryLifecycle = { markConversationDeleted: async () => undefined };
   const displayService = new ChatDisplayService({} as never);
@@ -127,9 +147,11 @@ function createService(
     memoryTasks as never,
     memoryLifecycle as never,
     displayService,
+    preferenceReader as never,
+    memoryTasks as never,
   );
 
-  return { service, persisted, removed, modelInputs, bindings };
+  return { service, persisted, removed, modelInputs, bindings, contextInputs };
 }
 
 test('持久化聊天仅将系统上下文传给模型，不写入消息或响应', async () => {
@@ -311,4 +333,18 @@ test('归属校验失败时不查询消息或公开展示元数据', async () =>
     service.getForUser('other-user', 'missing-id', new PaginationDto()),
     { status: 404 },
   );
+});
+
+test('任一上下文读取失败仅跳过该领域，另一来源继续进入模型上下文', async () => {
+  for (const failedReader of ['preferences', 'memory'] as const) {
+    const { service, contextInputs } = createService({ failedReader });
+    await service.chat(
+      { id: 'user-1' } as never,
+      { messages: [{ role: 'user', content: '推荐服装' }] } as never,
+    );
+    assert.equal(
+      contextInputs[0]?.memoryContext,
+      failedReader === 'preferences' ? '可用文档' : '可用偏好',
+    );
+  }
 });

@@ -1,16 +1,8 @@
 import { z } from 'zod';
 
-import { containsSensitiveMemoryText } from './memory-safety.js';
+import { memoryDocumentContentSchema } from './memory-document.schema.js';
 
-const patchTextSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(2000)
-  .refine((text) => !text.includes('\u0000'), '候选内容包含非法字符')
-  .refine((text) => !containsSensitiveMemoryText(text), {
-    message: '候选内容包含不允许保存的信息',
-  });
+const patchTextSchema = memoryDocumentContentSchema.trim().min(1).max(2000);
 
 const operationBase = {
   explicit: z.literal(true),

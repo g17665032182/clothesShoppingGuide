@@ -2,7 +2,7 @@
 
 ## 完整拆分修订说明（2026-11-04）
 
-本文件是此前混合方案的技术记录，不能作为本次完整拆分的实施授权。用户已确认 [完整拆分设计](./user-preference-memory-separation-design.md)、独立契约和 [拆分技术文档](./user-preference-memory-separation-technical.md)；当前 [拆分实施文档](./user-preference-memory-separation-implementation.md) 待确认。本文件中的共用任务、开关及读取方案仅说明历史实现。
+本文件是此前混合方案的历史技术记录，其中共用任务、开关及读取方案已被完整拆分取代。[完整拆分设计](./user-preference-memory-separation-design.md)、独立契约、[拆分技术文档](./user-preference-memory-separation-technical.md) 和 [拆分实施文档](./user-preference-memory-separation-implementation.md) 均已确认并实施，当前行为及验证记录以新文档为准。
 
 ## 状态与审批边界
 

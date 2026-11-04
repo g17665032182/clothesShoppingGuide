@@ -63,13 +63,18 @@ const emit = defineEmits<{
           v-else
           :disabled="!canSend"
           aria-label="发送消息"
-          class="ml-auto shrink-0"
+          class="ml-auto shrink-0 justify-center has-data-[icon=inline-start]:pl-0"
           size="icon-sm"
           title="发送消息"
           type="submit"
           variant="default"
         >
-          <SendHorizontal aria-hidden="true" data-icon="inline-start" />
+          <!-- 纸飞机绕中心旋转朝上，按钮不保留文字前缀图标的左侧内边距。 -->
+          <SendHorizontal
+            aria-hidden="true"
+            class="-rotate-90"
+            data-icon="inline-start"
+          />
         </InputGroupButton>
       </InputGroupAddon>
     </InputGroup>

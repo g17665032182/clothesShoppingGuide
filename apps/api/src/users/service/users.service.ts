@@ -37,6 +37,14 @@ export class UsersService {
     return this.users.findOne({ id, status: UserStatus.ACTIVE });
   }
 
+  public async isActive(id: string): Promise<boolean> {
+    // 后台读取使用独立工作单元，公开调用方无需接触用户实体。
+    const entityManager = this.users.getEntityManager().fork();
+    return (
+      (await entityManager.count(User, { id, status: UserStatus.ACTIVE })) > 0
+    );
+  }
+
   public async findByEmail(email: string): Promise<User | null> {
     return this.users.findOne({ email: this.normalizeEmail(email) });
   }

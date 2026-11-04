@@ -158,3 +158,20 @@ test('系统上下文参与预算，但不会进入摘要来源', () => {
   );
   assert.equal(plan.messages[0] instanceof SystemMessage, true);
 });
+
+test('偏好先占预算，Markdown 使用剩余额度，包装和分隔符计入 512 token', () => {
+  const service = createService(8_192);
+  for (const [preferences, memory] of [
+    ['', '记忆 '.repeat(900)],
+    ['偏好 '.repeat(900), '后置文档标记'],
+    ['[偏好参考]\n宽松版型', '[Markdown参考]\n通勤 '.repeat(900)],
+    ['', ''],
+  ]) {
+    const content = service.composeLongTermContext(preferences!, memory!);
+    assert.ok(service.countTokens([{ role: 'user', content }]) <= 512);
+    if (preferences) assert.ok(content.startsWith(preferences.slice(0, 6)));
+    if (preferences!.length > 1_000) {
+      assert.equal(content.includes('后置文档标记'), false);
+    }
+  }
+});

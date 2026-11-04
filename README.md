@@ -37,7 +37,7 @@ pnpm --filter @clothes-shopping-guide/shared build
 `http://localhost:5173`，后端地址为 `http://localhost:3000`。首次启动或数据库容器
 停止后，先执行 `pnpm dev:db` 启动 PostgreSQL；该命令只负责基础设施，不会启动应用进程。
 
-`pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。`pnpm migration:fresh` 内置 `--seed`，会清空本地数据库、重跑迁移并执行默认 Seeder，只应在可重建的本地或 CI 数据库中使用。`pnpm seeder:create DatabaseSeeder` 会在 `apps/api/src/database/seeders/` 生成 Seeder 类。当前没有业务逻辑和测试用例；新增功能时应在所属包中补充测试及 `test` 脚本，并接入 CI。
+`pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。`pnpm migration:fresh` 内置 `--drop-db --seed`，会删除并重建目标数据库、重跑迁移并执行默认 Seeder，也会清理不再映射到 Entity 的旧表，只应在可重建的本地或 CI 数据库中使用。`pnpm seeder:create DatabaseSeeder` 会在 `apps/api/src/database/seeders/` 生成 Seeder 类。后端业务测试通过 `pnpm --filter @clothes-shopping-guide/api test` 执行。
 
 ## 前端
 
@@ -52,7 +52,7 @@ pnpm --filter @clothes-shopping-guide/shared build
 ```bash
 cp apps/api/.env.example apps/api/.env
 pnpm dev:db
-pnpm --filter @clothes-shopping-guide/api migration:up
+pnpm migration:fresh
 ```
 
 之后日常开发只需执行 `pnpm dev:db`（数据库未运行时）和 `pnpm dev`。`pnpm migration:fresh` 会清空数据库，仅用于明确可重建的本地或 CI 数据库。

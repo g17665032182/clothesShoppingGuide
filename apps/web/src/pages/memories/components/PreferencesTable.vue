@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Pencil, Star, Trash2 } from '@lucide/vue';
-import type { MemoryRecord } from '@/api/types/memories';
+import type { PreferenceRecord } from '@/api/types/preferences';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -15,19 +15,19 @@ import {
 } from '@/components/ui/table';
 import {
   categoryLabel,
-  formatMemoryDate,
-  formatMemorySource,
-  formatMemoryValue,
+  formatPreferenceDate,
+  formatPreferenceSource,
+  formatPreferenceValue,
 } from '../preference-display';
 
 defineProps<{
-  records: MemoryRecord[];
+  records: PreferenceRecord[];
   deletingId: string | null;
   busy: boolean;
 }>();
 
 const emit = defineEmits<{
-  edit: [record: MemoryRecord];
+  edit: [record: PreferenceRecord];
   delete: [id: string];
 }>();
 </script>
@@ -45,11 +45,11 @@ const emit = defineEmits<{
       </TableRow>
     </TableHeader>
     <TableBody>
-      <TableRow v-for="memory in records" :key="memory.id">
+      <TableRow v-for="preference in records" :key="preference.id">
         <TableCell class="py-4 pl-3 align-top sm:pl-4">
           <div class="flex flex-col items-start gap-2">
-            <span>{{ categoryLabel(memory.category) }}</span>
-            <Badge v-if="memory.isPrimary" variant="secondary">
+            <span>{{ categoryLabel(preference.category) }}</span>
+            <Badge v-if="preference.isPrimary" variant="secondary">
               <Star aria-hidden="true" data-icon="inline-start" />
               主要
             </Badge>
@@ -57,53 +57,53 @@ const emit = defineEmits<{
         </TableCell>
         <TableCell class="py-4 align-top whitespace-normal">
           <p class="break-words leading-6 [overflow-wrap:anywhere]">
-            {{ formatMemoryValue(memory) }}
+            {{ formatPreferenceValue(preference) }}
           </p>
           <div
             class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground lg:hidden"
           >
-            <span>{{ formatMemorySource(memory) }}</span>
-            <time :datetime="memory.updatedAt" class="md:hidden">{{
-              formatMemoryDate(memory.updatedAt)
+            <span>{{ formatPreferenceSource(preference) }}</span>
+            <time :datetime="preference.updatedAt" class="md:hidden">{{
+              formatPreferenceDate(preference.updatedAt)
             }}</time>
           </div>
         </TableCell>
         <TableCell
           class="hidden py-4 align-top text-muted-foreground lg:table-cell"
         >
-          {{ formatMemorySource(memory) }}
+          {{ formatPreferenceSource(preference) }}
         </TableCell>
         <TableCell
           class="hidden py-4 align-top text-muted-foreground md:table-cell"
         >
-          <time :datetime="memory.updatedAt">{{
-            formatMemoryDate(memory.updatedAt)
+          <time :datetime="preference.updatedAt">{{
+            formatPreferenceDate(preference.updatedAt)
           }}</time>
         </TableCell>
         <TableCell class="py-3 pr-3 align-top sm:pr-4">
           <div class="flex justify-end gap-1">
             <Button
-              :aria-label="`编辑${categoryLabel(memory.category)}`"
-              :title="`编辑${categoryLabel(memory.category)}`"
+              :aria-label="`编辑${categoryLabel(preference.category)}`"
+              :title="`编辑${categoryLabel(preference.category)}`"
               :disabled="busy"
               size="icon-sm"
               type="button"
               variant="ghost"
-              @click="emit('edit', memory)"
+              @click="emit('edit', preference)"
             >
               <Pencil aria-hidden="true" data-icon="inline-start" />
             </Button>
             <Button
-              :aria-label="`删除${categoryLabel(memory.category)}`"
-              :title="`删除${categoryLabel(memory.category)}`"
+              :aria-label="`删除${categoryLabel(preference.category)}`"
+              :title="`删除${categoryLabel(preference.category)}`"
               :disabled="busy"
               size="icon-sm"
               type="button"
               variant="ghost"
-              @click="emit('delete', memory.id)"
+              @click="emit('delete', preference.id)"
             >
               <Spinner
-                v-if="deletingId === memory.id"
+                v-if="deletingId === preference.id"
                 aria-hidden="true"
                 data-icon="inline-start"
               />

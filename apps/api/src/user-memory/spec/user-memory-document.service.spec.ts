@@ -7,6 +7,7 @@ import { memoryDocumentContentSchema } from '../context/memory-document.schema.j
 import { UserMemoryDocumentState } from '../entity/user-memory-document-state.entity.js';
 import { UserMemoryDocumentTaskResult } from '../entity/user-memory-document-task-result.entity.js';
 import { UserMemorySetting } from '../entity/user-memory-setting.entity.js';
+import { UserMemoryTask } from '../entity/user-memory-task.entity.js';
 import { UserMemoryDocumentService } from '../service/user-memory-document.service.js';
 
 function createFixture() {
@@ -17,6 +18,7 @@ function createFixture() {
   let enabled = true;
   let reads = 0;
   let uploads = 0;
+  let leaseValid = true;
 
   const stateRepository = {
     findOne: async ({ userId }: { userId: string }) =>
@@ -45,10 +47,17 @@ function createFixture() {
     getRepository: (entity: unknown) => unknown;
     persist: (entity: unknown) => void;
     flush: () => Promise<void>;
+    fork: () => TestManager;
+    findOne: (entity: unknown) => Promise<unknown>;
+    nativeUpdate: () => Promise<number>;
   };
   const manager: TestManager = {
     transactional: async <T>(callback: (em: TestManager) => Promise<T>) =>
       callback(manager),
+    fork: () => manager,
+    findOne: async (entity: unknown) =>
+      entity === UserMemoryTask && leaseValid ? {} : null,
+    nativeUpdate: async () => 0,
     getConnection: () => ({ execute: async () => undefined }),
     getTransactionContext: () => undefined,
     getRepository: (entity: unknown) => {
@@ -103,6 +112,9 @@ function createFixture() {
     },
     getReads: () => reads,
     getUploads: () => uploads,
+    invalidateLease: () => {
+      leaseValid = false;
+    },
   };
 }
 
@@ -184,6 +196,8 @@ test('提取操作去重、匹配唯一目标并隔离清空前的任务', async
     userId: 'a',
     taskId: 'task',
     documentGeneration: 0,
+    taskAttempts: 1,
+    taskLockedAt: new Date(),
     operations: [append, append],
   };
   await service.applyExtractedOperations(input);
@@ -224,6 +238,8 @@ test('关闭记忆和超过文档上限时不会应用提取内容', async () =>
     userId: 'a',
     taskId: 'disabled',
     documentGeneration: 0,
+    taskAttempts: 1,
+    taskLockedAt: new Date(),
     operations: [operation],
   });
   assert.equal((await service.get('a')).content, '');
@@ -236,7 +252,31 @@ test('关闭记忆和超过文档上限时不会应用提取内容', async () =>
     userId: 'a',
     taskId: 'too-large',
     documentGeneration: 0,
+    taskAttempts: 1,
+    taskLockedAt: new Date(),
     operations: [operation],
   });
   assert.equal((await service.get('a')).content.length, 32768);
+});
+
+test('过期租约不能上传对象或提交文档补丁', async () => {
+  const fixture = createFixture();
+  fixture.invalidateLease();
+  await fixture.service.applyExtractedOperations({
+    userId: 'a',
+    taskId: 'stale',
+    taskAttempts: 1,
+    taskLockedAt: new Date(),
+    documentGeneration: 0,
+    operations: [
+      {
+        operation: 'append',
+        section: 'clothing',
+        markdown: '喜欢棉质外套',
+        explicit: true,
+      },
+    ],
+  });
+  assert.equal(fixture.getUploads(), 0);
+  assert.equal(fixture.results.length, 0);
 });

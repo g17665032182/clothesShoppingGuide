@@ -1,62 +1,63 @@
-import type { MemoryCategory } from '@/api/types/memories';
+import type { PreferenceCategory } from '@/api/types/preferences';
 
 export type PreferenceOption = { value: string; label: string };
 const options = (entries: [string, string][]): PreferenceOption[] =>
   entries.map(([value, label]) => ({ value, label }));
 
-export const itemPresets: Partial<Record<MemoryCategory, PreferenceOption[]>> =
-  {
-    style: options([
-      ['minimal', '简约'],
-      ['commute', '通勤'],
-      ['street', '街头'],
-      ['casual', '休闲'],
-      ['formal', '正式'],
-      ['sporty', '运动'],
-      ['vintage', '复古'],
-      ['outdoor', '户外'],
-      ['other', '其他'],
-    ]),
-    occasion: options([
-      ['commute', '日常通勤'],
-      ['casual', '日常休闲'],
-      ['formal', '正式场合'],
-      ['outdoor', '户外活动'],
-      ['travel', '旅行出游'],
-      ['sport', '运动健身'],
-      ['home', '居家'],
-      ['party', '聚会'],
-      ['other', '其他'],
-    ]),
-    color: options([
-      ['黑色', '黑色'],
-      ['白色', '白色'],
-      ['灰色', '灰色'],
-      ['蓝色', '蓝色'],
-      ['米色', '米色'],
-      ['绿色', '绿色'],
-      ['红色', '红色'],
-      ['粉色', '粉色'],
-    ]),
-    avoidance: options([
-      ['紧身版型', '紧身版型'],
-      ['大面积印花', '大面积印花'],
-      ['荧光色', '荧光色'],
-      ['易皱面料', '易皱面料'],
-      ['不透气面料', '不透气面料'],
-      ['难打理', '难打理'],
-    ]),
-    purchase_preference: options([
-      ['quality', '品质优先'],
-      ['price', '价格优先'],
-      ['easy_care', '易打理'],
-      ['sustainable', '环保可持续'],
-      ['online', '线上购买'],
-      ['offline', '线下购买'],
-      ['durable', '耐穿耐用'],
-      ['other', '其他'],
-    ]),
-  };
+export const itemPresets: Partial<
+  Record<PreferenceCategory, PreferenceOption[]>
+> = {
+  style: options([
+    ['minimal', '简约'],
+    ['commute', '通勤'],
+    ['street', '街头'],
+    ['casual', '休闲'],
+    ['formal', '正式'],
+    ['sporty', '运动'],
+    ['vintage', '复古'],
+    ['outdoor', '户外'],
+    ['other', '其他'],
+  ]),
+  occasion: options([
+    ['commute', '日常通勤'],
+    ['casual', '日常休闲'],
+    ['formal', '正式场合'],
+    ['outdoor', '户外活动'],
+    ['travel', '旅行出游'],
+    ['sport', '运动健身'],
+    ['home', '居家'],
+    ['party', '聚会'],
+    ['other', '其他'],
+  ]),
+  color: options([
+    ['黑色', '黑色'],
+    ['白色', '白色'],
+    ['灰色', '灰色'],
+    ['蓝色', '蓝色'],
+    ['米色', '米色'],
+    ['绿色', '绿色'],
+    ['红色', '红色'],
+    ['粉色', '粉色'],
+  ]),
+  avoidance: options([
+    ['紧身版型', '紧身版型'],
+    ['大面积印花', '大面积印花'],
+    ['荧光色', '荧光色'],
+    ['易皱面料', '易皱面料'],
+    ['不透气面料', '不透气面料'],
+    ['难打理', '难打理'],
+  ]),
+  purchase_preference: options([
+    ['quality', '品质优先'],
+    ['price', '价格优先'],
+    ['easy_care', '易打理'],
+    ['sustainable', '环保可持续'],
+    ['online', '线上购买'],
+    ['offline', '线下购买'],
+    ['durable', '耐穿耐用'],
+    ['other', '其他'],
+  ]),
+};
 
 export const garmentPresets = options([
   ['top', '上装'],
@@ -116,7 +117,7 @@ export function normalizePreferenceItems(
     ),
   ];
 }
-export function itemLimit(category: MemoryCategory): number {
+export function itemLimit(category: PreferenceCategory): number {
   if (category === 'style' || category === 'occasion') return 5;
   return category === 'purchase_preference' ? 6 : 8;
 }

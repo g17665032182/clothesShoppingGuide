@@ -2,12 +2,12 @@
 
 ## 状态与审批边界
 
-- 状态：待用户确认。
+- 状态：已确认，已实施并完成受控验收。
 - 最后更新：2026-11-04。
 - 已确认：[完整拆分设计](./user-preference-memory-separation-design.md)、[偏好契约](../contracts/user-preferences-crud-contract.md)、[记忆契约](../contracts/user-memory-crud-contract.md)、[完整拆分技术文档](./user-preference-memory-separation-technical.md)。
-- 当前阶段：实施规划；本文分工、文件路径和验收项是计划，不代表已经实现。
-- 确认本文后：按文件所有权启动子代理开发，由主代理集成、执行迁移与验证并记录结果。
-- 本轮仅修改文档，不启动子代理，不修改业务代码、测试、配置或数据库。
+- 确认记录：2026-11-04 用户回复“确认实施文档”。
+- 当前阶段：交付；完成情况与验证限制见文末记录。
+- 执行范围：按文件所有权启动子代理开发，由主代理集成、执行迁移与验证并记录结果。
 
 本文沿用已确认技术方案，不重新审批路由、独立开关或数据规则。如果实施发现必须改变数据、权限、API 或迁移语义，回到对应文档说明影响后确认。
 
@@ -223,17 +223,71 @@ git diff --check
 - 共享数据库或模型服务整体不可用仍会影响两边，故障隔离测试不等同于基础设施独立。
 - 若必须改变已确认 API、授权、数据或幂等语义，暂停受影响实现，说明差异并回到对应阶段确认。
 - 若数据库目标不是已授权可销毁本地/测试库，停止 fresh；若专用 PostgreSQL 不可用，明确列为未完成验证。
-- 当前没有待确认的业务决策；本文待确认的是实施分工、顺序与验收安排。
+- 设计、技术及实施安排均已确认，没有待确认的业务决策。
 
 ## 进度与交付记录
 
 - [x] 完整拆分设计和两份 CRUD 契约已确认。
 - [x] 完整拆分技术文档已确认。
-- [ ] 本实施文档获用户确认。
-- [ ] 公开边界与基础设施准备完成。
-- [ ] 三个子代理开发、检查与所有权交接完成。
-- [ ] 主代理集成及旧混合实现移除完成。
-- [ ] 历史迁移、并发隔离和本地 fresh/Seed 验证完成。
-- [ ] 全部检查、Smoke Test 和交付记录完成。
+- [x] 本实施文档获用户确认。
+- [x] 公开边界与基础设施准备完成。
+- [x] 三个子代理开发、检查与所有权交接完成。
+- [x] 主代理集成及旧混合实现移除完成。
+- [x] 历史迁移、并发隔离和本地 fresh/Seed 验证完成。
+- [x] 全部检查、Smoke Test 和交付记录完成。
 
-交付时记录实际修改、子代理报告、依赖/配置差异、命令与结果、数据库目标类型、迁移与 Seed 证据、运行地址及剩余限制。未执行、跳过或失败的项目分别说明，禁止把本文目标写成已交付结果。
+### 实际改动
+
+- `user-preferences/` 独立拥有结构化偏好 CRUD、设置、四类 Entity、候选校验、提取、任务、调度、上下文读取、来源生命周期与测试。
+- `user-memory/` 只保留 Markdown 文档、设置、文档 generation/revision、独立任务/候选/调度、对象存储和清理；旧混合 Controller、Entity、服务及结构化校验已删除。
+- 两领域只导出公开 token 与端口。聊天通过独立 reader 和任务端口接入，消息来源由 `chat-records/extraction-source/` 叶子模块检查用户状态、消息角色与所有权。
+- 聊天上下文单边失败降级，偏好优先，包含包装的总预算不超过 512 token。聊天消息与任务仍由外层事务管理，单边可恢复 SQL 错误先回滚自己的 savepoint。
+- 前端 API、类型、两个组合式函数、开关和异步状态已独立；保留既有页面入口与文档草稿/冲突行为。
+- 新增 `Migration20261104090000` 并更新 snapshot。保留数据、旧结果及任务标识；无法精确重放的旧部分成功任务阻断迁移；有损 `down()` 明确拒绝。
+- 无新增依赖，无真实密钥或环境文件修改。统一环境文件入口与优先级，并为数据库 I/O 设置有限等待。本地 fresh 使用现有 CLI 的 `--drop-db --seed`。
+
+### 子代理交付
+
+| 开发线        | 实际交付                                            | 检查与所有权                                                                               |
+| ------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 偏好          | 独立领域、真实 Nest HTTP、任务与业务测试            | 定向测试通过；已释放所有权                                                                 |
+| Markdown 记忆 | 独立设置/文档/任务、租约与代次保护、HTTP 及调度测试 | 定向测试通过；缓存候选重试的来源校验已补回归；已释放所有权                                 |
+| 前端          | 独立 API/类型/状态、组件适配与生命周期保护          | Web 类型/构建、临时 Vue renderer/Vite SSR/Axios 行为校验通过；未安装测试框架；已释放所有权 |
+
+公共接口、迁移、模块注册及跨域集成由主代理完成。没有子代理修改包清单、锁文件或共享迁移；所有权交接后由主代理完成集成修复。
+
+### 实际验证结果
+
+| 检查                                             | 结果                                                                                                                                     |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @clothes-shopping-guide/api test` | 139 项，133 通过、6 项数据库用例默认跳过、0 失败                                                                                         |
+| 显式启用五组数据库用例后的最终 API 全套          | 139 项，138 通过、仅空库历史迁移用例跳过、0 失败；该迁移用例已独立通过                                                                   |
+| 专用库历史迁移测试                               | 显式启用后 1 项通过；两类危险部分结果均阻断并整体回滚，ID/时间/设置/结果/文档指针保留，Seed 幂等且密码匹配当前配置                       |
+| 双领域及跨域 PostgreSQL 测试                     | 显式启用后 3 项通过；四种开关、租约竞争、候选复用、清空/删除、savepoint、外层回滚、来源权限与后台 RequestContext                         |
+| 既有聊天展示/真实 HTTP 工具流 PostgreSQL 回归    | 显式启用后 2 项通过；最终 trace 绑定、公开历史、越权及故障回滚                                                                           |
+| 全应用 HTTP Smoke Test                           | 完整 AppModule + 真实数据库：Seed 管理员通过验证码夹具、密码与 JWT 登录；四种开关、关闭后人工管理、独立清理、400/401/404/409、旧路由移除 |
+| snapshot 与实际库                                | 两领域所有表的列名、可空性、索引名与外键名一致                                                                                           |
+| `pnpm migration:fresh`                           | `localhost:5432/clothes_guide` 可销毁本地库：7 个 Migration 全部通过，自动执行 DatabaseSeeder                                            |
+| API/Web 类型检查与构建、全仓格式                 | `pnpm check` 全部通过；API/Web 所属检查亦已执行                                                                                          |
+| 差异检查                                         | `git diff --check` 通过                                                                                                                  |
+| 开发服务                                         | `pnpm dev` 正常启动，后端 0 编译错误，前端入口与 API 健康检查均 200                                                                      |
+| 浏览器                                           | Chrome 确认未登录访问 `/memories` 跳转 `/login?redirect=/memories`，登录页正常渲染                                                       |
+
+专用库为 `clothes_guide_separation_test_20261104`，测试只使用本地 PostgreSQL；历史迁移测试要求新建空库，不能对同一已迁移库重复执行。显式测试命令如下（在 `apps/api` 中运行）：
+
+```bash
+RUN_SEPARATION_MIGRATION_TEST=1 PERSONALIZATION_TEST_DB=<新的专用空测试库> pnpm exec tsx --test src/database/spec/preference-separation-migration.postgres.spec.ts
+RUN_PERSONALIZATION_POSTGRES_TEST=1 PERSONALIZATION_TEST_DB=clothes_guide_separation_test_20261104 pnpm exec tsx --test src/chat-records/spec/personalization.postgres.spec.ts src/user-preferences/spec/preference-tasks.postgres.spec.ts src/user-memory/spec/user-memory-task.postgres.spec.ts
+DB_NAME=clothes_guide_separation_test_20261104 RUN_CHAT_DISPLAY_POSTGRES_SMOKE=1 pnpm exec tsx --test src/chat-records/spec/chat-stream.postgres.spec.ts src/chat-records/spec/chat-display.postgres.spec.ts
+```
+
+集成中修复了三处边界：缓存候选重试重新校验来源与用户；会话删除先取得偏好领域锁；新任务及过期任务的可领取时间与领取条件统一数据库时钟。第一次实际 fresh 发现默认清理遗漏已移除 Entity 的旧表，补充 CLI `--drop-db` 后原命令成功。合并测试初次统一覆盖 DB_NAME 触发专用库保护，恢复各用例约定的连接目标后全套通过，保护断言未放宽。
+
+### 运行地址与限制
+
+- 前端：`http://localhost:5173`；API：`http://localhost:3000`；Swagger：`http://localhost:3000/api/docs`。
+- fresh 已清空原本地数据及登录会话，管理员按当前环境配置重新 Seed；既有浏览器需要重新登录。
+- 未将真实模型调用、七牛非空文档上传/下载/删除或生产升级列为验收通过；自动化对外部能力使用受控模型/存储替身。
+- 登录后的完整浏览器交互和移动端视觉未在本轮实际回归。前端独立请求、过期响应、取消、草稿及冲突已有临时 renderer/SSR/Axios 行为验证；不等同于真实浏览器端到端验收。
+- 两领域仍共享数据库和模型基础设施；共享服务整体故障不具备基础设施级隔离。历史线上升级须停旧 worker、排空部分成功任务并做一致备份。
+- 未提交 Git commit，保留工作区改动供审阅。

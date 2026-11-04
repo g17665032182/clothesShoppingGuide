@@ -1,21 +1,28 @@
-import type { MemoryCategory, MemoryRecord } from '@/api/types/memories';
+import type {
+  PreferenceCategory,
+  PreferenceRecord,
+} from '@/api/types/preferences';
 import { itemPresets, presetLabel } from './preference-options';
 
-export const memoryCategories: Array<{ value: MemoryCategory; label: string }> =
-  [
-    { value: 'size', label: '服装尺码' },
-    { value: 'shoe_size', label: '鞋码' },
-    { value: 'fit', label: '版型' },
-    { value: 'style', label: '风格' },
-    { value: 'color', label: '颜色' },
-    { value: 'occasion', label: '穿着场景' },
-    { value: 'budget', label: '预算' },
-    { value: 'avoidance', label: '避开偏好' },
-    { value: 'purchase_preference', label: '购买偏好' },
-  ];
+export const preferenceCategories: Array<{
+  value: PreferenceCategory;
+  label: string;
+}> = [
+  { value: 'size', label: '服装尺码' },
+  { value: 'shoe_size', label: '鞋码' },
+  { value: 'fit', label: '版型' },
+  { value: 'style', label: '风格' },
+  { value: 'color', label: '颜色' },
+  { value: 'occasion', label: '穿着场景' },
+  { value: 'budget', label: '预算' },
+  { value: 'avoidance', label: '避开偏好' },
+  { value: 'purchase_preference', label: '购买偏好' },
+];
 
-export function categoryLabel(category: MemoryCategory): string {
-  return memoryCategories.find((item) => item.value === category)?.label ?? '';
+export function categoryLabel(category: PreferenceCategory): string {
+  return (
+    preferenceCategories.find((item) => item.value === category)?.label ?? ''
+  );
 }
 
 const garmentLabels: Record<string, string> = {
@@ -44,11 +51,11 @@ const systemLabels: Record<string, string> = {
   OTHER: '其他尺码',
 };
 
-export function formatMemoryValue(memory: MemoryRecord): string {
-  const value = memory.value as Record<string, unknown>;
+export function formatPreferenceValue(preference: PreferenceRecord): string {
+  const value = preference.value as Record<string, unknown>;
   const system =
     systemLabels[String(value.system)] ?? String(value.system ?? '');
-  switch (memory.category) {
+  switch (preference.category) {
     case 'size':
       return [
         garmentLabels[String(value.garment)] ?? value.garment,
@@ -89,25 +96,25 @@ export function formatMemoryValue(memory: MemoryRecord): string {
       const items = Array.isArray(value.items)
         ? value.items
             .map((item) =>
-              presetLabel(String(item), itemPresets[memory.category] ?? []),
+              presetLabel(String(item), itemPresets[preference.category] ?? []),
             )
             .join('、')
         : '';
-      return memory.category === 'color'
+      return preference.category === 'color'
         ? `${value.mode === 'avoid' ? '避免' : '喜欢'} · ${items}`
         : items;
     }
   }
 }
 
-export function formatMemorySource(memory: MemoryRecord): string {
-  if (!memory.source) return '手动添加';
-  if (memory.source.status === 'deleted') return '原聊天已删除';
-  if (memory.source.status === 'unavailable') return '来源不可用';
+export function formatPreferenceSource(preference: PreferenceRecord): string {
+  if (!preference.source) return '手动添加';
+  if (preference.source.status === 'deleted') return '原聊天已删除';
+  if (preference.source.status === 'unavailable') return '来源不可用';
   return '聊天提取';
 }
 
-export function formatMemoryDate(date: string): string {
+export function formatPreferenceDate(date: string): string {
   return new Date(date).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',

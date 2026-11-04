@@ -7,6 +7,7 @@ import {
   PrimaryKey,
   Property,
 } from '@mikro-orm/decorators/legacy';
+import type { MemoryDocumentOperation } from '../context/memory-document-patch.schema.js';
 
 export enum UserMemoryTaskStatus {
   PENDING = 'pending',
@@ -42,6 +43,10 @@ export class UserMemoryTask {
 
   @Property({ type: 'integer', fieldName: 'document_generation', default: 0 })
   public documentGeneration = 0;
+
+  // 只缓存通过领域校验的补丁，保证重试复用同一批操作。
+  @Property({ type: 'json', fieldName: 'candidate_operations', nullable: true })
+  public candidateOperations: MemoryDocumentOperation[] | null = null;
 
   @Property({
     type: 'string',

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import type { EntityManager } from '@mikro-orm/core';
+import { Inject } from '@nestjs/common';
+import { MikroORM, RequestContext, type EntityManager } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 
@@ -19,21 +20,27 @@ export class UserMemoryDocumentCleanupService
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private marker: string | undefined;
+  private stopped = false;
+  private work: Promise<void> | undefined;
+  private nextFailureLogAt = 0;
 
   public constructor(
     @InjectRepository(UserMemoryDocumentCleanup)
     private readonly cleanups: EntityRepository<UserMemoryDocumentCleanup>,
     private readonly store: UserMemoryDocumentStoreService,
+    @Inject(MikroORM) private readonly orm: MikroORM,
   ) {}
 
   public onModuleInit(): void {
-    this.timer = setInterval(() => void this.poll(), RETRY_DELAY_MS);
+    this.timer = setInterval(() => this.startPoll(), RETRY_DELAY_MS);
     this.timer.unref();
-    void this.poll();
+    this.startPoll();
   }
 
-  public onModuleDestroy(): void {
+  public async onModuleDestroy(): Promise<void> {
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    await this.work;
   }
 
   public async trackUploaded(userId: string, objectKey: string): Promise<void> {
@@ -83,6 +90,7 @@ export class UserMemoryDocumentCleanupService
     );
 
     for (const cleanup of due) {
+      if (this.stopped) return;
       try {
         const current = await states.findOne({ objectKey: cleanup.objectKey });
         if (current) {
@@ -95,9 +103,18 @@ export class UserMemoryDocumentCleanupService
         cleanup.attempts += 1;
         cleanup.nextAttemptAt = new Date(Date.now() + RETRY_DELAY_MS);
         await em.flush();
-        this.logger.warn('用户记忆对象清理失败，将稍后重试');
+        this.logFailure();
       }
     }
+  }
+
+  private startPoll(): void {
+    if (this.stopped || this.work) return;
+    this.work = RequestContext.create(this.orm.em, () => this.poll()).finally(
+      () => {
+        this.work = undefined;
+      },
+    );
   }
 
   private async poll(): Promise<void> {
@@ -109,6 +126,7 @@ export class UserMemoryDocumentCleanupService
       const page = await this.store.listObjects(this.marker);
       const em = this.cleanups.getEntityManager().fork();
       for (const object of page.items) {
+        if (this.stopped) return;
         if (object.uploadedAt.getTime() > Date.now() - CLEANUP_DELAY_MS)
           continue;
         const referenced = await em.findOne(UserMemoryDocumentState, {
@@ -122,10 +140,17 @@ export class UserMemoryDocumentCleanupService
         }
       }
       this.marker = page.marker;
+      this.nextFailureLogAt = 0;
     } catch {
-      this.logger.warn('用户记忆对象清理巡检失败，将稍后重试');
+      this.logFailure();
     } finally {
       this.running = false;
     }
+  }
+
+  private logFailure(): void {
+    if (Date.now() < this.nextFailureLogAt) return;
+    this.nextFailureLogAt = Date.now() + 30_000;
+    this.logger.warn('用户记忆对象清理失败 (CLEANUP_UNAVAILABLE)');
   }
 }

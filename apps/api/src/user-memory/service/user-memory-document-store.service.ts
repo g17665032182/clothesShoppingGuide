@@ -13,7 +13,10 @@ const UNAVAILABLE = '记忆文档存储暂不可用';
 
 @Injectable()
 export class UserMemoryDocumentStoreService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    // 七牛上传默认等待十分钟；通过 SDK 公开配置收紧实际网络超时。
+    qiniu.conf.RPC_TIMEOUT = 10_000;
+  }
 
   async putRevision(
     userId: string,

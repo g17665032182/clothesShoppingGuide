@@ -2,12 +2,12 @@
 
 ## 状态与审批边界
 
-- 状态：已确认，实施规划中。
+- 状态：已确认，已实施并完成受控验收。
 - 最后更新：2026-11-04。
 - 已确认：[完整拆分设计](./user-preference-memory-separation-design.md)、[偏好契约](../contracts/user-preferences-crud-contract.md)、[记忆契约](../contracts/user-memory-crud-contract.md)。
 - 确认记录：2026-11-04 用户回复“确认”，批准本文技术方案。
-- 当前阶段：实施规划；本文件中的目录、接口和 SQL 规则是实施目标，不是已经完成的改动。
-- 下一阶段：仅编写 [拆分实施文档](./user-preference-memory-separation-implementation.md)；实施文档确认后才能修改代码、配置、测试和 Migration。
+- 当前阶段：已按确认的实施文档完成开发、集成、迁移和受控验收。
+- 交付依据：[拆分实施文档](./user-preference-memory-separation-implementation.md) 的进度与交付记录，包括实际检查及未验证事项。
 - 原 `user-memory-technical.md`、`user-memory-implementation.md` 仅记录历史混合方案，不作为本次实施依据。
 
 ## 技术目标与现有能力
@@ -101,11 +101,11 @@ apps/api/src/
 
 ### 领域公开能力
 
-| 能力         | 偏好公开入口                                  | 记忆公开入口                          |
-| ------------ | --------------------------------------------- | ------------------------------------- |
-| 读取上下文   | `readContext(userId, currentMessage)`         | `readContext(userId, currentMessage)` |
-| 登记任务     | `enqueueInTransaction(em, input)`             | `enqueueInTransaction(em, input)`     |
-| 来源会话通知 | `markConversationDeleted(em, conversationId)` | 不提供无实际用途的通知方法            |
+| 能力         | 偏好公开入口                                          | 记忆公开入口                          |
+| ------------ | ----------------------------------------------------- | ------------------------------------- |
+| 读取上下文   | `readContext(userId, currentMessage)`                 | `readContext(userId, currentMessage)` |
+| 登记任务     | `enqueueInTransaction(em, input)`                     | `enqueueInTransaction(em, input)`     |
+| 来源会话通知 | `markConversationDeleted(em, conversationId, userId)` | 不提供无实际用途的通知方法            |
 
 两个端口的 input 在所属模块单独定义，字段均为 userId、conversationId、userMessageId、assistantMessageId；不传入另一个领域 Entity。EM 是数据库基础设施类型，不能借此操作对方表。
 
@@ -277,10 +277,10 @@ apps/api/src/
 
 ### 本地 fresh 与环境文件
 
-- 按用户已确认的日常约定，本地重建使用 `pnpm migration:fresh`，自动执行 Seed，不改回 migration:up 作为日常命令。
+- 按用户已确认的日常约定，本地重建使用 `pnpm migration:fresh`，通过 CLI 的 `--drop-db --seed` 完整重建目标库并自动执行 Seed，不改回 migration:up 作为日常命令。删除旧 Entity 后，默认仅清理当前实体表会遗留旧表，因此需要完整重建。
 - 迁移兼容性测试通过 Migrator 程序化应用到专用测试库，不在用户库做保留数据实验。
-- 现有 ConfigModule 读取 .env.dev/.env，ORM CLI 当前仅导入 dotenv/config，可能得到不同配置。
-- 实施时统一一个基础设施环境加载入口，按进程环境 > .env.dev > .env 的相同规则供 Nest 与 ORM/Seed 使用；不能把 shell source 和默认账号当作配置加载实现。
+- 拆分前 ConfigModule 与 ORM CLI 使用不同的环境文件入口，可能得到不同配置。
+- 已通过 `common/config/environment.ts` 统一基础设施环境加载入口，按进程环境 > .env.dev > .env 的相同规则供 Nest 与 ORM/Seed 使用；不依赖 shell source。
 - 保持现有管理员 Seed 幂等，不重置已存在账号密码；增加测试确认 fresh 后管理员存在且密码匹配当前配置。
 - 所有新示例只放占位值，不输出密码、连接串或真实七牛密钥。
 
@@ -405,7 +405,7 @@ pnpm check
 git diff --check
 ```
 
-数据库类测试需显式指向专用测试库；本地重建仅在实施阶段执行 `pnpm migration:fresh`。当前实施规划阶段只运行文档格式和差异检查。
+数据库类测试显式指向专用测试库；本地重建已在授权的可销毁数据库执行 `pnpm migration:fresh`。实际结果见实施文档交付记录。
 
 ## 技术决策与剩余限制
 
@@ -413,4 +413,4 @@ git diff --check
 2. 旧部分成功且可重试任务必须先排空，Migration 遇到它们会中止。
 3. 两类状态发布后不能无损自动合回旧单开关/单任务，回退依赖一致备份。
 4. 独立任务共享数据库与模型服务，无法保证共享基础设施整体故障时任一业务仍可写入。
-5. 实施阶段应按新文档分配文件所有权；本文件不代替后续实施计划，也不启动子代理开发。
+5. 已按实施文档完成子代理分工和主代理集成；真实模型、七牛非空文档往返及登录后的完整浏览器交互仍未作为本轮验收通过项。
