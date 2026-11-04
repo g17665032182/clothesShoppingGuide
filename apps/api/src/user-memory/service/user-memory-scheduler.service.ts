@@ -5,6 +5,13 @@ import { MEMORY_TASK_POLL_INTERVAL_MS } from '../task/memory-task-claim.js';
 import { UserMemoryExtractorService } from './user-memory-extractor.service.js';
 import { UserMemoryTaskService } from './user-memory-task.service.js';
 
+const FAILURE_LOG_INTERVAL_MS = 30_000;
+
+type SchedulerError = Error & {
+  code?: unknown;
+  sqlState?: unknown;
+};
+
 @Injectable()
 export class UserMemorySchedulerService
   implements OnModuleInit, OnModuleDestroy
@@ -13,6 +20,7 @@ export class UserMemorySchedulerService
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private stopped = false;
+  private nextFailureLogAt = 0;
 
   public constructor(
     private readonly tasks: UserMemoryTaskService,
@@ -22,8 +30,8 @@ export class UserMemorySchedulerService
   public async onModuleInit(): Promise<void> {
     try {
       await this.tasks.recoverExpiredProcessing();
-    } catch {
-      this.logger.error('用户记忆任务超时恢复失败');
+    } catch (error) {
+      this.logFailure('用户记忆任务超时恢复失败', error);
     }
     this.timer = setInterval(() => {
       void this.poll();
@@ -54,10 +62,33 @@ export class UserMemorySchedulerService
           );
         }
       }
-    } catch {
-      this.logger.error('用户记忆任务轮询失败');
+    } catch (error) {
+      this.logFailure('用户记忆任务轮询失败', error);
     } finally {
       this.running = false;
     }
+  }
+
+  private logFailure(message: string, error: unknown): void {
+    const now = Date.now();
+    if (now < this.nextFailureLogAt) return;
+
+    // 数据库不可用时任务会持续轮询，节流日志但保留首条错误码供定位。
+    this.nextFailureLogAt = now + FAILURE_LOG_INTERVAL_MS;
+    if (error instanceof Error) {
+      const detail = error as SchedulerError;
+      const code =
+        typeof detail.code === 'string'
+          ? detail.code
+          : typeof detail.sqlState === 'string'
+            ? detail.sqlState
+            : undefined;
+      this.logger.error(
+        `${message}${code ? ` (${code})` : ''}: ${error.message}`,
+      );
+      return;
+    }
+
+    this.logger.error(`${message}: ${String(error)}`);
   }
 }
