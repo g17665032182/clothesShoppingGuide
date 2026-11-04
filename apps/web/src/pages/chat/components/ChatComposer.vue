@@ -46,7 +46,7 @@ const emit = defineEmits<{
         <InputGroupButton
           v-if="isSending"
           aria-label="停止生成"
-          class="ml-auto shrink-0"
+          class="ml-auto shrink-0 justify-center has-data-[icon=inline-start]:pl-0"
           size="icon-sm"
           title="停止生成"
           type="button"
