@@ -1,5 +1,9 @@
 # 用户长期记忆实施文档
 
+## 完整拆分修订说明（2026-11-04）
+
+本文件记录此前混合方案的实施与交付，不作为本次完整拆分的开发计划。[完整拆分设计](./user-preference-memory-separation-design.md)、独立契约和 [拆分技术文档](./user-preference-memory-separation-technical.md) 已确认，当前 [拆分实施文档](./user-preference-memory-separation-implementation.md) 待确认。新的实施文档确认后才进入本次代码修改；旧文件所有权和共用模块方案不直接沿用。
+
 ## 状态与审批边界
 
 - 状态：已确认，实施中
