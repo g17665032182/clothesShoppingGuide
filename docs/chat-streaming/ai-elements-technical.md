@@ -30,10 +30,14 @@
 apps/web/src/
   api/types/chat.ts                    请求、响应及公开事件类型
   api/modules/chat.ts                  Axios 调用、分页、SSE 解析
+  stores/chat/
+    index.ts                            跨路由会话与生成任务
+    history.ts                          分页历史、终态核实及持久化合并
+    session.ts                          会话和本轮状态模型
+    turn.ts                             本轮事件合并、终态处理和视图映射
   pages/chat/
     index.vue                          页面组合与基础绑定
-    page.ts                            会话、生成、取消、恢复状态
-    chat-turn.ts                       本轮事件合并、终态处理和视图映射
+    page.ts                            页面草稿与展示事件协调
     components/
       ChatMessageList.vue              Message Scroller 与消息排列
       ChatAssistantMessage.vue         执行过程、正文、来源、用时组合
@@ -44,6 +48,7 @@ apps/web/src/
       ChatComposer.vue                 Input Group、发送、停止
       ChatContextUsage.vue             Context 入口及浮层
       ChatContextDetails.vue           Hover Card/Popover 共用的用量内容
+      ChatHistoryNavigation.vue        会话导航与局部交互
   components/ui/                       CLI 引入的基础组件
 
 apps/api/src/
@@ -62,7 +67,7 @@ apps/api/src/
     spec/                              所属模块测试
 ```
 
-只在存在对应职责时创建文件。基础 UI 不复制到页面目录；现有侧栏、标题、MarkdownRenderer 保留职责。`chat-turn.ts` 只处理页面数据，不执行请求。
+只在存在对应职责时创建文件。基础 UI 不复制到页面目录；现有侧栏、标题、MarkdownRenderer 保留职责。`stores/chat/turn.ts` 只处理消息快照，不执行请求；聊天页面草稿仍为页面局部状态。
 
 依赖方向为 `chat-records -> LlmService`。LLM 运行类型由 LLM 模块自己的公开入口导出；公开展示投影属于 chat-records。禁止 LLM 导入 chat-records 的 Entity、Repository 或展示 DTO，也不将整个 Graph state 发往前端。
 
@@ -265,7 +270,7 @@ display reader 使用 EntityManager/Repository，限定 conversationId、eventTy
 - 服务端事务可能已提交而 done 未送达，使用 start 会话 ID 刷新核实。发现新增已保存消息可恢复正式历史；未发现消息不能证明事务已经停止，继续保持待核实并允许再次只读刷新。
 - 缺少运行状态接口时不能承诺自动判定“确定未保存”；若后续要求自动解除待核实状态，须回到设计确认新能力。本期不增加轮询、后台重发或新状态路由。
 
-新建、切换、删除及卸载均使旧请求失效。取消或未知状态以会话为归属保存于页面作用域，不能因切换回来把旧流重新认为成功。保持已有路由认证行为，不新增全局 Store 或重复鉴权跳转。
+2026-11-05 更新：生成任务和会话缓存迁入 `src/stores/chat/` Pinia Store；原 `pages/chat/chat-turn.ts` 迁至 `stores/chat/turn.ts`，页面仅维护草稿和展示绑定。新建、切换会话及站内路由卸载不取消生成，每个任务只更新所属会话；生成中的会话禁止删除。主动停止和真实断流仍保留未知状态，退出登录、认证身份变化或应用销毁清理全部任务。详见[后台生成说明](./background-generation.md)，继续复用既有路由鉴权。
 
 ## 请求 Schema、HTTP 错误与 Swagger
 

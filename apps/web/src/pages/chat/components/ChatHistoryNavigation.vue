@@ -21,9 +21,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import type { Conversation } from '@/api/types/chat';
 
-// 提供可复用的会话导航，并通过事件把操作交回所属页面。
+// 聊天页私有导航只展示会话状态，通过事件把操作交回所属页面。
 defineProps<{
   activeConversationId: string | null;
   conversations: Conversation[];
@@ -32,6 +33,7 @@ defineProps<{
   isLoadingMoreConversations: boolean;
   deletingConversationId: string | null;
   canDeleteConversations: boolean;
+  generatingConversationIds: string[];
 }>();
 
 const emit = defineEmits<{
@@ -131,7 +133,11 @@ function handleConversationScroll(event: Event) {
           class="group flex min-w-0 items-center gap-1"
         >
           <button
-            :aria-label="conversation.title"
+            :aria-label="
+              generatingConversationIds.includes(conversation.id)
+                ? `${conversation.title}，正在生成回复`
+                : conversation.title
+            "
             :aria-current="
               conversation.id === activeConversationId ? 'page' : undefined
             "
@@ -148,8 +154,13 @@ function handleConversationScroll(event: Event) {
             type="button"
             @click="emit('select', conversation.id)"
           >
+            <Spinner
+              v-if="generatingConversationIds.includes(conversation.id)"
+              aria-label="正在生成回复"
+              class="size-[18px] shrink-0"
+            />
             <MessageSquare
-              v-if="!isCollapsed"
+              v-else-if="!isCollapsed"
               aria-hidden="true"
               class="size-[18px] shrink-0"
             />
@@ -169,7 +180,8 @@ function handleConversationScroll(event: Event) {
             :aria-label="`删除会话：${conversation.title}`"
             :disabled="
               !canDeleteConversations ||
-              deletingConversationId === conversation.id
+              deletingConversationId === conversation.id ||
+              generatingConversationIds.includes(conversation.id)
             "
             :title="
               deletingConversationId === conversation.id

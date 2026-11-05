@@ -17,6 +17,7 @@ const {
   conversationListError,
   conversationListStatus,
   deletingConversationId,
+  generatingConversationIds,
   draft,
   hasActiveConversation,
   handleKeydown,
@@ -54,6 +55,7 @@ const {
       :conversation-list-error="conversationListError"
       :conversation-list-status="conversationListStatus"
       :deleting-conversation-id="deletingConversationId"
+      :generating-conversation-ids="generatingConversationIds"
       :is-loading-more-conversations="isLoadingMoreConversations"
       @delete="removeConversation"
       @load-more="loadMoreConversations"
