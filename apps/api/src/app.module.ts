@@ -20,6 +20,15 @@ import { UserPreferencesModule } from './user-preferences/index.js';
       isGlobal: true,
       cache: true,
       ignoreEnvFile: true,
+      validate: (config: Record<string, unknown>) => {
+        const cursorSecret = config.PRODUCT_QUERY_CURSOR_SECRET;
+        if (typeof cursorSecret !== 'string' || cursorSecret.length < 32) {
+          throw new Error(
+            'PRODUCT_QUERY_CURSOR_SECRET 必须配置为至少 32 字符的随机密钥',
+          );
+        }
+        return config;
+      },
     }),
     LoggingModule,
     MikroOrmModule.forRoot(mikroOrmConfig),

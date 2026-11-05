@@ -194,6 +194,7 @@ test(
           await preferenceTasks.enqueueInTransaction(transaction, input);
         },
       },
+      {} as never,
     );
     const chat = () =>
       service.chat(owner, {

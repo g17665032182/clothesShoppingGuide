@@ -19,6 +19,7 @@
     "migration:down": "pnpm build && mikro-orm migration:down --config ./dist/mikro-orm.config.js",
     "migration:fresh": "pnpm build && mikro-orm migration:fresh --config ./dist/mikro-orm.config.js --drop-db --seed",
     "seeder:create": "pnpm build && node ./scripts/seeder-create.mjs",
+    "catalog:import": "tsx src/scripts/import-product-catalog.ts",
     "seed": "pnpm build && mikro-orm seeder:run --config ./dist/mikro-orm.config.js"
   },
   "dependencies": {

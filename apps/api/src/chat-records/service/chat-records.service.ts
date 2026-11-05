@@ -51,6 +51,8 @@ import type {
   ChatDisplayEvent,
 } from '../display/chat-display.types.js';
 import type { LlmEventStreamResult } from '../../llm/stream/llm-stream.types.js';
+import { ProductCatalogService } from '../../product-catalog/index.js';
+import { createProductSearchTool } from '../../product-catalog/tool/product-search.tool.js';
 
 export type Page<T> = {
   items: T[];
@@ -149,6 +151,7 @@ export class ChatRecordsService {
     private readonly preferenceReader: UserPreferencesReader,
     @Inject(USER_PREFERENCES_TASKS)
     private readonly preferenceTasks: UserPreferencesTasks,
+    private readonly productCatalog: ProductCatalogService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -159,6 +162,7 @@ export class ChatRecordsService {
         messages: prepared.plan.messages,
       },
       this.traceContext(prepared),
+      [createProductSearchTool(this.productCatalog)],
     );
     await this.persistChat(prepared, result);
 
@@ -203,6 +207,7 @@ export class ChatRecordsService {
         { messages: prepared.plan.messages },
         signal,
         this.traceContext(prepared, signal),
+        [createProductSearchTool(this.productCatalog)],
       );
       let result: LlmEventStreamResult | undefined;
       try {
@@ -646,6 +651,7 @@ export class ChatRecordsService {
       createdAt: message.createdAt.toISOString(),
       activities: [],
       sources: [],
+      productResults: [],
       context: null,
     };
   }

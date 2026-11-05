@@ -149,6 +149,7 @@ function createService(
     displayService,
     preferenceReader as never,
     memoryTasks as never,
+    {} as never,
   );
 
   return { service, persisted, removed, modelInputs, bindings, contextInputs };

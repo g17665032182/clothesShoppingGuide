@@ -4,6 +4,7 @@ import type {
   ChatActivity,
   ChatContextUsage,
   ChatConversationDetail,
+  ChatProductResults,
   ChatRequest,
   ChatStreamEvent,
   ChatSource,
@@ -44,6 +45,9 @@ export async function getConversation(
         ...message,
         activities: isActivities(message.activities) ? message.activities : [],
         sources: isSources(message.sources) ? message.sources : [],
+        productResults: isProductResults(message.productResults)
+          ? message.productResults
+          : [],
         context: isContext(message.context) ? message.context : null,
       })),
     },
@@ -74,9 +78,15 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
   }
   if (!eventName || dataLines.length === 0) return null;
   if (
-    !['start', 'delta', 'activity', 'sources', 'done', 'error'].includes(
-      eventName,
-    )
+    ![
+      'start',
+      'delta',
+      'activity',
+      'sources',
+      'product-results',
+      'done',
+      'error',
+    ].includes(eventName)
   )
     return null;
 
@@ -111,6 +121,18 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
   }
   if (eventName === 'sources' && isRecord(data) && isSources(data.sources)) {
     return { type: 'sources', sources: data.sources };
+  }
+  if (
+    eventName === 'product-results' &&
+    isRecord(data) &&
+    isProductResults([data.results]) &&
+    isToolActivity(data.activity)
+  ) {
+    return {
+      type: 'product-results',
+      results: data.results as ChatProductResults,
+      activity: data.activity,
+    };
   }
   if (eventName === 'delta' && isRecord(data)) {
     if (!hasString(data, 'content')) {
@@ -261,6 +283,53 @@ function isContext(value: unknown): value is ChatContextUsage {
     : value.usedTokens === null;
 }
 
+function isProductResults(value: unknown): value is ChatProductResults[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((result) => {
+    if (
+      !isRecord(result) ||
+      !Array.isArray(result.items) ||
+      result.items.length > 20 ||
+      (result.nextCursor !== null && typeof result.nextCursor !== 'string') ||
+      ![
+        null,
+        'NO_MATCHING_SIZE',
+        'OVER_BUDGET',
+        'OUT_OF_STOCK',
+        'NO_MATCHING_PRODUCT',
+      ].includes(result.noResultReason as null | string)
+    )
+      return false;
+    return result.items.every((item) => {
+      if (
+        !isRecord(item) ||
+        !hasString(item, 'externalId') ||
+        !hasString(item, 'name') ||
+        !hasString(item, 'category') ||
+        !['tops', 'bottoms', 'dresses', 'outerwear', 'shoes'].includes(
+          item.category,
+        ) ||
+        !(item.brand === null || typeof item.brand === 'string') ||
+        !(item.description === null || typeof item.description === 'string') ||
+        !(item.imageUrl === null || typeof item.imageUrl === 'string') ||
+        !(item.productUrl === null || typeof item.productUrl === 'string') ||
+        !hasString(item, 'price') ||
+        !/^\d{1,10}\.\d{2}$/u.test(item.price) ||
+        item.currency !== 'CNY' ||
+        !Array.isArray(item.sizes) ||
+        !item.sizes.every((size) => typeof size === 'string') ||
+        !Array.isArray(item.colors) ||
+        !item.colors.every((color) => typeof color === 'string') ||
+        typeof item.inStock !== 'boolean' ||
+        !Array.isArray(item.matchReasons) ||
+        !item.matchReasons.every((reason) => typeof reason === 'string')
+      )
+        return false;
+      return true;
+    });
+  });
+}
+
 function isJson(value: unknown, depth = 0): value is JsonValue {
   if (depth > 20) return false;
   if (value === null || typeof value === 'string' || typeof value === 'boolean')
@@ -288,6 +357,12 @@ function isActivity(value: unknown): value is ChatActivity {
     isJson(value.input) &&
     (value.output === null || typeof value.output === 'string')
   );
+}
+
+function isToolActivity(
+  value: unknown,
+): value is Extract<ChatActivity, { type: 'tool' }> {
+  return isActivity(value) && value.type === 'tool';
 }
 
 function isActivities(value: unknown): value is ChatActivity[] {

@@ -28,6 +28,13 @@ export function useChatPage() {
     void chat.sendMessage(content);
   }
 
+  function loadMoreProducts() {
+    if (!chat.canSubmit) return;
+    void chat.sendMessage(
+      '请继续展示上一轮商品搜索的下一页商品，使用上一轮工具结果中的分页游标，并遵守原有筛选条件。',
+    );
+  }
+
   function selectConversation(id: string) {
     draft.value = '';
     return chat.selectConversation(id, id === chat.activeConversationId);
@@ -65,6 +72,7 @@ export function useChatPage() {
     canSend,
     handleKeydown,
     sendMessage,
+    loadMoreProducts,
     selectConversation,
     startNewConversation,
     loadConversations: chat.loadConversations,

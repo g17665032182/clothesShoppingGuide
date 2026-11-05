@@ -16,6 +16,33 @@ export type ChatActivity =
 
 export type ChatSource = { id: string; title: string; url: string };
 
+export type ChatProductCard = {
+  externalId: string;
+  name: string;
+  brand: string | null;
+  category: 'tops' | 'bottoms' | 'dresses' | 'outerwear' | 'shoes';
+  description: string | null;
+  imageUrl: string | null;
+  productUrl: string | null;
+  price: string;
+  currency: 'CNY';
+  sizes: string[];
+  colors: string[];
+  inStock: boolean;
+  matchReasons: string[];
+};
+
+export type ChatProductResults = {
+  items: ChatProductCard[];
+  nextCursor: string | null;
+  noResultReason:
+    | 'NO_MATCHING_SIZE'
+    | 'OVER_BUDGET'
+    | 'OUT_OF_STOCK'
+    | 'NO_MATCHING_PRODUCT'
+    | null;
+};
+
 export type ChatContextUsage = {
   contextWindowTokens: number;
   inputTokens: number | null;
@@ -37,6 +64,7 @@ export interface ChatMessage {
   duration?: string;
   activities: ChatActivity[];
   sources: ChatSource[];
+  productResults: ChatProductResults[];
   context: ChatContextUsage | null;
   status: ChatTurnStatus;
 }
@@ -60,6 +88,7 @@ export interface ChatApiMessage {
   createdAt: string;
   activities?: ChatActivity[];
   sources?: ChatSource[];
+  productResults?: ChatProductResults[];
   context?: ChatContextUsage | null;
 }
 
@@ -118,6 +147,11 @@ export type ChatStreamEvent =
     }
   | { type: 'activity'; activity: ChatActivity }
   | { type: 'sources'; sources: ChatSource[] }
+  | {
+      type: 'product-results';
+      results: ChatProductResults;
+      activity: Extract<ChatActivity, { type: 'tool' }>;
+    }
   | {
       type: 'error';
       message: string;

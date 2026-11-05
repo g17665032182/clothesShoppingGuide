@@ -13,6 +13,7 @@ export function toChatMessage(message: ChatApiMessage): ChatMessage {
     createdAt: message.createdAt,
     activities: message.activities ?? [],
     sources: message.sources ?? [],
+    productResults: message.productResults ?? [],
     context: message.context ?? null,
     status: 'saved',
   };
@@ -30,6 +31,7 @@ export function createPendingMessage(
     createdAt: new Date().toISOString(),
     activities: [],
     sources: [],
+    productResults: [],
     context: null,
     status: 'submitted',
   };
@@ -48,6 +50,14 @@ export function applyTurnEvent(
     else message.activities[index] = event.activity;
   }
   if (event.type === 'sources') message.sources = event.sources;
+  if (event.type === 'product-results') {
+    message.productResults.push(event.results);
+    const index = message.activities.findIndex(
+      (item) => item.id === event.activity.id,
+    );
+    if (index < 0) message.activities.push(event.activity);
+    else message.activities[index] = event.activity;
+  }
   if (event.type === 'done') {
     message.context = event.context ?? null;
     finishTurn(message, 'saved');

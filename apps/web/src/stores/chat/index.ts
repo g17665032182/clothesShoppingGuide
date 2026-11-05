@@ -394,6 +394,7 @@ export const useChatStore = defineStore('chat', () => {
       ...task.assistant,
       activities: [...task.assistant.activities],
       sources: [...task.assistant.sources],
+      productResults: [...task.assistant.productResults],
     };
     task.user = { ...task.user };
     updateSession(key, {

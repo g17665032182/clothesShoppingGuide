@@ -8,6 +8,7 @@ import type {
   ChatActivity,
   ChatContextUsage,
   ChatDisplayData,
+  ChatProductResults,
   ChatSource,
   PublicDisplayEnvelope,
 } from './chat-display.types.js';
@@ -30,6 +31,49 @@ const activitySchema = z.discriminatedUnion('type', [
   }),
 ]);
 
+const productCardSchema = z.strictObject({
+  externalId: z.string().min(1).max(160),
+  name: z.string().min(1).max(200),
+  brand: z.string().max(100).nullable(),
+  category: z.enum(['tops', 'bottoms', 'dresses', 'outerwear', 'shoes']),
+  description: z.string().max(2000).nullable(),
+  imageUrl: z.string().max(2048).nullable(),
+  productUrl: z.string().max(2048).nullable(),
+  price: z.string().regex(/^\d{1,10}\.\d{2}$/u),
+  currency: z.literal('CNY'),
+  sizes: z.array(z.string().max(32)).max(100),
+  colors: z.array(z.string().max(32)).max(100),
+  inStock: z.boolean(),
+  matchReasons: z
+    .array(
+      z.enum([
+        'category_match',
+        'size_match',
+        'budget_match',
+        'stock_available',
+        'color_match',
+        'style_match',
+        'occasion_match',
+        'fit_match',
+        'preference_match',
+      ]),
+    )
+    .max(9),
+});
+
+const productResultsSchema = z.strictObject({
+  items: z.array(productCardSchema).max(20),
+  nextCursor: z.string().max(4096).nullable(),
+  noResultReason: z
+    .enum([
+      'NO_MATCHING_SIZE',
+      'OVER_BUDGET',
+      'OUT_OF_STOCK',
+      'NO_MATCHING_PRODUCT',
+    ])
+    .nullable(),
+});
+
 const envelopeSchema = z.object({
   version: z.literal(1),
   assistantMessageId: z.uuid(),
@@ -41,6 +85,8 @@ const envelopeSchema = z.object({
       url: z.string(),
     }),
   ),
+  // 缺字段兼容导购上线前已保存的聊天快照。
+  productResults: z.array(productResultsSchema).max(5).default([]),
   context: z
     .object({
       contextWindowTokens: z
@@ -202,6 +248,7 @@ export function displayEnvelope(
     assistantMessageId,
     activities: data.activities,
     sources: data.sources,
+    productResults: data.productResults,
     context: data.context,
   };
 }
@@ -211,6 +258,7 @@ export function reservedDisplayBytes(data: ChatDisplayData): number {
     displayEnvelope({
       activities: data.activities,
       sources: data.sources,
+      productResults: data.productResults,
       // 在发送活动前预留最终用量数字，避免实时成功而最终绑定超限。
       context: {
         contextWindowTokens:
@@ -252,6 +300,32 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
     );
   }
   const sources = projectSources(source.sources, new Map(), true);
+  const productResults: ChatProductResults[] = source.productResults.map(
+    (entry) => ({
+      ...entry,
+      items: entry.items.flatMap((item) => {
+        const imageUrl = item.imageUrl
+          ? (publicSourceUrl(item.imageUrl)?.toString() ?? null)
+          : null;
+        const productUrl = item.productUrl
+          ? (publicSourceUrl(item.productUrl)?.toString() ?? null)
+          : null;
+        if (!item.name.trim() || !/^\d{1,10}\.\d{2}$/u.test(item.price))
+          return [];
+        return [
+          {
+            ...item,
+            name: item.name.trim(),
+            imageUrl,
+            productUrl,
+            sizes: [...new Set(item.sizes)],
+            colors: [...new Set(item.colors)],
+            matchReasons: [...new Set(item.matchReasons)],
+          },
+        ];
+      }),
+    }),
+  );
   const context = source.context
     ? projectContext(source.context.contextWindowTokens, {
         inputTokens: tokenCount(source.context.inputTokens),
@@ -259,7 +333,34 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
       })
     : null;
   return displayEnvelope(
-    { activities, sources, context },
+    { activities, sources, productResults, context },
     source.assistantMessageId,
   );
+}
+
+export function restoreProductResults(
+  output: string,
+): ChatProductResults | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(output);
+  } catch {
+    return null;
+  }
+  if (!isRecord(value)) return null;
+  const parsed = productResultsSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const result = parsed.data;
+  return {
+    ...result,
+    items: result.items.map((item) => ({
+      ...item,
+      imageUrl: item.imageUrl
+        ? (publicSourceUrl(item.imageUrl)?.toString() ?? null)
+        : null,
+      productUrl: item.productUrl
+        ? (publicSourceUrl(item.productUrl)?.toString() ?? null)
+        : null,
+    })),
+  };
 }

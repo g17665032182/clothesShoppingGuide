@@ -27,6 +27,7 @@ import {
   projectSources,
   reservedDisplayBytes,
   restoreDisplay,
+  restoreProductResults,
   safeToolName,
 } from './chat-display.projection.js';
 import type {
@@ -55,6 +56,7 @@ export class ChatDisplayService {
     const data: ChatDisplayData = {
       activities: [],
       sources: [],
+      productResults: [],
       context: projectContext(contextWindowTokens, null),
     };
     this.sourceNamespaces.set(data, randomUUID());
@@ -79,6 +81,34 @@ export class ChatDisplayService {
       data.sources = sources;
       this.sourceNamespaces.set(data, namespace);
       return { type: 'sources', sources };
+    }
+    if (
+      event.type === 'tool-result' &&
+      event.toolName === 'search_local_clothing_products'
+    ) {
+      const results = restoreProductResults(event.output);
+      const activity: Extract<ChatActivity, { type: 'tool' }> = {
+        type: 'tool',
+        id: event.id,
+        toolName: safeToolName(event.toolName),
+        status: event.status === 'success' ? 'success' : 'error',
+        input: null,
+        output: null,
+      };
+      const activities = [...data.activities];
+      const position = activities.findIndex((item) => item.id === activity.id);
+      if (position === -1) activities.push(activity);
+      else activities[position] = activity;
+      if (!results) {
+        this.assertBudget({ ...data, activities });
+        data.activities = activities;
+        return { type: 'activity', activity };
+      }
+      const productResults = [...data.productResults, results].slice(-5);
+      this.assertBudget({ ...data, productResults, activities });
+      data.productResults = productResults;
+      data.activities = activities;
+      return { type: 'product-results', results, activity };
     }
 
     let activity: ChatActivity;
@@ -222,6 +252,7 @@ export class ChatDisplayService {
       result.set(id, {
         activities: restored.activities,
         sources: restored.sources,
+        productResults: restored.productResults,
         context: restored.context,
       });
     }

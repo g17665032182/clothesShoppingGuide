@@ -3,6 +3,7 @@ import {
   GatewayTimeoutException,
   Inject,
   Injectable,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -14,8 +15,12 @@ import {
 } from '@langchain/core/messages';
 
 import { ChatMessageRole } from '../dto/chat.dto.js';
-import { createLlmGraph, normalizeUsage } from '../graph/llm.graph.js';
-import { LLM_GRAPH } from '../graph/llm.tokens.js';
+import {
+  createLlmGraph,
+  normalizeUsage,
+  type LlmTool,
+} from '../graph/llm.graph.js';
+import { LLM_GRAPH, LLM_GRAPH_FACTORY } from '../graph/llm.tokens.js';
 import type { LlmStateValue, LlmUsage } from '../graph/llm.state.js';
 import type { LlmTraceContext } from '../trace/llm-trace.types.js';
 import { SYSTEM_CONTEXT } from '../context/system-context.js';
@@ -53,6 +58,7 @@ export type ChatOutput = {
 };
 
 export type LlmGraph = ReturnType<typeof createLlmGraph>;
+export type LlmGraphFactory = (extraTools: LlmTool[]) => LlmGraph;
 
 export type LlmStreamResult = {
   content: string;
@@ -116,6 +122,9 @@ export class LlmService {
   public constructor(
     @Inject(LLM_GRAPH) private readonly graph: LlmGraph,
     private readonly configService: ConfigService,
+    @Optional()
+    @Inject(LLM_GRAPH_FACTORY)
+    private readonly graphFactory?: LlmGraphFactory,
   ) {}
 
   public async chat(
@@ -136,12 +145,13 @@ export class LlmService {
   public async chatPrepared(
     input: ChatInput,
     traceContext?: LlmTraceContext,
+    extraTools: LlmTool[] = [],
   ): Promise<ChatOutput> {
     const model = this.assertConfigured();
 
     let result: LlmStateValue;
     try {
-      result = await this.graph.invoke(
+      result = await this.activeGraph(extraTools).invoke(
         {
           messages: input.messages.map(toLangChainMessage),
         },
@@ -205,6 +215,7 @@ export class LlmService {
     input: ChatInput,
     signal?: AbortSignal,
     traceContext?: LlmTraceContext,
+    extraTools: LlmTool[] = [],
   ): AsyncGenerator<LlmStreamEvent, LlmEventStreamResult> {
     const model = this.assertConfigured();
     const controller = new AbortController();
@@ -218,7 +229,7 @@ export class LlmService {
     let content = '';
     try {
       controller.signal.throwIfAborted();
-      const stream = await this.graph.stream(
+      const stream = await this.activeGraph(extraTools).stream(
         { messages: input.messages.map(toLangChainMessage) },
         {
           streamMode: ['custom', 'values'],
@@ -306,5 +317,13 @@ export class LlmService {
       throw new GatewayTimeoutException('大模型调用超时');
     }
     throw new BadGatewayException('上游大模型调用失败');
+  }
+
+  private activeGraph(extraTools: LlmTool[]): LlmGraph {
+    if (extraTools.length === 0) return this.graph;
+    if (!this.graphFactory) {
+      throw new ServiceUnavailableException('本次聊天工具未完成配置');
+    }
+    return this.graphFactory(extraTools);
   }
 }

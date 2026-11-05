@@ -176,6 +176,7 @@ test(
         display,
         { readContext: async () => '' },
         { enqueueInTransaction: async () => undefined },
+        {} as never,
       );
 
       // tsx 不生成参数类型元数据；仅在测试内补 Nest 构造注入，不改业务接口。

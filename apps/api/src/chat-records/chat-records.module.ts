@@ -4,6 +4,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { LlmModule } from '../llm/llm.module.js';
 import { UserMemoryModule } from '../user-memory/index.js';
 import { UserPreferencesModule } from '../user-preferences/index.js';
+import { ProductCatalogModule } from '../product-catalog/index.js';
 import { AdminChatRecordsController } from './controller/admin-chat-records.controller.js';
 import { ChatContextService } from './context/chat-context.service.js';
 import { ChatConversation } from './entity/chat-conversation.entity.js';
@@ -22,6 +23,7 @@ import { ChatDisplayService } from './display/chat-display.service.js';
     LlmModule,
     UserMemoryModule,
     UserPreferencesModule,
+    ProductCatalogModule,
   ],
   controllers: [
     ChatRecordsController,

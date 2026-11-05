@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "products": [
+    {
+      "externalId": "dev-wool-coat-001",
+      "name": "开发样例羊毛通勤外套",
+      "brand": "本地样例",
+      "category": "outerwear",
+      "description": "仅用于开发验证的样例商品。",
+      "styles": ["简约"],
+      "occasions": ["通勤"],
+      "fits": ["直筒"],
+      "audience": "adult",
+      "skus": [
+        {
+          "externalSkuId": "dev-wool-coat-001-black-m",
+          "color": "黑色",
+          "size": "M",
+          "price": 499,
+          "stock": 8
+        }
+      ]
+    }
+  ]
+}

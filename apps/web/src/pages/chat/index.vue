@@ -41,6 +41,7 @@ const {
   isLoadingEarlierMessages,
   historyError,
   loadEarlierMessages,
+  loadMoreProducts,
 } = useChatPage();
 </script>
 
@@ -97,6 +98,7 @@ const {
               :is-loading-earlier-messages="isLoadingEarlierMessages"
               :history-error="historyError"
               @load-earlier="loadEarlierMessages"
+              @more-products="loadMoreProducts"
               @retry-history="loadEarlierMessages"
             />
           </div>

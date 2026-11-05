@@ -9,11 +9,15 @@ import {
 } from '@/components/ui/message';
 import { Spinner } from '@/components/ui/spinner';
 import ChatActivityList from './ChatActivityList.vue';
+import ChatProductResults from './ChatProductResults.vue';
 import ChatSources from './ChatSources.vue';
 
 const props = defineProps<{
   message: ChatMessage;
   streamDuration: string | null;
+}>();
+const emit = defineEmits<{
+  (event: 'moreProducts'): void;
 }>();
 
 const isRunning = computed(
@@ -59,6 +63,12 @@ const statusLabel = computed(() => {
         正在生成回复
       </p>
       <ChatSources v-if="message.sources.length" :sources="message.sources" />
+      <ChatProductResults
+        v-if="message.productResults.length"
+        :result-sets="message.productResults"
+        :disabled="isRunning"
+        @more="emit('moreProducts')"
+      />
       <MessageFooter
         v-if="statusLabel || message.duration || streamDuration"
         class="gap-2 px-0"

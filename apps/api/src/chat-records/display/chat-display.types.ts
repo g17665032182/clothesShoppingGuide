@@ -14,6 +14,28 @@ export type ChatActivity =
 
 export type ChatSource = { id: string; title: string; url: string };
 
+export type ChatProductCard = {
+  externalId: string;
+  name: string;
+  brand: string | null;
+  category: string;
+  description: string | null;
+  imageUrl: string | null;
+  productUrl: string | null;
+  price: string;
+  currency: 'CNY';
+  sizes: string[];
+  colors: string[];
+  inStock: boolean;
+  matchReasons: string[];
+};
+
+export type ChatProductResults = {
+  items: ChatProductCard[];
+  nextCursor: string | null;
+  noResultReason: string | null;
+};
+
 export type ChatContextUsage = {
   contextWindowTokens: number;
   inputTokens: number | null;
@@ -24,6 +46,7 @@ export type ChatContextUsage = {
 export type ChatDisplayData = {
   activities: ChatActivity[];
   sources: ChatSource[];
+  productResults: ChatProductResults[];
   context: ChatContextUsage | null;
 };
 
@@ -35,4 +58,9 @@ export type PublicDisplayEnvelope = ChatDisplayData & {
 
 export type ChatDisplayEvent =
   | { type: 'activity'; activity: ChatActivity }
-  | { type: 'sources'; sources: ChatSource[] };
+  | { type: 'sources'; sources: ChatSource[] }
+  | {
+      type: 'product-results';
+      results: ChatProductResults;
+      activity: Extract<ChatActivity, { type: 'tool' }>;
+    };

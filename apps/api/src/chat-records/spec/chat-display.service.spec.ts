@@ -9,6 +9,8 @@ import {
   MAX_DISPLAY_BYTES,
   publicSourceUrl,
   reservedDisplayBytes,
+  restoreDisplay,
+  restoreProductResults,
 } from '../display/chat-display.projection.js';
 import { ChatDisplayService } from '../display/chat-display.service.js';
 import {
@@ -114,6 +116,74 @@ test('回显和未知工具只显示安全名称、状态，同 ID 原地更新�
     },
   ]);
   assert.equal(JSON.stringify(data).includes('private'), false);
+});
+
+test('商品搜索结果只投影白名单字段并绑定到公开聊天快照', () => {
+  const { display } = createState();
+  const data = display.create(10_000);
+  display.apply(data, {
+    type: 'tool-call',
+    id: 'product-call',
+    toolName: 'search_local_clothing_products',
+    input: { size: 'M' },
+  });
+  const results = {
+    items: [
+      {
+        externalId: 'coat-1',
+        name: '羊毛大衣',
+        brand: '本地品牌',
+        category: 'outerwear',
+        description: null,
+        imageUrl: 'http://127.0.0.1/internal.png',
+        productUrl: 'https://shop.example.com/coat-1',
+        price: '899.00',
+        currency: 'CNY',
+        sizes: ['M'],
+        colors: ['黑色'],
+        inStock: true,
+        matchReasons: ['size_match'],
+      },
+    ],
+    nextCursor: null,
+    noResultReason: null,
+  };
+  const event = display.apply(data, {
+    type: 'tool-result',
+    id: 'product-call',
+    toolName: 'search_local_clothing_products',
+    status: 'success',
+    output: JSON.stringify(results),
+  });
+  assert.equal(event?.type, 'product-results');
+  assert.equal(data.activities[0]?.type, 'tool');
+  assert.equal(data.activities[0]?.status, 'success');
+  assert.equal(data.productResults[0]?.items[0]?.imageUrl, null);
+  assert.equal(JSON.stringify(data).includes('internalSkuId'), false);
+  const restored = restoreDisplay(displayEnvelope(data, assistantMessageId));
+  assert.equal(restored?.productResults[0]?.items[0]?.price, '899.00');
+});
+
+test('商品工具结果非法时不生成公开商品投影', () => {
+  assert.equal(restoreProductResults('not-json'), null);
+  assert.equal(
+    restoreProductResults(
+      JSON.stringify({
+        items: [{ externalId: 'private', databaseId: 'hidden' }],
+        nextCursor: null,
+        noResultReason: null,
+      }),
+    ),
+    null,
+  );
+  const oldSnapshot = {
+    version: 1,
+    assistantMessageId,
+    activities: [],
+    sources: [],
+    context: null,
+  };
+  assert.deepEqual(restoreDisplay(oldSnapshot)?.productResults, []);
 });
 
 test('正文不会派生 reasoning，只有显式公开摘要可以更新活动', () => {
