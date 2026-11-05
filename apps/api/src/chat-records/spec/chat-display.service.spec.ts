@@ -125,7 +125,7 @@ test('商品搜索结果只投影白名单字段并绑定到公开聊天快照',
     type: 'tool-call',
     id: 'product-call',
     toolName: 'search_local_clothing_products',
-    input: { size: 'M' },
+    input: { size: 'M', limit: 20 },
   });
   const results = {
     items: [
@@ -159,9 +159,17 @@ test('商品搜索结果只投影白名单字段并绑定到公开聊天快照',
   assert.equal(data.activities[0]?.type, 'tool');
   assert.equal(data.activities[0]?.status, 'success');
   assert.equal(data.productResults[0]?.items[0]?.imageUrl, null);
+  assert.deepEqual(data.productResults[0]?.query, {
+    size: 'M',
+    limit: 3,
+  });
   assert.equal(JSON.stringify(data).includes('internalSkuId'), false);
   const restored = restoreDisplay(displayEnvelope(data, assistantMessageId));
   assert.equal(restored?.productResults[0]?.items[0]?.price, '899.00');
+  assert.deepEqual(restored?.productResults[0]?.query, {
+    size: 'M',
+    limit: 3,
+  });
 });
 
 test('商品工具结果非法时不生成公开商品投影', () => {

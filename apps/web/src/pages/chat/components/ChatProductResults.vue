@@ -8,7 +8,7 @@ const props = defineProps<{
   disabled?: boolean;
 }>();
 const emit = defineEmits<{
-  (event: 'more'): void;
+  (event: 'more', resultIndex: number): void;
 }>();
 const failedImages = ref(new Set<string>());
 
@@ -41,6 +41,7 @@ const emptyReasonLabels: Record<string, string> = {
 
 const resultSets = computed(() =>
   props.resultSets.map((result, index) => ({
+    index,
     key: `${index}-${result.items.map((item) => item.externalId).join('|')}`,
     result,
     items: result.items.map((item) => ({
@@ -56,6 +57,7 @@ const resultSets = computed(() =>
     emptyLabel: result.noResultReason
       ? emptyReasonLabels[result.noResultReason]
       : '',
+    canLoadMore: Boolean(result.nextCursor && result.query),
   })),
 );
 
@@ -139,12 +141,12 @@ function publicUrl(value: string | null): string | null {
             rel="noopener noreferrer"
             class="flex min-w-0 items-start gap-1 font-medium leading-5 hover:underline"
           >
-            <span class="line-clamp-2 min-w-0 break-words">{{
+            <span class="line-clamp-2 min-w-0 wrap-break-word">{{
               item.name
             }}</span>
             <ArrowUpRight class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           </a>
-          <p v-else class="line-clamp-2 break-words font-medium leading-5">
+          <p v-else class="line-clamp-2 wrap-break-word font-medium leading-5">
             {{ item.name }}
           </p>
           <p class="truncate text-xs text-muted-foreground">
@@ -180,13 +182,20 @@ function publicUrl(value: string | null): string | null {
       {{ set.emptyLabel }}
     </p>
     <button
-      v-if="set.result.nextCursor"
+      v-if="set.canLoadMore"
       type="button"
       class="text-sm font-medium text-primary underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-      :disabled="disabled"
-      @click="emit('more')"
+      :disabled="disabled || set.result.loadingMore"
+      @click="emit('more', set.index)"
     >
-      查看更多商品
+      {{ set.result.loadingMore ? '正在加载' : '查看更多商品' }}
     </button>
+    <p
+      v-if="set.result.loadMoreError"
+      class="text-sm text-destructive"
+      role="alert"
+    >
+      {{ set.result.loadMoreError }}
+    </p>
   </section>
 </template>

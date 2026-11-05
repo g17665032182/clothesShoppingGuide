@@ -41,6 +41,22 @@ export type ChatProductResults = {
     | 'OUT_OF_STOCK'
     | 'NO_MATCHING_PRODUCT'
     | null;
+  query?: ProductSearchQuery;
+  loadingMore?: boolean;
+  loadMoreError?: string;
+};
+
+export type ProductSearchQuery = {
+  category?: ChatProductCard['category'];
+  size?: string;
+  color?: string;
+  style?: string;
+  occasion?: string;
+  fit?: string;
+  budgetMin?: number;
+  budgetMax?: number;
+  inStock?: boolean;
+  limit: 3;
 };
 
 export type ChatContextUsage = {

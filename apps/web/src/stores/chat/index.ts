@@ -14,8 +14,16 @@ import {
   listConversations,
   streamChat,
 } from '@/api/modules/chat';
+import {
+  getNextProductPage,
+  isProductPageResponse,
+} from '@/api/modules/product-catalog';
 import { flushMemoryTasks } from '@/api/modules/memories';
-import type { ChatApiConversation, Conversation } from '@/api/types/chat';
+import type {
+  ChatApiConversation,
+  ChatProductResults,
+  Conversation,
+} from '@/api/types/chat';
 import { auth } from '@/lib/auth';
 import {
   latestDetail,
@@ -39,6 +47,7 @@ interface GenerationTask extends PendingTurn {
   startedAt: number;
   timer?: ReturnType<typeof setInterval>;
   receivedDone: boolean;
+  pendingProductResults: ChatProductResults[];
 }
 
 function toConversation(item: ChatApiConversation): Conversation {
@@ -265,6 +274,74 @@ export const useChatStore = defineStore('chat', () => {
     activeSessionKey.value = null;
   }
 
+  async function loadMoreProducts(messageId: string, resultIndex: number) {
+    const token = auth.state.token;
+    const key = activeSessionKey.value;
+    if (!token || !key) return;
+    const session = sessions.value[key];
+    const message = session?.messages.find((item) => item.id === messageId);
+    const result = message?.productResults[resultIndex];
+    if (!session || !message || !result?.query || !result.nextCursor) return;
+    if (result.loadingMore) return;
+
+    // 固定会话与消息定位，路由切换后响应仍追加回发起请求的结果组。
+    const updateResult = (
+      transform: (current: ChatProductResults) => ChatProductResults,
+    ) => {
+      const currentSession = sessions.value[key];
+      if (!currentSession) return;
+      const currentMessage = currentSession.messages.find(
+        (item) => item.id === messageId,
+      );
+      const currentResult = currentMessage?.productResults[resultIndex];
+      if (!currentMessage || !currentResult) return;
+      const productResults = [...currentMessage.productResults];
+      productResults[resultIndex] = transform(currentResult);
+      updateSession(key, {
+        messages: currentSession.messages.map((item) =>
+          item.id === messageId ? { ...item, productResults } : item,
+        ),
+      });
+    };
+
+    updateResult((current) => ({
+      ...current,
+      loadingMore: true,
+      loadMoreError: '',
+    }));
+    try {
+      const page = await getNextProductPage(
+        token,
+        result.query,
+        result.nextCursor,
+      );
+      if (!isProductPageResponse(page)) throw new Error('商品数据格式无效');
+      updateResult((current) => ({
+        ...current,
+        items: [
+          ...current.items,
+          ...page.items.filter(
+            (item) =>
+              !current.items.some(
+                (existing) => existing.externalId === item.externalId,
+              ),
+          ),
+        ],
+        nextCursor: page.nextCursor,
+        noResultReason: current.items.length ? null : page.noResultReason,
+        loadingMore: false,
+        loadMoreError: '',
+      }));
+    } catch (error) {
+      updateResult((current) => ({
+        ...current,
+        loadingMore: false,
+        loadMoreError:
+          error instanceof Error ? error.message : '商品加载失败，请重试',
+      }));
+    }
+  }
+
   async function selectConversation(id: string, refresh = false) {
     const token = auth.state.token;
     if (!token) return;
@@ -465,6 +542,7 @@ export const useChatStore = defineStore('chat', () => {
       controller: new AbortController(),
       startedAt: Date.now(),
       receivedDone: false,
+      pendingProductResults: [],
       user: createPendingMessage(
         `pending-user-${sequence}`,
         'user',
@@ -513,7 +591,13 @@ export const useChatStore = defineStore('chat', () => {
             updatedAt: '刚刚',
           });
         }
-        applyTurnEvent(task.assistant, event);
+        if (event.type === 'product-results')
+          task.pendingProductResults.push(event.results);
+        applyTurnEvent(task.assistant, event, true);
+        if (event.type === 'done' && task.pendingProductResults.length) {
+          task.assistant.productResults.push(...task.pendingProductResults);
+          task.pendingProductResults = [];
+        }
         publishTurn(key, task);
         if (event.type === 'error') {
           finishTurn(task.assistant, 'failed');
@@ -715,6 +799,7 @@ export const useChatStore = defineStore('chat', () => {
     loadConversations,
     loadEarlierMessages,
     loadMoreConversations,
+    loadMoreProducts,
     refreshUncertainTurn,
     removeConversation,
     selectConversation,

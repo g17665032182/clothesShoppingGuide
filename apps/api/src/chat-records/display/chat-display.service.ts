@@ -13,6 +13,7 @@ import {
 
 import type { LlmUsage } from '../../llm/graph/llm.state.js';
 import type { LlmStreamEvent } from '../../llm/stream/llm-stream.types.js';
+import { productSearchQuerySchema } from '../../product-catalog/index.js';
 import {
   ChatTraceEvent,
   ChatTraceEventType,
@@ -40,6 +41,10 @@ import type {
 export class ChatDisplayService {
   private readonly logger = new Logger(ChatDisplayService.name);
   private readonly sourceNamespaces = new WeakMap<ChatDisplayData, string>();
+  private readonly productQueries = new WeakMap<
+    ChatDisplayData,
+    Map<string, ReturnType<typeof productSearchQuerySchema.parse>>
+  >();
 
   public constructor(
     @InjectRepository(ChatTraceEvent)
@@ -68,6 +73,22 @@ export class ChatDisplayService {
     event: LlmStreamEvent,
   ): ChatDisplayEvent | null {
     if (event.type === 'delta') return null;
+    if (
+      event.type === 'tool-call' &&
+      event.toolName === 'search_local_clothing_products'
+    ) {
+      const parsed = productSearchQuerySchema.safeParse({
+        ...(typeof event.input === 'object' && event.input !== null
+          ? event.input
+          : {}),
+        limit: 3,
+      });
+      if (parsed.success) {
+        const queries = this.productQueries.get(data) ?? new Map();
+        queries.set(event.id, parsed.data);
+        this.productQueries.set(data, queries);
+      }
+    }
     if (event.type === 'sources') {
       const identities = new Map(
         data.sources.map((source) => [source.url, source.id]),
@@ -86,7 +107,10 @@ export class ChatDisplayService {
       event.type === 'tool-result' &&
       event.toolName === 'search_local_clothing_products'
     ) {
-      const results = restoreProductResults(event.output);
+      const restored = restoreProductResults(event.output);
+      const query = this.productQueries.get(data)?.get(event.id);
+      this.productQueries.get(data)?.delete(event.id);
+      const results = restored && query ? { ...restored, query } : restored;
       const activity: Extract<ChatActivity, { type: 'tool' }> = {
         type: 'tool',
         id: event.id,

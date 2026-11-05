@@ -2,13 +2,13 @@
 
 ## 状态与依据
 
-- 状态：已确认。
+- 状态：商品目录原实施范围已确认并完成；“查看更多商品”直接分页增量计划待用户确认。
 - 设计：[服装导购体系设计文档](./product-guide-design.md)，已确认。
 - 契约：[商品目录 CRUD 契约](../contracts/product-catalog-crud-contract.md)，已确认。
 - 技术：[商品目录技术文档](./product-catalog-technical.md)，已确认。
 - 最后更新：2026-11-05。
 
-本文件规划的规则已全部确认，允许进入实施；本文件本身不代表功能已经实现。
+原商品目录实施范围已经完成。本次直接分页增量计划经用户确认后才允许进入代码实施；本文件本身不代表新增功能已经实现。
 
 ## 开发流程总览
 
@@ -25,12 +25,52 @@
 
 - 字段长度、类别、adult 受众、SKU 尺码字符串和 CNY `numeric(12,2)` 按契约实施。
 - JSON v1 最大 10 MiB、最多 5,000 个商品、每商品最多 100 个 SKU；全文件严格校验后单事务写入。
-- 首期不新增商品查询 API；聊天工具只能从认证请求上下文取得用户身份。
-- 软匹配命中各加 1 分，按约定外部 ID 稳定排序；默认每页 3 件，最大 20 件。
+- 首轮查询继续通过受保护聊天入口调用服务端工具；“查看更多”使用已确认的商品目录只读下一页 API，复用全局 JWT Guard。
+- 软匹配命中各加 1 分，按约定外部 ID 稳定排序；每页固定 3 件，点击查看更多时继续取下一页。
 - 签名游标有效期 15 分钟；`PRODUCT_QUERY_CURSOR_SECRET` 必填且不得提供默认密钥。
 - 商品卡片按消息时快照保存，历史记录不得暗示实时价格或库存。
+- 下一页沿用首轮 query 全部筛选条件及 limit；只有经商品查询 schema 校验的 query 可以进入聊天展示快照。
+- 不新增商品/SKU Entity、字段、Migration、Seeder 或运行时依赖；追加的下一页结果只更新当前前端会话状态，不写回历史聊天快照。
 
 实现中如遇到会改变已确认字段、权限、排序、导入或用户可见行为的未决情况，停止对应阶段并回到设计/契约审批，不得自行假设。
+
+## 本次增量实施计划（待用户确认）
+
+### 范围
+
+- 点击“查看更多”直接请求 `POST /api/product-catalog/next-page`，不调用 `sendMessage`、聊天 SSE 或 LLM。
+- 保持原结果组及原消息归属；同一结果组独立加载、失败可重试，游标失效时提示重新搜索。
+- 新历史快照只保存由 `productSearchSchema.omit({ cursor: true })` 校验的首轮 query；不公开其他工具参数。旧快照没有 query 时隐藏分页按钮。
+- 不把下一页响应写回服务端历史快照。无 Entity、Migration、导入、默认 Seeder、LLM Tool Registry 或新依赖改动。
+
+### 阶段 F：商品目录直接分页 API 与验证
+
+所有权：主代理，范围较小且 API、公开投影和聊天 Store 有紧密状态契约，不拆分并行文件所有权。
+
+- 新增 `apps/api/src/product-catalog/controller/product-catalog.controller.ts`。
+- 新增 `apps/api/src/product-catalog/dto/product-next-page.dto.ts` 和响应 Swagger DTO。
+- 修改 `apps/api/src/product-catalog/product-catalog.module.ts` 与 `service/product-catalog.service.ts`，Controller 调用既有 `search` 查询能力并完整沿用签名游标校验。
+- 修改 `apps/api/src/chat-records/display/chat-display.types.ts`、`chat-display.service.ts`、`chat-display.projection.ts`，按 tool call ID 白名单解析商品 query，并兼容缺少 query 的历史展示数据。
+- 在 `apps/api/src/product-catalog/spec/` 与 `apps/api/src/chat-records/spec/` 补 schema、HTTP 和公开投影测试。
+
+### 阶段 G：聊天前端分页交互
+
+所有权：主代理；组件只负责声明式交互，API 通过资源模块公开。
+
+- 新增 `apps/web/src/api/modules/product-catalog.ts` 与 `apps/web/src/api/types/product-catalog.ts`。
+- 修改 `apps/web/src/api/types/chat.ts`、`apps/web/src/stores/chat/index.ts` 和必要的 `stores/chat/` 页面状态，按 session/message/result-set 定位结果并执行直接请求。
+- 修改 `apps/web/src/pages/chat/page.ts`、`index.vue`、`components/ChatMessageList.vue`、`ChatAssistantMessage.vue`、`ChatProductResults.vue`，传递结果组身份、展示 loading/error/retry 状态并原位追加商品。
+- 保持组件 Props/Emits 单向数据流；商品结果组件不得直接请求 API，聊天 Store 负责异步状态、重复提交保护及过期响应保护。
+
+### 集成顺序和验收
+
+1. 先实现后端 strict schema、Controller 和 Service 接线；验证合法请求、未知字段、非法/篡改/过期游标、limit/查询条件不匹配及未认证边界。
+2. 再接入聊天展示 query 白名单和旧快照兼容；确认其他工具的 input 仍不进入公开展示数据。
+3. 最后实现资源 API 模块、Store 请求状态和结果组追加；确认单击不新增 user message、不触发聊天 SSE/LLM，且切换会话或结果组时不会串写。
+4. 成功响应按 `externalId` 去重、追加 items 并更新 cursor；网络错误可重试；HTTP 400 提示重新搜索而不自动调用 LLM。
+5. 只执行增量验证，不执行数据库 Migration 或 `migration:fresh`。API 执行 typecheck、test、build；修改文件格式检查和 `pnpm check`。前端不新增尚未批准的测试框架，使用现有可运行检查并做浏览器 smoke test。
+
+本阶段确认后才开始修改业务代码；若实现发现游标无法在不改变已确认筛选条件的情况下继续分页，暂停并回到技术/契约审批。
 
 ## 工作阶段与文件所有权
 

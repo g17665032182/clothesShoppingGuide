@@ -28,11 +28,8 @@ export function useChatPage() {
     void chat.sendMessage(content);
   }
 
-  function loadMoreProducts() {
-    if (!chat.canSubmit) return;
-    void chat.sendMessage(
-      '请继续展示上一轮商品搜索的下一页商品，使用上一轮工具结果中的分页游标，并遵守原有筛选条件。',
-    );
+  function loadMoreProducts(messageId: string, resultIndex: number) {
+    void chat.loadMoreProducts(messageId, resultIndex);
   }
 
   function selectConversation(id: string) {

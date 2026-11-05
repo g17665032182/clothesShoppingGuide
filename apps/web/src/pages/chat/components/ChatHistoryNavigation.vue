@@ -157,12 +157,12 @@ function handleConversationScroll(event: Event) {
             <Spinner
               v-if="generatingConversationIds.includes(conversation.id)"
               aria-label="正在生成回复"
-              class="size-[18px] shrink-0"
+              class="size-4.5 shrink-0"
             />
             <MessageSquare
               v-else-if="!isCollapsed"
               aria-hidden="true"
-              class="size-[18px] shrink-0"
+              class="size-4.5 shrink-0"
             />
             <span
               v-else
@@ -271,7 +271,7 @@ function handleConversationScroll(event: Event) {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>删除这段对话？</AlertDialogTitle>
-          <AlertDialogDescription class="break-words">
+          <AlertDialogDescription class="wrap-break-word">
             确定删除“{{
               conversationPendingDelete?.title
             }}”及其聊天记录吗？此操作无法撤销。

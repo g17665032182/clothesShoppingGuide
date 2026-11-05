@@ -17,7 +17,7 @@ const props = defineProps<{
   streamDuration: string | null;
 }>();
 const emit = defineEmits<{
-  (event: 'moreProducts'): void;
+  (event: 'moreProducts', messageId: string, resultIndex: number): void;
 }>();
 
 const isRunning = computed(
@@ -67,7 +67,7 @@ const statusLabel = computed(() => {
         v-if="message.productResults.length"
         :result-sets="message.productResults"
         :disabled="isRunning"
-        @more="emit('moreProducts')"
+        @more="(resultIndex) => emit('moreProducts', message.id, resultIndex)"
       />
       <MessageFooter
         v-if="statusLabel || message.duration || streamDuration"

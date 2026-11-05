@@ -18,6 +18,8 @@ const TEST_PRODUCTS = [
     occasions: ['通勤', '日常'],
     fits: ['常规'],
     productUrl: 'https://www.uniqlo.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1576566588028-4147f3842f27?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-knit-ivory-s',
@@ -52,6 +54,8 @@ const TEST_PRODUCTS = [
     occasions: ['通勤', '日常'],
     fits: ['宽松'],
     productUrl: 'https://www.muji.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1598033129183-c4f50c736f10?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-shirt-blue-m',
@@ -86,6 +90,8 @@ const TEST_PRODUCTS = [
     occasions: ['通勤'],
     fits: ['直筒'],
     productUrl: 'https://www.uniqlo.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-trousers-black-s',
@@ -120,6 +126,8 @@ const TEST_PRODUCTS = [
     occasions: ['日常', '出游'],
     fits: ['直筒', '高腰'],
     productUrl: 'https://www.uniqlo.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-jeans-blue-m',
@@ -154,6 +162,8 @@ const TEST_PRODUCTS = [
     occasions: ['日常', '约会'],
     fits: ['收腰'],
     productUrl: 'https://www.muji.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-dress-navy-s',
@@ -188,6 +198,8 @@ const TEST_PRODUCTS = [
     occasions: ['通勤', '正式'],
     fits: ['直筒'],
     productUrl: 'https://www.uniqlo.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1548126032-079a0fb0099d?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-coat-camel-m',
@@ -222,6 +234,8 @@ const TEST_PRODUCTS = [
     occasions: ['日常', '出游'],
     fits: ['宽松'],
     productUrl: 'https://www.uniqlo.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-jacket-olive-s',
@@ -256,6 +270,8 @@ const TEST_PRODUCTS = [
     occasions: ['日常', '出游'],
     fits: ['常规'],
     productUrl: 'https://www.uniqlo.com/',
+    imageUrl:
+      'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-sneakers-white-38',
@@ -319,6 +335,7 @@ export class ProductCatalogTestSeeder extends Seeder {
             price: sku.price,
             currency: 'CNY',
             stock: sku.stock,
+            imageUrl: input.imageUrl,
             isActive: true,
           },
           {

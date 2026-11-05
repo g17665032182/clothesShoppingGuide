@@ -300,6 +300,8 @@ function isProductResults(value: unknown): value is ChatProductResults[] {
       ].includes(result.noResultReason as null | string)
     )
       return false;
+    if (result.query !== undefined && !isProductSearchQuery(result.query))
+      return false;
     return result.items.every((item) => {
       if (
         !isRecord(item) ||
@@ -328,6 +330,53 @@ function isProductResults(value: unknown): value is ChatProductResults[] {
       return true;
     });
   });
+}
+
+function isProductSearchQuery(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const allowedKeys = new Set([
+    'category',
+    'size',
+    'color',
+    'style',
+    'occasion',
+    'fit',
+    'budgetMin',
+    'budgetMax',
+    'inStock',
+    'limit',
+  ]);
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) return false;
+  if (!Number.isInteger(value.limit) || value.limit !== 3) return false;
+  if (
+    value.category !== undefined &&
+    !['tops', 'bottoms', 'dresses', 'outerwear', 'shoes'].includes(
+      String(value.category),
+    )
+  )
+    return false;
+  if (
+    ['size', 'color', 'style', 'occasion', 'fit'].some(
+      (key) =>
+        value[key] !== undefined &&
+        (typeof value[key] !== 'string' ||
+          value[key].trim().length === 0 ||
+          value[key].length > 32),
+    )
+  )
+    return false;
+  if (
+    ['budgetMin', 'budgetMax'].some(
+      (key) =>
+        value[key] !== undefined &&
+        (typeof value[key] !== 'number' ||
+          !Number.isFinite(value[key]) ||
+          value[key] < 0 ||
+          value[key] > 9_999_999_999.99),
+    )
+  )
+    return false;
+  return value.inStock === undefined || typeof value.inStock === 'boolean';
 }
 
 function isJson(value: unknown, depth = 0): value is JsonValue {

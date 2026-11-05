@@ -1,3 +1,5 @@
+import type { ProductSearchQuery } from '../../product-catalog/index.js';
+
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -34,6 +36,7 @@ export type ChatProductResults = {
   items: ChatProductCard[];
   nextCursor: string | null;
   noResultReason: string | null;
+  query?: ProductSearchQuery;
 };
 
 export type ChatContextUsage = {

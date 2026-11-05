@@ -4,6 +4,7 @@ import test from 'node:test';
 import { productCatalogImportSchema } from '../import/product-catalog-import.schema.js';
 import { publicProductUrl } from '../public-url.js';
 import { productSearchSchema } from '../service/product-catalog.service.js';
+import { createProductSearchTool } from '../tool/product-search.tool.js';
 
 const validCatalog = {
   version: 1,
@@ -101,4 +102,24 @@ test('商品查询工具参数使用严格 schema 和约定分页默认值', () 
     }).success,
     false,
   );
+});
+
+test('商品查询工具每轮只搜索一次并忽略模型要求的较大页数', async () => {
+  const limits: number[] = [];
+  const catalog = {
+    async search(input: { limit: number }) {
+      limits.push(input.limit);
+      return { items: [], nextCursor: null, noResultReason: null };
+    },
+  };
+  const searchTool = createProductSearchTool(catalog as never);
+
+  await searchTool.invoke({ size: 'M', limit: 20 });
+  const blockedPage = await searchTool.invoke({ size: 'L', limit: 20 });
+  assert.deepEqual(limits, [3]);
+  assert.deepEqual(JSON.parse(String(blockedPage)), {
+    items: [],
+    nextCursor: null,
+    noResultReason: null,
+  });
 });

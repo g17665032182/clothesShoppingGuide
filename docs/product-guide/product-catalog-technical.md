@@ -2,7 +2,7 @@
 
 ## 文档信息
 
-- 状态：已确认；已纳入补充业务规则。
+- 状态：商品目录既有技术设计及“查看更多商品”直接分页增量均已确认。
 - 关联设计：[服装导购体系设计文档](./product-guide-design.md)。
 - 关联契约：[商品目录 CRUD 契约](../contracts/product-catalog-crud-contract.md)。
 - 所属应用：`apps/api`、`apps/web`。
@@ -33,8 +33,11 @@
 apps/api/src/product-catalog/
   product-catalog.module.ts
   index.ts
-  controller/                 # 仅当确认提供只读 HTTP 查询端点
-  dto/                        # 查询输入的 Zod schema 和导入报告类型
+  controller/
+    product-catalog.controller.ts
+  dto/
+    product-next-page.dto.ts
+    product-search-response.dto.ts
   entity/
     product.entity.ts
     product-sku.entity.ts
@@ -60,9 +63,12 @@ apps/api/fixtures/product-catalog/
 apps/web/src/pages/chat/components/
   ChatProductResults.vue
   ChatProductCard.vue
+apps/web/src/api/
+  modules/product-catalog.ts
+  types/product-catalog.ts
 ```
 
-如不提供 HTTP 查询端点，不创建空 Controller/DTO 目录。商品卡片作为聊天页面私有组件留在 `pages/chat/components/`；只有存在两个及以上页面复用后再提升为共享业务组件。
+商品卡片作为聊天页面私有组件留在 `pages/chat/components/`；只有存在两个及以上页面复用后再提升为共享业务组件。
 
 ## 数据模型与索引
 
@@ -120,7 +126,7 @@ LlmModule
 
 初版只使用离散、可解释的规则分值：明确硬条件必须满足；软匹配标签 `category_match`、`size_match`、`budget_match`、`stock_available`、`color_match`、`style_match`、`occasion_match`、`fit_match`、`preference_match` 每命中一项加 1 分。按分数降序，再以 `product.externalId`、`sku.externalSkuId` 升序稳定排序。每个标签都由命中的字段推导，禁止让 LLM 生成结构化标签。不得在应用层加载全部商品再排序。
 
-默认 `limit=3`，上限为 20。为使游标续查结果稳定，分页排序键必须是完整且确定的组合。游标包含规范化查询指纹、最后排序键和版本，并使用服务端 HMAC 签名，有效期 15 分钟。非法、篡改、过期或版本不兼容游标返回稳定的无敏感信息错误。
+分页固定 `limit=3`，每轮聊天最多执行一次首轮商品查询，不允许模型或客户端提高单页数量或重复调用扩充结果。为使游标续查结果稳定，分页排序键必须是完整且确定的组合。游标包含规范化查询指纹、最后排序键和版本，并使用服务端 HMAC 签名，有效期 15 分钟。非法、篡改、过期或版本不兼容游标返回稳定的无敏感信息错误。
 
 “更多”和“换一批”都按相同排序键的下一页处理，不实现随机排序或排除当前结果集的隐藏规则。
 
@@ -146,9 +152,20 @@ LlmModule
 
 ## API、schema 与错误
 
-首期查询只由受 JWT 保护的聊天入口调用内部工具，不新增商品 HTTP 查询路由。商品工具的结构化输入单独定义 Zod strict schema，并由 LangChain 工具运行前校验。
+首轮商品搜索继续由受 JWT 保护的聊天入口调用内部工具。已确认的“查看更多商品”增量新增一个只读 HTTP 下一页路由；除此之外仍不开放通用商品搜索路由。商品工具的结构化输入单独定义 Zod strict schema，并由 LangChain 工具运行前校验。
 
 导入文件 schema 也用 Zod strict schema，但不是 HTTP 请求，不通过 Nest Pipe。
+
+### 下一页请求 Schema 与错误映射
+
+- 所属 schema：`apps/api/src/product-catalog/dto/product-next-page.dto.ts`。
+- Body：`z.strictObject({ query, cursor })`。`query` 复用 `productSearchSchema.omit({ cursor: true })`，继续使用现有 category、size、color、style、occasion、fit、budgetMin、budgetMax、inStock 和 limit 约束；`cursor` 为 1–4096 字符的非空字符串。
+- `query` 是首轮商品查询的白名单解析快照，固定包含 `limit: 3`；模型即使请求更大页数，服务端也强制按 3 件查询。不得把 cursor 放进 query，也不得让客户端调整筛选条件或分页大小。
+- 输入和输出类型从 Zod schema / 服务端响应投影派生。请求 schema 不接受未知字段；不做字符串数字隐式转换。
+- Controller 使用 `@Body({ schema: productNextPageSchema })`，由现有全局 `StandardSchemaValidationPipe` 映射 schema 失败为 HTTP 400。Swagger DTO 仅描述文档元数据，不承担运行时校验。
+- 路由：`POST /api/product-catalog/next-page`，位于 `ProductCatalogController`。现有全局 JWT Guard 保护；Controller 只接收请求 DTO 并调用 ProductCatalogService，不直接访问 Repository。
+- 服务端通过 `search({ ...query, cursor })` 复用现有筛选、稳定排序和签名校验；Body 中 query 与游标指纹不一致、游标无效或过期时返回 400，不泄露签名细节。
+- 正常响应复用 `items`、`nextCursor`、`noResultReason` 商品投影；无下一页返回空 `items` 和 `nextCursor: null`，不改写聊天记录。
 
 错误边界：
 
@@ -157,12 +174,15 @@ LlmModule
 - 商品无结果：成功返回空页而非错误。
 - CLI 文件无效或重复标识：非零退出，不写入。
 - 数据库异常沿用全局异常过滤器，不返回 SQL、连接信息或完整 Entity。
+- 下一页 HTTP 请求未认证为 `401`；未知字段、非法输入、游标无效/过期/不匹配为 `400`；数据库异常沿用全局异常过滤器，不泄露 SQL、连接信息或完整 Entity。
 
 ## 聊天展示持久化
 
 - 工具输出经过明确 allowlist 映射为 `publicDisplay.productResults`，关联本轮 assistant message ID。
-- 公开字段限定为商品名称、品牌、分类、有限描述、主图 URL、匹配 SKU 最低 CNY 价格/尺码/颜色、库存有货状态、匹配理由、详情 URL 和分页操作令牌。
+- 公开字段限定为商品名称、品牌、分类、有限描述、主图 URL、匹配 SKU 最低 CNY 价格/尺码/颜色、库存有货状态、匹配理由、详情 URL、分页游标，以及经 `productSearchSchema.omit({ cursor: true })` 校验的首轮 query 快照。
 - 不把内部工具参数、完整库存数量、查询 SQL、导入来源、模型生成解释直接复制到公开 payload。
+- `ChatDisplayService` 仅为 `search_local_clothing_products` 工具调用按 tool call ID 临时关联规范化 query；工具结果到达时把 query 加入对应商品结果投影。其他工具参数继续为 `null`，不得将任意模型参数公开。
+- `publicDisplay` 的商品结果 Zod schema 将 query 作为可选字段验证，以兼容已保存的旧快照；旧快照无 query 时前端隐藏分页入口。
 - 聊天消息保存生成时的商品名称、价格、图片和匹配理由快照；历史视图不得暗示价格或库存仍是当前值。详情 URL 不实时刷新，库存不展示精确数量。
 - 历史恢复再次校验 URL 协议、长度、字段 allowlist 和匹配消息归属。
 - 商品下架或价格变化后，历史消息保留当时公开的推荐快照，但卡片需按现有聊天历史边界说明是历史响应；详情链接仍由前端展示为外链并做安全属性处理。
@@ -175,9 +195,14 @@ LlmModule
 - 在聊天页面私有组件目录新增商品结果和商品卡片组件；聊天消息模型增加显式、类型化的 `productResults` 展示块，不在模板中解析工具 trace。
 - 商品图片使用固定比例容器和稳定尺寸；加载失败显示现有空图状态，不导致消息布局跳动。
 - 外链使用安全 URL 校验和 `target="_blank" rel="noopener noreferrer"`（若当前产品外链约定一致）。
-- “更多”和“换一批”通过明确按钮事件通知页面逻辑，由页面层调用聊天后续请求；不由卡片组件散落调用 Axios。
-- 复用 `src/api/` 现有客户端请求封装和聊天模块，不新增直接 Axios 调用。
-- Loading、无结果、请求错误、过期响应和重复点击状态由聊天页面现有请求状态管理承载。
+- “查看更多”事件携带 message ID 与 result-set index，由聊天 Store 定位目标会话的原始消息和商品结果组；不触发 `sendMessage` 或聊天 SSE。
+- 商品结果事件在流式任务内暂存，只有收到服务端 `done` 事件后才加入消息并渲染卡片。
+- 通过 `src/api/modules/product-catalog.ts` 使用既有 `apiRequest` 请求新路由；请求/响应类型放在 `src/api/types/product-catalog.ts`，不在页面散落 Axios 或拼接 API 地址。
+- 每个会话/消息/结果组分别跟踪 `idle`、`loading`、`success`、`error` 状态，防止同组重复请求；请求开始时记住原游标，只允许仍匹配该游标的响应更新该结果组，避免旧响应覆盖新状态或错误追加到其他会话。
+- 成功时按商品 `externalId` 去重并追加 items，替换 `nextCursor`，清除该组错误状态。返回空下一页时隐藏按钮。
+- 游标 400（无效、过期或 query 不匹配）显示“请重新搜索”的不可重试错误，不自动重新调用 LLM；网络或服务端暂时错误保留原结果和游标，允许用户重试。
+- 追加结果为当前前端会话状态，不持久化回服务器已保存的 `publicDisplay`；重载后仍以原聊天快照为准。
+- 旧快照没有 query 的结果组不显示“查看更多”；新快照 query schema 校验失败时整体按兼容策略舍弃分页 query，不影响商品卡片正文。
 - 移动端卡片宽度自适应消息正文，不产生横向滚动。
 
 ## 安全、可观测性与性能
@@ -199,13 +224,16 @@ LlmModule
 - Importer：完整预校验、dry-run 无写入、幂等新增/更新、显式下架、事务失败全回滚和文件缺席商品保持状态。
 - Query Service：有效状态、SKU 可用性、硬条件、软排序、并列稳定、空结果原因、limit 和游标绑定/篡改。
 - Tool：服务端用户上下文不可伪造、仅返回公开投影、模型未知字段返回工具错误。
-- HTTP（若开放）：JWT、Zod strict schema、数值转换、越界、未知字段和 `400` 行为。
+- 下一页 schema 与 HTTP：合法 Body、字段边界、默认 limit、未知字段拒绝、缺失/非法 cursor、limit 与 cursor 指纹不一致、过期 cursor 的 400 行为；未认证返回 401；确认响应不含 Entity 或签名密钥。
+- ChatDisplayService：只有对应商品 tool-call 的已校验参数进入结果 query；未知字段、其他工具参数、无效旧快照不进入公开投影。
+- 其他未来新增的 HTTP 路由：JWT、Zod strict schema、数值转换、越界、未知字段和 `400` 行为。
 - Migration：PostgreSQL 专项验证表、外键、唯一约束和索引。
 - 集成：Fake Chat Model 完成 tool call -> 查询 -> ToolMessage -> assistant 输出 -> 持久化公开卡片；不访问真实模型 API。
 
 前端：
 
 - 组件校验图片缺失/加载失败、详情链接缺失、价格和匹配原因展示、分页按钮禁用/提交状态。
+- 商品分页事件定位正确 message/result-set；成功追加与游标更新、重复点击防护、网络错误重试、过期游标不触发聊天 SSE、旧历史无 query 时隐藏入口。
 - 浏览器级验证聊天推荐、无结果、更多和窄视口不横向溢出；按项目测试基础设施现状先评估可执行手段，不因此临时引入未批准测试框架。
 
 ## 验证命令

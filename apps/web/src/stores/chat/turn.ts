@@ -40,6 +40,7 @@ export function createPendingMessage(
 export function applyTurnEvent(
   message: ChatMessage,
   event: ChatStreamEvent,
+  deferProductResults = false,
 ): void {
   if (event.type === 'delta') message.content += event.content;
   if (event.type === 'activity') {
@@ -51,7 +52,7 @@ export function applyTurnEvent(
   }
   if (event.type === 'sources') message.sources = event.sources;
   if (event.type === 'product-results') {
-    message.productResults.push(event.results);
+    if (!deferProductResults) message.productResults.push(event.results);
     const index = message.activities.findIndex(
       (item) => item.id === event.activity.id,
     );

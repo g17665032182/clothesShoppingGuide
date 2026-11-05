@@ -35,7 +35,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (event: 'loadEarlier'): void;
   (event: 'retryHistory'): void;
-  (event: 'moreProducts'): void;
+  (event: 'moreProducts', messageId: string, resultIndex: number): void;
 }>();
 
 const sessionGapMs = 5 * 60 * 1000;
@@ -139,7 +139,10 @@ function formatSessionTime(createdAt: string): string {
                   ? streamDuration
                   : null
               "
-              @more-products="emit('moreProducts')"
+              @more-products="
+                (messageId, resultIndex) =>
+                  emit('moreProducts', messageId, resultIndex)
+              "
             />
           </MessageScrollerItem>
           <MessageScrollerItem

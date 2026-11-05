@@ -31,6 +31,13 @@ export const productSearchSchema = z.strictObject({
 });
 
 export type ProductSearchInput = z.output<typeof productSearchSchema>;
+export const productSearchToolSchema = productSearchSchema.omit({
+  cursor: true,
+});
+export const productSearchQuerySchema = productSearchSchema
+  .omit({ cursor: true, limit: true })
+  .extend({ limit: z.literal(3).default(3) });
+export type ProductSearchQuery = z.output<typeof productSearchQuerySchema>;
 
 export const productMatchReasonSchema = z.enum([
   'category_match',
@@ -315,6 +322,13 @@ export class ProductCatalogService {
           ? await this.explainNoResult(manager, input)
           : null,
     };
+  }
+
+  public getNextPage(
+    query: ProductSearchQuery,
+    cursor: string,
+  ): Promise<ProductSearchResponse> {
+    return this.search({ ...query, cursor });
   }
 
   private async explainNoResult(

@@ -4,6 +4,7 @@ import { BlockList, isIP } from 'node:net';
 import { z } from 'zod';
 
 import type { LlmUsage } from '../../llm/graph/llm.state.js';
+import { productSearchQuerySchema } from '../../product-catalog/index.js';
 import type {
   ChatActivity,
   ChatContextUsage,
@@ -72,6 +73,7 @@ const productResultsSchema = z.strictObject({
       'NO_MATCHING_PRODUCT',
     ])
     .nullable(),
+  query: productSearchQuerySchema.optional(),
 });
 
 const envelopeSchema = z.object({
@@ -301,30 +303,34 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
   }
   const sources = projectSources(source.sources, new Map(), true);
   const productResults: ChatProductResults[] = source.productResults.map(
-    (entry) => ({
-      ...entry,
-      items: entry.items.flatMap((item) => {
-        const imageUrl = item.imageUrl
-          ? (publicSourceUrl(item.imageUrl)?.toString() ?? null)
-          : null;
-        const productUrl = item.productUrl
-          ? (publicSourceUrl(item.productUrl)?.toString() ?? null)
-          : null;
-        if (!item.name.trim() || !/^\d{1,10}\.\d{2}$/u.test(item.price))
-          return [];
-        return [
-          {
-            ...item,
-            name: item.name.trim(),
-            imageUrl,
-            productUrl,
-            sizes: [...new Set(item.sizes)],
-            colors: [...new Set(item.colors)],
-            matchReasons: [...new Set(item.matchReasons)],
-          },
-        ];
-      }),
-    }),
+    (entry) => {
+      const { query, ...result } = entry;
+      return {
+        ...result,
+        ...(query ? { query } : {}),
+        items: entry.items.flatMap((item) => {
+          const imageUrl = item.imageUrl
+            ? (publicSourceUrl(item.imageUrl)?.toString() ?? null)
+            : null;
+          const productUrl = item.productUrl
+            ? (publicSourceUrl(item.productUrl)?.toString() ?? null)
+            : null;
+          if (!item.name.trim() || !/^\d{1,10}\.\d{2}$/u.test(item.price))
+            return [];
+          return [
+            {
+              ...item,
+              name: item.name.trim(),
+              imageUrl,
+              productUrl,
+              sizes: [...new Set(item.sizes)],
+              colors: [...new Set(item.colors)],
+              matchReasons: [...new Set(item.matchReasons)],
+            },
+          ];
+        }),
+      };
+    },
   );
   const context = source.context
     ? projectContext(source.context.contextWindowTokens, {
@@ -351,8 +357,10 @@ export function restoreProductResults(
   const parsed = productResultsSchema.safeParse(value);
   if (!parsed.success) return null;
   const result = parsed.data;
+  const { query, ...productResults } = result;
   return {
-    ...result,
+    ...productResults,
+    ...(query ? { query } : {}),
     items: result.items.map((item) => ({
       ...item,
       imageUrl: item.imageUrl
