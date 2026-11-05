@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { LockMode, sql, type EntityManager } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
-import { randomUUID } from 'node:crypto';
-
+import {
+  CHAT_EXTRACTION_SOURCE,
+  type ChatExtractionSource,
+} from '../../chat-records/extraction-source/index.js';
 import type {
   EnqueueMemoryTaskInput,
   UserMemoryTasks,
@@ -13,7 +15,9 @@ import { UserMemorySetting } from '../entity/user-memory-setting.entity.js';
 import { UserMemoryDocumentState } from '../entity/user-memory-document-state.entity.js';
 import {
   MEMORY_TASK_BATCH_SIZE,
+  MEMORY_TASK_DEBOUNCE_MS,
   MEMORY_TASK_PROCESSING_TIMEOUT_MS,
+  MEMORY_TASK_SOURCE_TURN_LIMIT,
 } from '../task/memory-task-claim.js';
 import {
   MEMORY_TASK_MAX_ATTEMPTS,
@@ -30,59 +34,160 @@ export class UserMemoryTaskService implements UserMemoryTasks {
   public constructor(
     @InjectRepository(UserMemoryTask)
     private readonly tasks: EntityRepository<UserMemoryTask>,
+    @Inject(CHAT_EXTRACTION_SOURCE)
+    private readonly source: ChatExtractionSource,
   ) {}
 
   public async enqueueInTransaction(
     entityManager: EntityManager,
     input: EnqueueMemoryTaskInput,
   ): Promise<void> {
-    const now = new Date();
     const transactionContext = entityManager.getTransactionContext();
     const connection = entityManager.getConnection();
+    // advisory lock 协调跨进程同用户写入；实体读写仍由 EntityManager 管理。
     await connection.execute(
       'select pg_advisory_xact_lock(hashtextextended(?, 0))',
       [`user-memory-document:${input.userId}`],
       'run',
       transactionContext,
     );
-    const [setting] = await connection.execute<Array<{ enabled: boolean }>>(
-      'select enabled from user_memory_settings where user_id = ?',
-      [input.userId],
-      'all',
-      transactionContext,
-    );
+    const setting = await entityManager.findOne(UserMemorySetting, {
+      userId: input.userId,
+    });
     if (setting?.enabled === false) return;
-    const [state] = await connection.execute<
-      Array<{ document_generation: number }>
-    >(
-      'select document_generation from user_memory_document_states where user_id = ?',
-      [input.userId],
-      'all',
-      transactionContext,
-    );
-    // 立即入队与领取共用数据库时钟，避免跨进程时钟偏差推迟首次领取。
-    await connection.execute(
-      `insert into user_memory_tasks (
-         id, user_id, conversation_id, user_message_id, assistant_message_id,
-         deduplication_key, document_generation, status, attempts, available_at,
-         locked_at, last_error_code, created_at, updated_at
-       ) values (?, ?, ?, ?, ?, ?, ?, ?, 0, now(), null, null, ?, ?)
-       on conflict (deduplication_key) do nothing`,
-      [
-        randomUUID(),
-        input.userId,
-        input.conversationId,
-        input.userMessageId,
-        input.assistantMessageId,
-        `${input.conversationId}:${input.userMessageId}`,
-        state?.document_generation ?? 0,
-        UserMemoryTaskStatus.PENDING,
-        now,
-        now,
+    const state = await entityManager.findOne(UserMemoryDocumentState, {
+      userId: input.userId,
+    });
+    const generation = state?.documentGeneration ?? 0;
+    const deduplicationKey = `${input.conversationId}:${input.userMessageId}`;
+    const existing = await entityManager.findOne(UserMemoryTask, {
+      $or: [
+        { deduplicationKey },
+        {
+          conversationId: input.conversationId,
+          userMessageId: input.userMessageId,
+        },
+        {
+          conversationId: input.conversationId,
+          sourceTurns: {
+            $elemMatch: { userMessageId: input.userMessageId },
+          },
+        },
       ],
-      'run',
-      transactionContext,
+    });
+    if (existing) return;
+    const mergeable = await entityManager.findOne(
+      UserMemoryTask,
+      {
+        userId: input.userId,
+        conversationId: input.conversationId,
+        documentGeneration: generation,
+        status: UserMemoryTaskStatus.PENDING,
+        attempts: 0,
+        candidateOperations: null,
+        sourceTurns: { $ne: null },
+      },
+      {
+        orderBy: { createdAt: 'DESC' },
+        lockMode: LockMode.PESSIMISTIC_WRITE,
+      },
     );
+    if (
+      mergeable?.sourceTurns &&
+      mergeable.sourceTurns.length < MEMORY_TASK_SOURCE_TURN_LIMIT
+    ) {
+      const turns = mergeable.sourceTurns;
+      const includesSource = turns.some(
+        (turn) => turn.userMessageId === input.userMessageId,
+      );
+      if (!includesSource) {
+        const sourceTurns = [
+          ...turns,
+          {
+            userMessageId: input.userMessageId,
+            assistantMessageId: input.assistantMessageId,
+          },
+        ];
+        await entityManager.nativeUpdate(
+          UserMemoryTask,
+          {
+            id: mergeable.id,
+            status: UserMemoryTaskStatus.PENDING,
+            attempts: 0,
+            candidateOperations: null,
+          },
+          {
+            sourceTurns,
+            availableAt:
+              sql`now() + ${MEMORY_TASK_DEBOUNCE_MS} * interval '1 millisecond'` as unknown as Date,
+            updatedAt: sql.now(),
+          },
+        );
+      }
+      return;
+    }
+    // 所有实例共享数据库时钟，最后一轮写入后才开始 5 分钟静默期。
+    entityManager.create(UserMemoryTask, {
+      userId: input.userId,
+      conversationId: input.conversationId,
+      userMessageId: input.userMessageId,
+      assistantMessageId: input.assistantMessageId,
+      sourceTurns: [
+        {
+          userMessageId: input.userMessageId,
+          assistantMessageId: input.assistantMessageId,
+        },
+      ],
+      deduplicationKey,
+      documentGeneration: generation,
+      status: UserMemoryTaskStatus.PENDING,
+      attempts: 0,
+      availableAt: new Date(),
+      lockedAt: null,
+      lastErrorCode: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await entityManager.flush();
+    await entityManager.nativeUpdate(
+      UserMemoryTask,
+      { deduplicationKey },
+      {
+        availableAt:
+          sql`now() + ${MEMORY_TASK_DEBOUNCE_MS} * interval '1 millisecond'` as unknown as Date,
+        updatedAt: sql.now(),
+      },
+    );
+  }
+
+  public async flush(userId: string, conversationId: string): Promise<void> {
+    const entityManager = this.tasks.getEntityManager().fork();
+    await entityManager.transactional(async (transaction) => {
+      await transaction
+        .getConnection()
+        .execute(
+          'select pg_advisory_xact_lock(hashtextextended(?, 0))',
+          [`user-memory-document:${userId}`],
+          'run',
+          transaction.getTransactionContext(),
+        );
+      if (
+        !this.source.ownsConversation ||
+        !(await this.source.ownsConversation({ userId, conversationId }))
+      )
+        throw new NotFoundException('会话不存在');
+      await transaction.nativeUpdate(
+        UserMemoryTask,
+        {
+          userId,
+          conversationId,
+          status: UserMemoryTaskStatus.PENDING,
+          attempts: 0,
+          candidateOperations: null,
+        },
+        { availableAt: sql.now(), updatedAt: sql.now() },
+      );
+    });
   }
 
   public async claimBatch(): Promise<UserMemoryTask[]> {

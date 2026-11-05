@@ -6,6 +6,7 @@ import {
   ref,
   shallowRef,
 } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
 import { ApiError } from '@/api';
 import {
   deleteConversation as deleteConversationRequest,
@@ -19,6 +20,7 @@ import type {
   Conversation,
 } from '@/api/types/chat';
 import { auth } from '@/lib/auth';
+import { flushMemoryTasks } from '@/api/modules/memories';
 import {
   applyTurnEvent,
   createPendingMessage,
@@ -77,6 +79,14 @@ export function useChatPage() {
   let streamTimer: number | undefined;
   let streamStartedAt: number | null = null;
   let disposed = false;
+
+  function flushConversation(id: string | null, keepalive = false) {
+    const token = auth.state.token;
+    if (!id || !token) return;
+    void flushMemoryTasks(token, id, keepalive).catch(() => {
+      // 提前提取只是尽力触发，失败由服务端静默期调度兜底。
+    });
+  }
 
   const activeConversation = computed(() =>
     conversations.value.find((item) => item.id === activeConversationId.value),
@@ -257,6 +267,7 @@ export function useChatPage() {
   }
 
   function startNewConversation() {
+    flushConversation(activeConversationId.value);
     cancelCurrentRequest();
     requestVersion += 1;
     currentTurn = null;
@@ -309,6 +320,8 @@ export function useChatPage() {
   async function selectConversation(id: string) {
     const token = auth.state.token;
     if (!token) return;
+    if (id !== activeConversationId.value)
+      flushConversation(activeConversationId.value);
     cancelCurrentRequest();
     const version = ++requestVersion;
     const controller = new AbortController();
@@ -566,8 +579,16 @@ export function useChatPage() {
 
   onMounted(() => {
     void loadConversations();
+    window.addEventListener('pagehide', handlePageHide);
+  });
+  function handlePageHide() {
+    flushConversation(activeConversationId.value, true);
+  }
+  onBeforeRouteLeave(() => {
+    flushConversation(activeConversationId.value);
   });
   onBeforeUnmount(() => {
+    window.removeEventListener('pagehide', handlePageHide);
     cancelCurrentRequest();
     disposed = true;
     requestVersion += 1;

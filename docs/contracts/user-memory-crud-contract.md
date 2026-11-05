@@ -10,6 +10,19 @@
 - 独立资源：[用户偏好契约](./user-preferences-crud-contract.md)。
 - 确认记录：2026-11-04 用户批准设计、本契约、技术文档，并回复“确认实施文档”授权实施。
 
+## 后续变更草案：降低记忆提取频率
+
+- 状态：设计、契约、技术及实施已确认并完成。不属于 2026-11-04 已确认并实施的范围。
+- 日期：2026-11-05。
+- 设计文档：[会话批量提取设计](../user-memory/user-memory-session-extraction-design.md)。
+- 技术方案：[会话批量提取技术文档](../user-memory/user-memory-session-extraction-technical.md)。
+- 确认记录：用户于 2026-11-05 回复“可以”、两次“确认”，批准设计、契约、技术方案及实施安排。
+- 提议行为：同一聊天会话的待处理轮次合并，最后一轮成功保存后空闲 5 分钟自动可领取；离开聊天页时通过认证接口尽力提前释放待处理任务。
+- 已确认新增 `POST /api/memories/tasks/flush`，Body 为 strict `{ conversationId: UUID }`，成功返回 `204`，仅操作当前用户尚未领取的任务。
+- 浏览器关闭通知不是可靠保证；服务端 5 分钟空闲调度必须独立兜底。
+- 批次最多 10 轮，只保存聊天消息 ID，不复制正文；已领取任务不可被新消息或 flush 改写。
+- 该变更涉及记忆任务的数据结构和 API；实现与迁移验证结果见[实施文档](../user-memory/user-memory-session-extraction-implementation.md)。
+
 结构化偏好的类别、表单预设、自定义值及 CRUD 规则由偏好契约维护，不再属于本资源。
 
 ## 资源与字段
@@ -33,13 +46,14 @@
 
 ## 已确认 API
 
-| 操作     | 方法及路径                      | 输入与响应                                    |
-| -------- | ------------------------------- | --------------------------------------------- |
-| 读取文档 | `GET /api/memories/document`    | `{ content, revision, updatedAt }`            |
-| 替换文档 | `PUT /api/memories/document`    | `{ content, expectedRevision }`；返回最新文档 |
-| 清空文档 | `DELETE /api/memories/document` | 无 Body；`204`                                |
-| 读取开关 | `GET /api/memories/settings`    | `{ enabled, updatedAt }`                      |
-| 修改开关 | `PATCH /api/memories/settings`  | `{ enabled: boolean }`；返回记忆设置          |
+| 操作                   | 方法及路径                       | 输入与响应                                             |
+| ---------------------- | -------------------------------- | ------------------------------------------------------ |
+| 读取文档               | `GET /api/memories/document`     | `{ content, revision, updatedAt }`                     |
+| 替换文档               | `PUT /api/memories/document`     | `{ content, expectedRevision }`；返回最新文档          |
+| 清空文档               | `DELETE /api/memories/document`  | 无 Body；`204`                                         |
+| 读取开关               | `GET /api/memories/settings`     | `{ enabled, updatedAt }`                               |
+| 修改开关               | `PATCH /api/memories/settings`   | `{ enabled: boolean }`；返回记忆设置                   |
+| 提前释放待处理提取任务 | `POST /api/memories/tasks/flush` | `{ conversationId: UUID }`；返回 `204`；仅当前用户会话 |
 
 原结构化偏好路由移至 `/api/preferences`，本模块不保留其兼容别名。原 settings 接口只控制记忆，前端不得继续将其作为总开关。
 

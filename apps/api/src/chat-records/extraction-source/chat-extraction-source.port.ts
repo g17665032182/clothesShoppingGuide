@@ -7,9 +7,26 @@ export type ChatExtractionInput = {
   assistantMessageId: string;
 };
 
+export type ChatExtractionTurn = {
+  userMessageId: string;
+  assistantMessageId: string;
+};
+
 export interface ChatExtractionSource {
+  ownsConversation?(input: {
+    userId: string;
+    conversationId: string;
+  }): Promise<boolean>;
   readTurn(input: ChatExtractionInput): Promise<{
     userMessage: string;
     assistantMessage: string;
   } | null>;
+  readTurns?(input: {
+    userId: string;
+    conversationId: string;
+    turns: ChatExtractionTurn[];
+  }): Promise<Array<{
+    userMessage: string;
+    assistantMessage: string;
+  }> | null>;
 }

@@ -52,3 +52,22 @@ export function clearMemoryDocument(
     signal,
   });
 }
+
+export function flushMemoryTasks(
+  token: string,
+  conversationId: string,
+  keepalive = false,
+): Promise<void> {
+  return apiRequest<void>('/memories/tasks/flush', {
+    method: 'POST',
+    data: { conversationId },
+    token,
+    ...(keepalive
+      ? {
+          adapter: 'fetch',
+          fetchOptions: { keepalive: true },
+          allowRefresh: false,
+        }
+      : {}),
+  });
+}

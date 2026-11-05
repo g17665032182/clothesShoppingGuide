@@ -1444,6 +1444,23 @@
           "enumItems": [],
           "mappedType": "json"
         },
+        "source_turns": {
+          "name": "source_turns",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
         "conversation_id": {
           "name": "conversation_id",
           "type": "uuid",
@@ -1697,6 +1714,12 @@
           "expression": "attempts >= 0",
           "definition": "CHECK ((attempts >= 0))",
           "columnName": "attempts"
+        },
+        {
+          "name": "user_memory_tasks_source_turns_array_check",
+          "expression": "source_turns is null or jsonb_typeof(source_turns) = 'array'",
+          "definition": "CHECK (((source_turns IS NULL) OR (jsonb_typeof(source_turns) = 'array'::text)))",
+          "columnName": "source_turns"
         },
         {
           "name": "user_memory_tasks_document_generation_check",

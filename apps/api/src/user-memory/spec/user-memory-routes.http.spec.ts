@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   ConflictException,
   Module,
+  NotFoundException,
   ServiceUnavailableException,
   StandardSchemaValidationPipe,
 } from '@nestjs/common';
@@ -13,8 +14,10 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard.js';
 import { UserMemoryDocumentController } from '../controller/user-memory-document.controller.js';
 import { UserMemorySettingsController } from '../controller/user-memory-settings.controller.js';
+import { UserMemoryTaskController } from '../controller/user-memory-task.controller.js';
 import { UserMemoryDocumentService } from '../service/user-memory-document.service.js';
 import { UserMemorySettingsService } from '../service/user-memory-settings.service.js';
+import { UserMemoryTaskService } from '../service/user-memory-task.service.js';
 import type { UpdateMemoryDocumentInput } from '../dto/user-memory-document.dto.js';
 
 test('真实 Nest 记忆路由：认证、用户隔离、严格校验、冲突与独立开关', async () => {
@@ -55,6 +58,13 @@ test('真实 Nest 记忆路由：认证、用户隔离、严格校验、冲突�
       return settingsService.get(id);
     },
   };
+  const taskService = {
+    flush: async (userId: string, conversationId: string) => {
+      if (conversationId !== '11111111-1111-4111-8111-111111111111')
+        throw new NotFoundException();
+      assert.equal(userId, 'owner');
+    },
+  };
   // tsx 不产生构造器元数据，测试显式补入生产编译器会生成的信息。
   Reflect.defineMetadata(
     'design:paramtypes',
@@ -66,11 +76,21 @@ test('真实 Nest 记忆路由：认证、用户隔离、严格校验、冲突�
     [UserMemorySettingsService],
     UserMemorySettingsController,
   );
+  Reflect.defineMetadata(
+    'design:paramtypes',
+    [UserMemoryTaskService],
+    UserMemoryTaskController,
+  );
   @Module({
-    controllers: [UserMemoryDocumentController, UserMemorySettingsController],
+    controllers: [
+      UserMemoryDocumentController,
+      UserMemorySettingsController,
+      UserMemoryTaskController,
+    ],
     providers: [
       { provide: UserMemoryDocumentService, useValue: documentService },
       { provide: UserMemorySettingsService, useValue: settingsService },
+      { provide: UserMemoryTaskService, useValue: taskService },
     ],
   })
   class TestMemoryModule {}
@@ -183,6 +203,39 @@ test('真实 Nest 记忆路由：认证、用户隔离、严格校验、冲突�
       404,
     );
     assert.equal((await request('memories/document', 'DELETE')).status, 204);
+    assert.equal(
+      (
+        await request('memories/tasks/flush', 'POST', {
+          conversationId: '11111111-1111-4111-8111-111111111111',
+        })
+      ).status,
+      204,
+    );
+    assert.equal(
+      (
+        await request('memories/tasks/flush', 'POST', {
+          conversationId: 'invalid',
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request('memories/tasks/flush', 'POST', {
+          conversationId: '22222222-2222-4222-8222-222222222222',
+          userId: 'other',
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request('memories/tasks/flush', 'POST', {
+          conversationId: '22222222-2222-4222-8222-222222222222',
+        })
+      ).status,
+      404,
+    );
   } finally {
     await app.close();
   }

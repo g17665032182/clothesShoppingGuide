@@ -109,6 +109,7 @@ test(
     const preferenceLifecycle = new UserPreferenceLifecycleService();
     const memoryTasks = new UserMemoryTaskService(
       em.getRepository(UserMemoryTask),
+      { ownsConversation: async () => true } as never,
     );
     const cleanup = new UserMemoryDocumentCleanupService(
       em.getRepository(UserMemoryDocumentCleanup),

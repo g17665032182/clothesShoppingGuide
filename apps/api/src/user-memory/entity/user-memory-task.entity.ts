@@ -41,6 +41,12 @@ export class UserMemoryTask {
   @Property({ type: 'uuid', fieldName: 'assistant_message_id', nullable: true })
   public assistantMessageId: string | null = null;
 
+  @Property({ type: 'json', fieldName: 'source_turns', nullable: true })
+  public sourceTurns: Array<{
+    userMessageId: string;
+    assistantMessageId: string;
+  }> | null = null;
+
   @Property({ type: 'integer', fieldName: 'document_generation', default: 0 })
   public documentGeneration = 0;
 

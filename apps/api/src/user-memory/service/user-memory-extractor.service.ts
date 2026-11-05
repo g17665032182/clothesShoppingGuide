@@ -33,21 +33,27 @@ export class UserMemoryExtractorService {
 
   public async process(task: UserMemoryTask): Promise<void> {
     const current = await this.tasks.readCurrent(task);
-    if (
-      !current ||
-      !task.conversationId ||
-      !task.userMessageId ||
-      !task.assistantMessageId
-    )
-      return;
+    if (!current || !task.conversationId) return;
     // 缓存只复用生成结果，每次重试仍须校验用户和消息来源的当前有效性。
-    const input = await this.source.readTurn({
-      userId: task.userId,
-      conversationId: task.conversationId,
-      userMessageId: task.userMessageId,
-      assistantMessageId: task.assistantMessageId,
-    });
-    if (!input) return;
+    const turns = task.sourceTurns
+      ? this.source.readTurns
+        ? await this.source.readTurns({
+            userId: task.userId,
+            conversationId: task.conversationId,
+            turns: task.sourceTurns,
+          })
+        : null
+      : task.userMessageId && task.assistantMessageId
+        ? [
+            await this.source.readTurn({
+              userId: task.userId,
+              conversationId: task.conversationId,
+              userMessageId: task.userMessageId,
+              assistantMessageId: task.assistantMessageId,
+            }),
+          ]
+        : null;
+    if (!turns || turns.some((turn) => turn === null)) return;
     let operations = current.candidateOperations;
     if (operations === null) {
       const document = await this.documents.get(task.userId);
@@ -60,7 +66,10 @@ export class UserMemoryExtractorService {
           '每项 explicit 必须为 true。append 使用 section(clothing/other) 和 markdown；replace 使用唯一原文 targetText 和 replacement；delete 使用唯一原文 targetText。',
           'replace/delete 的 targetText 必须逐字来自当前文档。不得改动与本轮无关的内容。无更新时返回空数组。',
         ].join('\n'),
-        user: JSON.stringify({ ...input, currentDocument: document.content }),
+        user: JSON.stringify({
+          turns,
+          currentDocument: document.content,
+        }),
         timeoutMs: 30_000,
       });
       operations = memoryCandidateSchema.parse(

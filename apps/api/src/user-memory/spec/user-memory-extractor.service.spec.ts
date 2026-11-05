@@ -169,30 +169,43 @@ test('区分模型输出、存储故障和数据库故障，不输出未知异�
 
 test('登记取得文档锁后先检查独立开关，再捕获清空代次', async () => {
   const queries: Array<{ sql: string; params: unknown[] }> = [];
+  const created: Array<Record<string, unknown>> = [];
+  let flushes = 0;
+  let updates = 0;
   const manager = {
     getTransactionContext: () => undefined,
     getConnection: () => ({
       execute: async (sql: string, params: unknown[]) => {
         queries.push({ sql, params });
-        if (sql.includes('select enabled')) return [{ enabled: true }];
-        if (sql.includes('select document_generation'))
-          return [{ document_generation: 3 }];
         return [];
       },
     }),
-  };
-  await new UserMemoryTaskService({} as never).enqueueInTransaction(
-    manager as never,
-    {
-      userId: 'user',
-      conversationId: 'conversation',
-      userMessageId: 'message',
-      assistantMessageId: 'reply',
+    findOne: async () => null,
+    create: (_entity: unknown, input: Record<string, unknown>) => {
+      created.push(input);
+      return input;
     },
-  );
+    flush: async () => {
+      flushes++;
+    },
+    nativeUpdate: async () => {
+      updates++;
+    },
+  };
+  await new UserMemoryTaskService(
+    {} as never,
+    {} as never,
+  ).enqueueInTransaction(manager as never, {
+    userId: 'user',
+    conversationId: 'conversation',
+    userMessageId: 'message',
+    assistantMessageId: 'reply',
+  });
   assert.match(queries[0]!.sql, /pg_advisory_xact_lock/);
   assert.deepEqual(queries[0]!.params, ['user-memory-document:user']);
-  assert.match(queries[1]!.sql, /select enabled/);
-  assert.match(queries[2]!.sql, /select document_generation/);
-  assert.equal(queries[3]!.params[6], 3);
+  assert.equal(created.length, 1);
+  assert.equal(created[0]?.documentGeneration, 0);
+  assert.ok(created[0]?.availableAt instanceof Date);
+  assert.equal(flushes, 1);
+  assert.equal(updates, 1);
 });

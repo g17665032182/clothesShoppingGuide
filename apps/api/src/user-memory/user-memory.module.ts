@@ -5,6 +5,7 @@ import { LlmModule } from '../llm/llm.module.js';
 import { ChatExtractionSourceModule } from '../chat-records/extraction-source/index.js';
 import { UserMemoryDocumentController } from './controller/user-memory-document.controller.js';
 import { UserMemorySettingsController } from './controller/user-memory-settings.controller.js';
+import { UserMemoryTaskController } from './controller/user-memory-task.controller.js';
 import { UserMemorySetting } from './entity/user-memory-setting.entity.js';
 import { UserMemoryTask } from './entity/user-memory-task.entity.js';
 import { UserMemoryDocumentState } from './entity/user-memory-document-state.entity.js';
@@ -35,7 +36,11 @@ import { UserMemoryTaskService } from './service/user-memory-task.service.js';
       UserMemoryDocumentCleanup,
     ]),
   ],
-  controllers: [UserMemoryDocumentController, UserMemorySettingsController],
+  controllers: [
+    UserMemoryDocumentController,
+    UserMemorySettingsController,
+    UserMemoryTaskController,
+  ],
   providers: [
     UserMemorySettingsService,
     UserMemoryDocumentService,

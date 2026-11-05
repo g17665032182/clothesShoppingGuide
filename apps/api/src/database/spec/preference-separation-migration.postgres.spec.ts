@@ -13,6 +13,7 @@ import { Migration20261029150000 } from '../migrations/Migration20261029150000.j
 import { Migration20261103120000 } from '../migrations/Migration20261103120000.js';
 import { Migration20261103130000 } from '../migrations/Migration20261103130000.js';
 import { Migration20261104090000 } from '../migrations/Migration20261104090000.js';
+import { Migration20261105100000 } from '../migrations/Migration20261105100000.js';
 import { DatabaseSeeder } from '../seeders/DatabaseSeeder.js';
 
 test(
@@ -42,6 +43,7 @@ test(
           Migration20261103120000,
           Migration20261103130000,
           Migration20261104090000,
+          Migration20261105100000,
         ],
       },
     });
@@ -168,6 +170,37 @@ test(
       }
       t.diagnostic('两类旧部分成功任务均阻断迁移，数据库无半改名状态');
       await migrator.up();
+      const legacyTask = await connection.execute<
+        Array<{ source_turns: unknown }>
+      >('select source_turns from user_memory_tasks where id = ?', [
+        taskIds[0],
+      ]);
+      assert.equal(legacyTask[0]?.source_turns, null);
+      await connection.execute(
+        `update user_memory_tasks set source_turns = ?::jsonb where id = ?`,
+        [
+          JSON.stringify([
+            {
+              userMessageId: randomUUID(),
+              assistantMessageId: randomUUID(),
+            },
+            {
+              userMessageId: randomUUID(),
+              assistantMessageId: randomUUID(),
+            },
+          ]),
+          taskIds[0],
+        ],
+      );
+      await assert.rejects(
+        migrator.down({ to: 'Migration20261104090000' }),
+        /ACTIVE_MEMORY_BATCHES_REQUIRE_FORWARD_MIGRATION/u,
+      );
+      await connection.execute(
+        `update user_memory_tasks set source_turns = jsonb_build_array(source_turns -> 0)
+         where id = ?`,
+        [taskIds[0]],
+      );
       const preferences = await connection.execute<
         Array<{ id: string; user_id: string; value: unknown; created_at: Date }>
       >('select * from user_preferences');
@@ -268,7 +301,7 @@ test(
       );
       assert.equal(
         (await migrator.getExecuted()).at(-1)?.name,
-        'Migration20261104090000',
+        'Migration20261105100000',
       );
       t.diagnostic(
         'ID、设置、generation、文档指针、操作键、任务次数和外键保留；有损 down 被拒绝',

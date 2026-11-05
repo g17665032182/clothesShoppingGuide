@@ -62,6 +62,7 @@ test(
     const em = orm.em.fork();
     const taskService = new UserMemoryTaskService(
       orm.em.getRepository(UserMemoryTask),
+      { ownsConversation: async () => true } as never,
     );
     const settings = new UserMemorySettingsService(
       orm.em.getRepository(UserMemorySetting),
@@ -120,6 +121,11 @@ test(
           userMessage: '长期喜欢棉质衣物',
           assistantMessage: '好的',
         }),
+        readTurns: async ({ turns }: { turns: Array<unknown> }) =>
+          turns.map(() => ({
+            userMessage: '长期喜欢棉质衣物',
+            assistantMessage: '好的',
+          })),
       },
       documents,
     );
@@ -129,6 +135,12 @@ test(
       userMessageId: randomUUID(),
       assistantMessageId: randomUUID(),
     };
+    const additionalTurns = Array.from({ length: 10 }, () => ({
+      userId: owner,
+      conversationId,
+      userMessageId: randomUUID(),
+      assistantMessageId: randomUUID(),
+    }));
     const enqueue = (data = input) =>
       em
         .fork()
@@ -151,23 +163,54 @@ test(
         }),
       );
       await em.flush();
-      em.persist([
-        Object.assign(new ChatMessage(), {
-          id: input.userMessageId,
-          conversationId,
-          role: ChatRecordMessageRole.USER,
-          content: '长期喜欢棉质衣物',
-        }),
-        Object.assign(new ChatMessage(), {
-          id: input.assistantMessageId,
-          conversationId,
-          role: ChatRecordMessageRole.ASSISTANT,
-          content: '好的',
-        }),
-      ]);
+      em.persist(
+        [input, ...additionalTurns].flatMap((turn) => [
+          Object.assign(new ChatMessage(), {
+            id: turn.userMessageId,
+            conversationId,
+            role: ChatRecordMessageRole.USER,
+            content: '长期喜欢棉质衣物',
+          }),
+          Object.assign(new ChatMessage(), {
+            id: turn.assistantMessageId,
+            conversationId,
+            role: ChatRecordMessageRole.ASSISTANT,
+            content: '好的',
+          }),
+        ]),
+      );
       await em.flush();
       await Promise.all([settings.get(owner), settings.get(owner)]);
       await enqueue();
+      for (const turn of additionalTurns) await enqueue(turn);
+      await enqueue(additionalTurns[9]);
+      const queued = await em.fork().find(
+        UserMemoryTask,
+        {
+          userId: owner,
+          conversationId,
+        },
+        {
+          orderBy: { createdAt: 'ASC' },
+        },
+      );
+      assert.equal(queued.length, 2, '超过上限后建立后续批次');
+      assert.equal(queued[0]?.sourceTurns?.length, 10);
+      assert.equal(queued[1]?.sourceTurns?.length, 1);
+      assert.ok(queued[0]!.availableAt.getTime() > Date.now() + 4 * 60_000);
+      const tooEarly = await taskService.claimBatch();
+      assert.equal(
+        tooEarly.some((task) => task.id === queued[0]!.id),
+        false,
+        '五分钟静默期内不可领取',
+      );
+      await taskService.flush(owner, conversationId);
+      await taskService.flush(owner, conversationId);
+      const flushed = await em
+        .fork()
+        .findOneOrFail(UserMemoryTask, { id: queued[0]!.id });
+      assert.ok(flushed.availableAt.getTime() <= Date.now());
+      await em.nativeDelete(UserMemoryTask, { id: queued[1]!.id });
       const batches = await Promise.all([
         taskService.claimBatch(),
         taskService.claimBatch(),
