@@ -2,7 +2,7 @@
 
 ## 文档信息
 
-- 状态：待用户确认。
+- 状态：技术方案已确认；本轮按补充契约规则同步，待用户复核。
 - 关联设计：[服装导购体系设计文档](./product-guide-design.md)。
 - 关联契约：[商品目录 CRUD 契约](../contracts/product-catalog-crud-contract.md)。
 - 所属应用：`apps/api`、`apps/web`。
@@ -66,13 +66,13 @@ apps/web/src/pages/chat/components/
 
 ## 数据模型与索引
 
-建议使用两张表：
+已确认使用两张表：
 
 ### `products`
 
 - UUID 主键。
 - `external_id` 唯一且非空。
-- 名称、品牌、类别、纯文本描述、风格/场合/版型 JSON 标签、适用人群。
+- 名称、品牌、类别（`tops`、`bottoms`、`dresses`、`outerwear`、`shoes`）、纯文本描述、风格/场合/版型 JSON 标签、适用人群（`adult`）。
 - `product_url` 可空，`is_active`。
 - 创建和更新时间。
 
@@ -80,12 +80,12 @@ apps/web/src/pages/chat/components/
 
 - UUID 主键，外键 `product_id` 指向 products，父商品删除策略为禁止物理删除或级联仅由数据库策略明确限定。
 - `external_sku_id` 与 `product_id` 组成唯一约束。
-- 颜色、尺码、价格（PostgreSQL `numeric`，不得使用浮点数计算）、币种、非负整数库存、图片 URL、启用状态。
+- 颜色、尺码字符串、价格（PostgreSQL `numeric(12,2)`，不得使用浮点数计算）、固定币种 `CNY`、非负整数库存、图片 URL、启用状态。
 - 创建和更新时间。
 
 Migration 显式创建外键、唯一约束及读取索引。建议索引覆盖有效商品类别和 SKU 父键/状态；具体索引需根据查询 SQL 和 EXPLAIN 校验，避免为 JSON 标签建立未经测量的 GIN 索引。
 
-设计契约中标注待确认的精确枚举、价格单位、尺码表示和字段长度仍需用户批准后定稿。字段/约束发生变化时先回到设计与契约阶段更新审批，技术文档不替代该审批。
+字段/约束发生变化时先回到设计与契约阶段更新审批，技术文档不替代该审批。名称、描述、标签和 URL 的精确长度仍需在实现前由 schema 定稿。
 
 ## 模块依赖与工具注入
 
@@ -120,9 +120,9 @@ LlmModule
 
 初版只使用离散、可解释的规则分值：类别/尺码/预算/库存用于候选可用性；明确硬条件必须满足；颜色、风格、场合、版型和偏好匹配产生有限标签与排序分。每个分值和标签都由命中的字段推导，禁止让 LLM 生成结构化标签。不得在应用层加载全部商品再排序。
 
-默认 `limit=3` 且上限不超过契约确定的值。为使游标续查结果稳定，分页排序键必须是完整且确定的组合。游标不得明文承载任意过滤条件；建议包含规范化查询指纹、最后排序键和版本，并使用服务端 HMAC 签名。非法、篡改、版本不兼容游标返回稳定的无敏感信息错误。游标有效期待技术参数确认。
+默认 `limit=3`，上限为 20。为使游标续查结果稳定，分页排序键必须是完整且确定的组合。游标包含规范化查询指纹、最后排序键和版本，并使用服务端 HMAC 签名，有效期 15 分钟。非法、篡改、过期或版本不兼容游标返回稳定的无敏感信息错误。
 
-“更多”和“换一批”语义在设计契约仍待确认；批准前按相同排序键的下一页处理，不实现随机排序或排除当前结果集的隐藏规则。
+“更多”和“换一批”都按相同排序键的下一页处理，不实现随机排序或排除当前结果集的隐藏规则。
 
 无结果时返回空结果和有限原因枚举，例如 `NO_MATCHING_SIZE`、`OVER_BUDGET`、`OUT_OF_STOCK`、`NO_ACTIVE_PRODUCT`。只有能从实际查询约束确定的原因才可返回；不以模型推测原因，不自动调整筛选条件。
 
@@ -146,18 +146,9 @@ LlmModule
 
 ## API、schema 与错误
 
-首期查询由受 JWT 保护的聊天入口调用内部工具。商品只读 HTTP API 是契约中的待确认项；若批准 HTTP 查询，则新增 `GET /api/products`，否则不新增产品路由。
+首期查询只由受 JWT 保护的聊天入口调用内部工具，不新增商品 HTTP 查询路由。商品工具的结构化输入单独定义 Zod strict schema，并由 LangChain 工具运行前校验。
 
-如果存在 HTTP 查询：
-
-- Query schema 位于 `product-catalog/dto/product-query.dto.ts`，使用 `z.strictObject`。
-- Query 数字参数使用 `z.coerce` 后约束整数、非负边界；页大小采用 schema 默认值并限定最大值。
-- `cursor`、category、size、color、style、occasion、fit、预算和库存筛选都只接受明确字段；拒绝未知字段。
-- Controller 使用 `@Query({ schema: productQuerySchema })` 绑定；全局 `StandardSchemaValidationPipe` 将解析错误映射为 `400`。
-- 输入/解析类型由 schema 派生；对转换字段使用 `z.input` / `z.output` 区分。
-- Swagger DTO 仅描述文档，不承担运行时校验。
-
-导入文件 schema 也用 Zod strict schema，但不是 HTTP 请求，不通过 Nest Pipe。LLM 工具的结构化输入单独定义 Zod schema，并由 LangChain 工具运行前校验。
+导入文件 schema 也用 Zod strict schema，但不是 HTTP 请求，不通过 Nest Pipe。
 
 错误边界：
 
@@ -231,10 +222,7 @@ pnpm check
 
 ## 技术审批待确认
 
-1. 契约待确认项解决前的字段值、币种/精度、尺码和 JSON 缺省语义。
-2. 是否新增只读商品 HTTP API。
-3. Product Tool 与通用 LLM Tool Registry 的 Nest 注入组合方式。
-4. 游标签名密钥配置、生命周期和跨请求状态策略。
-5. “更多/换一批”精确语义及推荐卡片历史价格展示方式。
-6. 具体查询排序分值、匹配标签及无结果原因枚举。
-7. 生产商品 JSON 的尺寸/记录上限和部署环境 CLI 执行方式。
+1. Product Tool 与通用 LLM Tool Registry 的 Nest 注入组合方式。
+2. 游标签名密钥配置来源和具体载荷编码。
+3. 具体匹配标签和无结果原因枚举。
+4. 生产商品 JSON 的尺寸/记录数上限和部署环境 CLI 执行方式。
