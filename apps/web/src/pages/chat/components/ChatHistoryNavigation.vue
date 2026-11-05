@@ -2,16 +2,13 @@
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   MessageSquare,
-  Shirt,
   SquarePen,
   Trash2,
 } from '@lucide/vue';
 import { ref } from 'vue';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import AccountMenu from '@/components/shared/AccountMenu.vue';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,9 +21,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { auth } from '@/lib/auth';
 import type { Conversation } from '@/api/types/chat';
 
+// 提供可复用的会话导航，并通过事件把操作交回所属页面。
 defineProps<{
   activeConversationId: string | null;
   conversations: Conversation[];
@@ -87,59 +84,24 @@ function handleConversationScroll(event: Event) {
   <aside
     :class="
       cn(
-        'flex max-h-[45vh] w-full shrink-0 flex-col border-b border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] sm:h-full sm:max-h-none sm:border-b-0 sm:border-r',
+        'relative flex max-h-[45vh] w-full shrink-0 flex-col border-b border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] sm:h-full sm:max-h-none sm:border-b-0 sm:border-r',
         isCollapsed ? 'sm:w-16' : 'sm:w-80',
       )
     "
   >
     <div
-      :class="
-        cn(
-          'flex min-h-16 items-center px-4 py-3',
-          isCollapsed ? 'justify-center' : 'justify-between',
-        )
-      "
+      :class="cn('px-5 pb-4 pt-5', isCollapsed && 'flex justify-center px-2')"
     >
-      <RouterLink
-        v-if="!isCollapsed"
-        class="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-semibold transition-colors hover:bg-sidebar-accent"
-        to="/chat"
-        title="衣橱指南"
-      >
-        <span
-          class="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground"
-        >
-          <Shirt aria-hidden="true" />
-        </span>
-        <span class="truncate">衣橱指南</span>
-      </RouterLink>
-      <div class="flex items-center gap-0.5">
-        <Button
-          :aria-label="isCollapsed ? '展开侧边栏' : '折叠侧边栏'"
-          :title="isCollapsed ? '展开侧边栏' : '折叠侧边栏'"
-          class="size-8"
-          size="icon"
-          type="button"
-          variant="ghost"
-          @click="toggleCollapsed"
-        >
-          <ChevronRight v-if="isCollapsed" aria-hidden="true" />
-          <ChevronLeft v-else aria-hidden="true" />
-        </Button>
-      </div>
-    </div>
-
-    <div :class="cn('px-4 pb-4', isCollapsed && 'flex justify-center px-2')">
       <Button
         :aria-label="isCollapsed ? '新聊天' : undefined"
         :title="isCollapsed ? '新聊天' : undefined"
         :class="
           isCollapsed
-            ? 'size-10 rounded-lg px-0'
-            : 'h-10 w-full justify-start gap-2 rounded-lg text-xs'
+            ? 'size-10 rounded-full border bg-background px-0 shadow-md'
+            : 'h-10 justify-start gap-2 rounded-full border bg-background px-4 text-xs shadow-md'
         "
         type="button"
-        variant="secondary"
+        variant="ghost"
         @click="emit('new')"
       >
         <SquarePen
@@ -153,7 +115,7 @@ function handleConversationScroll(event: Event) {
     <Separator class="bg-sidebar-border" />
 
     <ScrollArea
-      :class="cn('min-h-0 flex-1 py-4', isCollapsed ? 'px-2' : 'px-4')"
+      :class="cn('min-h-0 flex-1 py-4 pb-14', isCollapsed ? 'px-2' : 'px-4')"
       @scroll="handleConversationScroll"
     >
       <div class="flex flex-col gap-1.5">
@@ -280,41 +242,18 @@ function handleConversationScroll(event: Event) {
       </div>
     </ScrollArea>
 
-    <Separator class="bg-sidebar-border" />
-
-    <div
-      :class="cn('flex flex-col gap-1 p-4', isCollapsed && 'items-center px-2')"
+    <Button
+      :aria-label="isCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+      :title="isCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+      class="absolute bottom-5 left-5 z-10 size-10 rounded-full border bg-background shadow-md"
+      size="icon"
+      type="button"
+      variant="ghost"
+      @click="toggleCollapsed"
     >
-      <AccountMenu align="start" side="top">
-        <Button
-          aria-label="用户菜单"
-          :title="auth.state.user?.displayName ?? '我的账户'"
-          :class="
-            cn(
-              'h-11',
-              isCollapsed ? 'size-11 px-0' : 'w-full justify-start gap-3 px-2',
-            )
-          "
-          type="button"
-          variant="ghost"
-        >
-          <span
-            aria-hidden="true"
-            class="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground"
-          >
-            {{ auth.state.user?.displayName?.slice(0, 1) ?? '我' }}
-          </span>
-          <span v-if="!isCollapsed" class="min-w-0 flex-1 truncate">{{
-            auth.state.user?.displayName ?? '我的账户'
-          }}</span>
-          <ChevronUp
-            v-if="!isCollapsed"
-            aria-hidden="true"
-            data-icon="inline-end"
-          />
-        </Button>
-      </AccountMenu>
-    </div>
+      <ChevronRight v-if="isCollapsed" aria-hidden="true" />
+      <ChevronLeft v-else aria-hidden="true" />
+    </Button>
 
     <AlertDialog v-model:open="isDeleteDialogOpen">
       <AlertDialogContent>

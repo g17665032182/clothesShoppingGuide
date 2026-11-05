@@ -23,15 +23,29 @@ export const router = createRouter({
     },
     {
       path: '/account',
-      name: 'account',
-      component: () => import('@/pages/account/index.vue'),
+      component: () => import('@/pages/account/layout.vue'),
       meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          redirect: { name: 'account-profile' },
+        },
+        {
+          path: 'profile',
+          name: 'account-profile',
+          component: () => import('@/pages/account/index.vue'),
+        },
+        {
+          path: 'memories',
+          name: 'account-memories',
+          component: () => import('@/pages/memories/index.vue'),
+        },
+      ],
     },
     {
       path: '/memories',
       name: 'memories',
-      component: () => import('@/pages/memories/index.vue'),
-      meta: { requiresAuth: true },
+      redirect: (to) => ({ name: 'account-memories', query: to.query }),
     },
     {
       path: '/chat',
@@ -57,7 +71,7 @@ router.beforeEach(async (to) => {
     return { path: '/login', query: { redirect: to.fullPath } };
   }
   if (to.meta.adminOnly && !auth.isAdmin.value) {
-    return '/account';
+    return { name: 'account-profile' };
   }
   return true;
 });

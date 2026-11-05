@@ -5,7 +5,7 @@ import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import ChatComposer from './components/ChatComposer.vue';
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessageList from './components/ChatMessageList.vue';
-import ConversationSidebar from './components/ConversationSidebar.vue';
+import ChatHistoryNavigation from './components/ChatHistoryNavigation.vue';
 import { useChatPage } from './page';
 
 const {
@@ -47,7 +47,7 @@ const {
   <section
     class="chat-page flex h-full min-h-0 w-full flex-col overflow-hidden bg-background text-foreground sm:flex-row"
   >
-    <ConversationSidebar
+    <ChatHistoryNavigation
       :active-conversation-id="activeConversationId"
       :can-delete-conversations="canDeleteConversations"
       :conversations="conversations"

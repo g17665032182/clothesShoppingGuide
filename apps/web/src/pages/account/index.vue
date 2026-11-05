@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Save, ShieldCheck } from '@lucide/vue';
+import { Save, ShieldCheck } from '@lucide/vue';
 import ProfileForm from './components/ProfileForm.vue';
 import { useAccountPage } from './page';
 import { Button } from '@/components/ui/button';
@@ -17,13 +17,11 @@ const { displayName, error, password, pending, saveProfile, status, user } =
 </script>
 
 <template>
-  <section class="flex flex-col gap-8 py-10 md:py-16">
+  <section class="flex flex-col gap-6">
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div class="flex flex-col gap-2">
         <p class="text-sm font-medium text-muted-foreground">账户</p>
-        <h1 class="text-3xl font-semibold tracking-tight md:text-4xl">
-          个人资料
-        </h1>
+        <h1 class="text-2xl font-semibold">个人资料</h1>
         <p class="text-muted-foreground">管理你的账户信息和登录凭据。</p>
       </div>
     </div>
@@ -80,13 +78,7 @@ const { displayName, error, password, pending, saveProfile, status, user } =
         </CardContent>
       </Card>
     </div>
-    <div v-if="user" class="flex justify-center gap-3 pt-2">
-      <Button as-child variant="outline">
-        <RouterLink to="/">
-          <ArrowLeft data-icon="inline-start" />
-          返回首页
-        </RouterLink>
-      </Button>
+    <div v-if="user" class="flex justify-end pt-2">
       <Button :disabled="pending" form="account-profile-form" type="submit">
         <Spinner v-if="pending" data-icon="inline-start" />
         <Save v-else data-icon="inline-start" />

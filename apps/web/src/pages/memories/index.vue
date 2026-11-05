@@ -94,7 +94,7 @@ function handleEditorOpenChange(open: boolean) {
 </script>
 
 <template>
-  <section class="flex min-w-0 flex-col gap-6 py-8 md:py-10">
+  <section class="flex min-w-0 flex-col gap-6">
     <header class="flex flex-wrap items-center justify-between gap-4">
       <div class="flex flex-col gap-2">
         <p class="text-sm font-medium text-muted-foreground">账户</p>

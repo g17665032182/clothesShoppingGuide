@@ -1,0 +1,90 @@
+<script setup lang="ts">
+import {
+  BookOpen,
+  ChevronDown,
+  LogOut,
+  Shirt,
+  SlidersHorizontal,
+  UserRound,
+} from '@lucide/vue';
+import { useRouter } from 'vue-router';
+import { auth } from '@/lib/auth';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+const router = useRouter();
+
+function signOut() {
+  auth.signOut();
+  void router.push('/login');
+}
+</script>
+
+<template>
+  <header class="shell-header">
+    <RouterLink class="brand" to="/">
+      <span class="brand-icon"><Shirt :size="18" /></span>
+      <span>衣橱指南</span>
+    </RouterLink>
+    <div class="header-actions">
+      <RouterLink v-if="auth.state.user" class="text-link" to="/chat">
+        聊天
+      </RouterLink>
+      <DropdownMenu v-if="auth.state.user">
+        <DropdownMenuTrigger as-child>
+          <Button aria-label="用户菜单" type="button" variant="ghost">
+            <UserRound aria-hidden="true" data-icon="inline-start" />
+            <span class="max-w-32 truncate">{{
+              auth.state.user.displayName
+            }}</span>
+            <ChevronDown aria-hidden="true" data-icon="inline-end" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="min-w-44">
+          <DropdownMenuGroup>
+            <DropdownMenuItem as-child>
+              <RouterLink :to="{ name: 'account-profile' }">
+                <UserRound aria-hidden="true" />
+                个人资料
+              </RouterLink>
+            </DropdownMenuItem>
+            <DropdownMenuItem as-child>
+              <RouterLink
+                :to="{ name: 'account-memories', query: { view: 'document' } }"
+              >
+                <BookOpen aria-hidden="true" />
+                我的记忆
+              </RouterLink>
+            </DropdownMenuItem>
+            <DropdownMenuItem as-child>
+              <RouterLink
+                :to="{
+                  name: 'account-memories',
+                  query: { view: 'preferences' },
+                }"
+              >
+                <SlidersHorizontal aria-hidden="true" />
+                我的偏好
+              </RouterLink>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem @select="signOut">
+              <LogOut aria-hidden="true" />
+              退出登录
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <RouterLink v-else class="text-link" to="/login">登录</RouterLink>
+    </div>
+  </header>
+</template>
