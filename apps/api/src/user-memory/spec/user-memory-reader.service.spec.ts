@@ -86,6 +86,20 @@ test('背景召回保持段落长度预算并跳过超长段落', async () => {
   assert.doesNotMatch(context, /甲/);
   assert.match(context, /气候湿热/);
   assert.match(context, /爱好徒步/);
-  const content = context.split('\n\n').slice(1).join('\n\n');
+  const content = context.split('\n\n').slice(2).join('\n\n');
   assert.ok(content.length <= 2048);
+});
+
+test('穿衣请求可召回当前所在地与近期倾向，保留历史自述和时效限制', async () => {
+  const location = '用户曾表示目前在广州海珠区，常住情况未确认';
+  const style = '用户曾表达近期穿衣倾向为休闲，未确认长期偏好';
+  const size = '上衣尺码为M，偏好棉质面料';
+  const f = fixture(true, `${location}\n\n${style}\n\n${size}\n\n喜欢阅读小说`);
+  const context = await f.service.readContext('owner', '推荐衣服');
+  for (const block of [location, style, size])
+    assert.ok(context.includes(block));
+  assert.match(context, /可能已变化/);
+  assert.match(context, /使用前需结合当前消息确认/);
+  assert.doesNotMatch(context, /阅读小说/);
+  assert.equal(await f.service.readContext('owner', '推荐一本小说'), '');
 });

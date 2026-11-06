@@ -3,7 +3,10 @@ import test from 'node:test';
 import { ServiceUnavailableException } from '@nestjs/common';
 
 import { memoryCandidateSchema } from '../context/memory-candidate.schema.js';
-import { memoryDocumentOperationsSchema } from '../context/memory-document-patch.schema.js';
+import {
+  memoryDocumentOperationsSchema,
+  type MemoryDocumentOperation,
+} from '../context/memory-document-patch.schema.js';
 import { UserMemoryExtractorService } from '../service/user-memory-extractor.service.js';
 import { UserMemoryTaskService } from '../service/user-memory-task.service.js';
 import {
@@ -18,7 +21,13 @@ const operation = {
   explicit: true as const,
 };
 
-function fixture() {
+function fixture(
+  options: {
+    userMessage?: string;
+    operations?: MemoryDocumentOperation[];
+    currentDocument?: string;
+  } = {},
+) {
   const task = Object.assign(new UserMemoryTask(), {
     id: 'task',
     userId: 'user',
@@ -37,13 +46,18 @@ function fixture() {
   let sourceAvailable = true;
   let modelInput = '';
   let systemPrompt = '';
+  let appliedOperations: MemoryDocumentOperation[] = [];
   const service = new UserMemoryExtractorService(
     {
       generate: async (input: { user: string; system: string }) => {
         generated++;
         modelInput = input.user;
         systemPrompt = input.system;
-        return { content: JSON.stringify({ operations: [operation] }) };
+        return {
+          content: JSON.stringify({
+            operations: options.operations ?? [operation],
+          }),
+        };
       },
     } as never,
     {
@@ -61,23 +75,28 @@ function fixture() {
       readTurn: async () => {
         sourceReads++;
         if (!sourceAvailable) return null;
-        return { userMessage: '我长期喜欢棉质衣物', assistantMessage: '好的' };
+        return {
+          userMessage: options.userMessage ?? '我长期喜欢棉质衣物',
+          assistantMessage: '好的',
+        };
       },
     } as never,
     {
       get: async () => ({
-        content: '已有的衣物记忆',
+        content: options.currentDocument ?? '已有的衣物记忆',
         revision: 0,
         updatedAt: null,
       }),
       applyExtractedOperations: async (input: {
         taskAttempts: number;
         taskLockedAt: Date;
+        operations: MemoryDocumentOperation[];
       }) => {
         assert.equal(input.taskAttempts, task.attempts);
         assert.equal(input.taskLockedAt, task.lockedAt);
         if (failApply) throw new ServiceUnavailableException();
         applied++;
+        appliedOperations = input.operations;
       },
     } as never,
   );
@@ -96,6 +115,7 @@ function fixture() {
     counts: () => ({ generated, applied, sourceReads }),
     modelInput: () => modelInput,
     systemPrompt: () => systemPrompt,
+    appliedOperations: () => appliedOperations,
   };
 }
 
@@ -106,24 +126,59 @@ test('记忆关闭或租约无效时不读取聊天也不调用模型', async ()
   assert.deepEqual(f.counts(), { generated: 0, applied: 0, sourceReads: 0 });
 });
 
-test('提取提示明确开放长期穿衣背景并排除临时和推测信息', async () => {
+test('提取提示放宽明确自述门槛，同时保留时间范围和隐私限制', async () => {
   const f = fixture();
   await f.service.process(f.task);
   const prompt = f.systemPrompt();
   for (const term of [
     '开放文本',
-    '长期或反复适用',
+    '不要求用户说出“长期”“经常”或重复表达',
     '季节',
-    '城市/地区',
+    '城市/行政区',
     '气候',
-    '长期爱好',
+    '常住情况未确认',
+    '近期穿衣倾向',
+    '今天想穿休闲',
     '单次天气',
-    '临时地点',
+    '旅行地点不能覆盖常住城市',
     'IP',
     '详细地址',
     '不得输出结构化偏好',
   ])
     assert.ok(prompt.includes(term), term);
+});
+
+test('所在地与近期倾向候选沿用补丁链路，生成输入保留已有常住信息', async () => {
+  const currentDocument = '用户常住杭州';
+  const operations: MemoryDocumentOperation[] = [
+    {
+      ...operation,
+      markdown: '用户曾表示目前在广州海珠区，常住情况未确认',
+    },
+    {
+      ...operation,
+      markdown: '用户曾表达近期穿衣倾向为休闲，未确认长期偏好',
+    },
+  ];
+  const userMessage = '我在广州海珠区，25度，有点下雨，我想穿休闲一点';
+  const f = fixture({ userMessage, currentDocument, operations });
+  await f.service.process(f.task);
+  const input = JSON.parse(f.modelInput());
+  assert.equal(input.turns[0].userMessage, userMessage);
+  assert.equal(input.currentDocument, currentDocument);
+  assert.deepEqual(f.task.candidateOperations, operations);
+  assert.deepEqual(f.appliedOperations(), operations);
+});
+
+test('没有适合保存的信息时允许空候选，不补写用户事实', async () => {
+  const f = fixture({
+    userMessage: '今天25度有小雨，今天想穿休闲，有衣服推荐吗',
+    operations: [],
+  });
+  await f.service.process(f.task);
+  assert.deepEqual(f.task.candidateOperations, []);
+  assert.deepEqual(f.appliedOperations(), []);
+  assert.deepEqual(f.counts(), { generated: 1, applied: 1, sourceReads: 1 });
 });
 
 test('记忆候选仅接受文档补丁并拒绝偏好、敏感信息和未知字段', () => {
