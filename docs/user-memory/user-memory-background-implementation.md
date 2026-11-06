@@ -2,9 +2,9 @@
 
 ## 状态与审批
 
-- 状态：待用户确认；尚未开始实现。
+- 状态：实施文档已确认，代码已实施；数据库集成测试和部署切换尚待执行。
 - 设计、两个资源契约及技术方案已确认。
-- 确认本实施文档后才修改业务代码、测试和前端；不新增数据库 migration，不改写账号数据。
+- 本次未新增数据库 migration，未改写账号数据。
 - 技术决策：[长期背景与偏好维护边界技术方案](./user-memory-background-technical.md)。
 
 ## 实施目标
@@ -85,3 +85,12 @@
 - HTTP/browser smoke：
 - 未执行项目与限制：
 - 剩余风险：
+
+## 本次实施记录
+
+- 2026-11-05 用户确认实施文档；聊天只登记 Markdown 记忆任务，偏好模块不再注册自动提取执行能力，删除全部偏好时保留历史任务与结果。
+- 记忆提取提示扩展长期穿衣背景，读取使用有限线索匹配；前端偏好开关更名为“参考我的偏好”。未新增依赖或 migration，未重放历史聊天。
+- `pnpm --filter @clothes-shopping-guide/api test`：149 项，143 通过、6 项 PostgreSQL 测试跳过；`pnpm check`、`pnpm --filter @clothes-shopping-guide/api typecheck`、`git diff --check` 通过。
+- 未配置 `PERSONALIZATION_TEST_DB`，未执行专用 PostgreSQL 测试；未执行真实模型、七牛及端到端 HTTP/browser smoke。
+- 未停止现有服务或执行上线切换。上线前必须停止全部旧版 API/worker，确认在途模型调用和数据库写事务结束，不得新旧版本混跑。
+- 固定线索可能漏召回或误召回，模型提取规则依赖模型遵循提示，不保证所有长期事实都能被提取。

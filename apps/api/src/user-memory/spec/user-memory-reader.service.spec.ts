@@ -63,3 +63,29 @@ test('记忆reader只保留相关段落及原顺序，故障交由聊天调用�
     ServiceUnavailableException,
   );
 });
+
+test('穿衣请求有限召回长期背景，普通请求不额外召回', async () => {
+  const f = fixture(
+    true,
+    '我住在广州，气候湿热\n\n冬季通勤较多\n\n长期爱好是徒步\n\n喜欢阅读小说',
+  );
+  const context = await f.service.readContext('owner', '推荐冬季通勤衣服');
+  assert.match(context, /住在广州/);
+  assert.match(context, /冬季通勤/);
+  assert.match(context, /徒步/);
+  assert.doesNotMatch(context, /阅读小说/);
+  assert.ok(context.indexOf('住在广州') < context.indexOf('冬季通勤'));
+  assert.equal(await f.service.readContext('owner', '推荐一本小说'), '');
+  assert.equal(await f.service.readContext('owner', '推荐早餐搭配'), '');
+  assert.equal(await f.service.readContext('owner', '购物清单'), '');
+});
+
+test('背景召回保持段落长度预算并跳过超长段落', async () => {
+  const f = fixture(true, `住在${'甲'.repeat(2048)}\n\n气候湿热\n\n爱好徒步`);
+  const context = await f.service.readContext('owner', '推荐衣服');
+  assert.doesNotMatch(context, /甲/);
+  assert.match(context, /气候湿热/);
+  assert.match(context, /爱好徒步/);
+  const content = context.split('\n\n').slice(1).join('\n\n');
+  assert.ok(content.length <= 2048);
+});

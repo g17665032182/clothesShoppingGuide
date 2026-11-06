@@ -175,7 +175,6 @@ test(
         { markConversationDeleted: async () => undefined } as never,
         display,
         { readContext: async () => '' },
-        { enqueueInTransaction: async () => undefined },
         {} as never,
       );
 

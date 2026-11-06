@@ -148,7 +148,6 @@ function createService(
     memoryLifecycle as never,
     displayService,
     preferenceReader as never,
-    memoryTasks as never,
     {} as never,
   );
 

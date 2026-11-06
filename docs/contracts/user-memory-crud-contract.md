@@ -12,7 +12,7 @@
 
 ## 后续变更：长期背景与偏好维护边界
 
-- 状态：设计、契约和技术方案已确认；实施文档待确认，未实施。设计见[长期背景与偏好维护边界](../user-memory/user-memory-background-design.md)，技术方案见[技术文档](../user-memory/user-memory-background-technical.md)。
+- 状态：设计、契约、技术方案和实施文档已确认，代码已实施；数据库集成测试及上线切换待完成。详见[实施记录](../user-memory/user-memory-background-implementation.md)。
 - 长期记忆为开放 Markdown，不依赖结构化偏好类别；纳入影响穿着选择、由用户明确表达且长期或反复适用的时间、季节、地点、爱好等背景。
 - 单次日期、地点、天气、旅行或活动仅供当前对话使用；不得由设备/IP 或助手推断补全用户事实。
 - 既有安全、用户隔离及用户管理规则保持不变；不改变记忆文档 API 或数据结构。

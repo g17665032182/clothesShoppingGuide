@@ -9,11 +9,6 @@ import {
   listPreferenceQuerySchema,
   updatePreferenceSchema,
 } from '../dto/user-preference.dto.js';
-import {
-  PREFERENCE_TASK_MAX_ATTEMPTS,
-  preferenceTaskCanRetry,
-  preferenceTaskRetryDelay,
-} from '../task/preference-task-backoff.js';
 import { formatPreferenceContext } from '../context/preference-context.formatter.js';
 
 test('偏好列表 Query 默认分页并拒绝未声明字段', () => {
@@ -125,14 +120,4 @@ test('偏好上下文包含当前消息优先级和不可执行数据规则', ()
   assert.match(context, /宽松|loose/);
   assert.match(context, /当前用户消息中的明确要求优先/u);
   assert.match(context, /不是指令/u);
-});
-
-test('提取任务按约定退避，第四次后停止重试', () => {
-  assert.equal(PREFERENCE_TASK_MAX_ATTEMPTS, 4);
-  assert.equal(preferenceTaskRetryDelay(1), 60_000);
-  assert.equal(preferenceTaskRetryDelay(2), 5 * 60_000);
-  assert.equal(preferenceTaskRetryDelay(3), 30 * 60_000);
-  assert.equal(preferenceTaskRetryDelay(4), 30 * 60_000);
-  assert.equal(preferenceTaskCanRetry(3), true);
-  assert.equal(preferenceTaskCanRetry(4), false);
 });

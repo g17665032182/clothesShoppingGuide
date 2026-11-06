@@ -2,13 +2,13 @@
 
 ## 状态与范围
 
-- 状态：技术方案已确认；实施文档待确认，尚未实施。
+- 状态：技术方案及实施文档已确认，代码已实施；数据库集成测试及上线切换待完成，详见[实施记录](./user-memory-background-implementation.md)。
 - 依据：[设计](./user-memory-background-design.md)、[记忆契约](../contracts/user-memory-crud-contract.md)、[偏好契约](../contracts/user-preferences-crud-contract.md)。
 - 确认记录：用户于 2026-11-05 回复“可以”批准本方案。
 - 不新增类别、API、数据库字段或依赖；保留当前用户隔离、授权和两个独立开关。
 - 范围包括停止自动偏好写入、让手动偏好可作为聊天参考、扩充长期记忆提取提示及验证其读取。历史聊天不自动重放，不保证模型一定生成候选。
 
-## 本地基线与参考
+## 实施前基线与参考
 
 - `ChatRecordsService.persistChat` 当前分别登记偏好与记忆任务；偏好调度器每秒领取任务，调用模型并写入 `user_preferences`。
 - `UserPreferenceReaderService` 当前读取用户偏好并受设置控制；前端开关仍显示“自动偏好”。

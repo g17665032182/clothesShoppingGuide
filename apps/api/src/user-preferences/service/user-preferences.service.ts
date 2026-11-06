@@ -18,10 +18,6 @@ import {
   UserPreference,
   UserPreferenceStatus,
 } from '../entity/user-preference.entity.js';
-import {
-  UserPreferenceTask,
-  UserPreferenceTaskStatus,
-} from '../entity/user-preference-task.entity.js';
 import { toPreferenceResponse } from '../entity/user-preference.mapper.js';
 import { containsSensitivePreferenceText } from '../context/preference-safety.js';
 import { UserPreferenceSettingsService } from './user-preference-settings.service.js';
@@ -196,18 +192,6 @@ export class UserPreferencesService {
     return this.preferences.getEntityManager().transactional(async (em) => {
       await lockPreferenceUser(em, userId);
       const repository = em.getRepository(UserPreference);
-      const taskRepository = em.getRepository(UserPreferenceTask);
-      // 与候选保存及应用使用同一锁，删除返回后旧租约无法恢复偏好。
-      await taskRepository.nativeDelete({
-        userId,
-        status: {
-          $in: [
-            UserPreferenceTaskStatus.PENDING,
-            UserPreferenceTaskStatus.PROCESSING,
-            UserPreferenceTaskStatus.FAILED,
-          ],
-        },
-      });
       const preferences = await repository.find({
         userId,
         status: UserPreferenceStatus.ACTIVE,

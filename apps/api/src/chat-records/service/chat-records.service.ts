@@ -39,10 +39,8 @@ import {
 } from '../../user-memory/index.js';
 import {
   USER_PREFERENCES_READER,
-  USER_PREFERENCES_TASKS,
   USER_PREFERENCES_LIFECYCLE,
   type UserPreferencesReader,
-  type UserPreferencesTasks,
   type UserPreferencesLifecycle,
 } from '../../user-preferences/index.js';
 import { ChatDisplayService } from '../display/chat-display.service.js';
@@ -149,8 +147,6 @@ export class ChatRecordsService {
     private readonly displayService: ChatDisplayService,
     @Inject(USER_PREFERENCES_READER)
     private readonly preferenceReader: UserPreferencesReader,
-    @Inject(USER_PREFERENCES_TASKS)
-    private readonly preferenceTasks: UserPreferencesTasks,
     private readonly productCatalog: ProductCatalogService,
   ) {}
 
@@ -518,13 +514,7 @@ export class ChatRecordsService {
         userMessageId: userMessage.id,
         assistantMessageId: assistantMessage.id,
       };
-      // 同一连接按固定顺序登记，局部 SQL 错误先回滚 savepoint 再继续另一领域。
-      await this.enqueueDomain(
-        transactionalEntityManager,
-        'PREFERENCES',
-        (transaction) =>
-          this.preferenceTasks.enqueueInTransaction(transaction, taskInput),
-      );
+      // Markdown 长期记忆仍由独立后台流程处理；结构化偏好由用户自行维护。
       await this.enqueueDomain(
         transactionalEntityManager,
         'MEMORY',

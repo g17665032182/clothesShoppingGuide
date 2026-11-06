@@ -18,7 +18,6 @@ import { UserPreferenceTaskResult } from '../../user-preferences/entity/user-pre
 import { UserPreferencesService } from '../../user-preferences/service/user-preferences.service.js';
 import { UserPreferenceSettingsService } from '../../user-preferences/service/user-preference-settings.service.js';
 import { UserPreferenceReaderService } from '../../user-preferences/service/user-preference-reader.service.js';
-import { UserPreferenceTaskService } from '../../user-preferences/service/user-preference-task.service.js';
 import { UserPreferenceLifecycleService } from '../../user-preferences/service/user-preference-lifecycle.service.js';
 import { lockPreferenceUser } from '../../user-preferences/task/preference-user-lock.js';
 import { UserMemorySetting } from '../../user-memory/entity/user-memory-setting.entity.js';
@@ -41,7 +40,7 @@ import { ChatExtractionSourceService } from '../extraction-source/chat-extractio
 import type { ChatExtractionInput } from '../extraction-source/chat-extraction-source.port.js';
 
 test(
-  '专用 PostgreSQL：双领域开关、savepoint故障隔离、外层回滚和来源授权',
+  '专用 PostgreSQL：偏好只读、记忆任务故障隔离、外层回滚和来源授权',
   {
     skip: process.env.RUN_PERSONALIZATION_POSTGRES_TEST !== '1',
     timeout: 60_000,
@@ -103,9 +102,6 @@ test(
       em.getRepository(UserPreference),
       preferenceSettings,
     );
-    const preferenceTasks = new UserPreferenceTaskService(
-      em.getRepository(UserPreferenceTask),
-    );
     const preferenceLifecycle = new UserPreferenceLifecycleService();
     const memoryTasks = new UserMemoryTaskService(
       em.getRepository(UserMemoryTask),
@@ -141,7 +137,7 @@ test(
         createSystemContextMessage: () => ({ content: 'system' }),
       } as never,
     );
-    let mode: 'normal' | 'preference-sql' | 'memory-sql' | 'outer' = 'normal';
+    let mode: 'normal' | 'memory-sql' | 'outer' = 'normal';
     let captured: ChatExtractionInput | undefined;
     const service = new ChatRecordsService(
       em.getRepository(ChatConversation),
@@ -179,21 +175,6 @@ test(
       preferenceLifecycle,
       new ChatDisplayService(em.getRepository(ChatTraceEvent)),
       preferenceReader,
-      {
-        async enqueueInTransaction(transaction, input) {
-          if (mode === 'preference-sql') {
-            await transaction
-              .getConnection()
-              .execute(
-                'select 1 / 0',
-                [],
-                'all',
-                transaction.getTransactionContext(),
-              );
-          }
-          await preferenceTasks.enqueueInTransaction(transaction, input);
-        },
-      },
       {} as never,
     );
     const chat = () =>
@@ -231,7 +212,7 @@ test(
             await fresh.count(UserPreferenceTask, {
               conversationId: result.conversationId,
             }),
-            Number(preferenceEnabled),
+            0,
           );
           assert.equal(
             await fresh.count(UserMemoryTask, {
@@ -239,7 +220,7 @@ test(
             }),
             Number(memoryEnabled),
           );
-          // 自动提取关闭时，两个领域依然允许人工管理。
+          // 关闭读取时，两个领域依然允许人工管理。
           await preferences.update(userId, preference.id, {
             isPrimary: preferenceEnabled,
           });
@@ -249,9 +230,9 @@ test(
           );
         }
       }
-      t.diagnostic('四种开关组合独立控制读取和登记，关闭不影响人工管理');
-      for (const failure of ['preference-sql', 'memory-sql'] as const) {
-        mode = failure;
+      t.diagnostic('四种开关组合不产生偏好任务，关闭不影响人工管理');
+      {
+        mode = 'memory-sql';
         const result = await chat();
         const fresh = orm.em.fork();
         assert.equal(
@@ -264,16 +245,16 @@ test(
           await fresh.count(UserPreferenceTask, {
             conversationId: result.conversationId,
           }),
-          Number(failure !== 'preference-sql'),
+          0,
         );
         assert.equal(
           await fresh.count(UserMemoryTask, {
             conversationId: result.conversationId,
           }),
-          Number(failure !== 'memory-sql'),
+          0,
         );
       }
-      t.diagnostic('任一领域真实SQL错误回滚savepoint后，聊天与另一任务仍提交');
+      t.diagnostic('记忆任务真实SQL错误回滚savepoint后，聊天仍提交');
       mode = 'outer';
       await assert.rejects(chat(), /controlled outer rollback/u);
       assert.ok(captured);

@@ -117,7 +117,7 @@ function handleEditorOpenChange(open: boolean) {
             @update:model-value="toggleEnabled($event === true)"
           />
           <FieldLabel :for="`${activeView}-enabled`">
-            {{ activeView === 'document' ? '自动记忆' : '自动偏好' }}
+            {{ activeView === 'document' ? '自动记忆' : '参考我的偏好' }}
           </FieldLabel>
         </Field>
         <Button

@@ -36,11 +36,13 @@ function fixture() {
   let failApply = false;
   let sourceAvailable = true;
   let modelInput = '';
+  let systemPrompt = '';
   const service = new UserMemoryExtractorService(
     {
-      generate: async (input: { user: string }) => {
+      generate: async (input: { user: string; system: string }) => {
         generated++;
         modelInput = input.user;
+        systemPrompt = input.system;
         return { content: JSON.stringify({ operations: [operation] }) };
       },
     } as never,
@@ -93,6 +95,7 @@ function fixture() {
     },
     counts: () => ({ generated, applied, sourceReads }),
     modelInput: () => modelInput,
+    systemPrompt: () => systemPrompt,
   };
 }
 
@@ -101,6 +104,26 @@ test('记忆关闭或租约无效时不读取聊天也不调用模型', async ()
   f.disable();
   await f.service.process(f.task);
   assert.deepEqual(f.counts(), { generated: 0, applied: 0, sourceReads: 0 });
+});
+
+test('提取提示明确开放长期穿衣背景并排除临时和推测信息', async () => {
+  const f = fixture();
+  await f.service.process(f.task);
+  const prompt = f.systemPrompt();
+  for (const term of [
+    '开放文本',
+    '长期或反复适用',
+    '季节',
+    '城市/地区',
+    '气候',
+    '长期爱好',
+    '单次天气',
+    '临时地点',
+    'IP',
+    '详细地址',
+    '不得输出结构化偏好',
+  ])
+    assert.ok(prompt.includes(term), term);
 });
 
 test('记忆候选仅接受文档补丁并拒绝偏好、敏感信息和未知字段', () => {
