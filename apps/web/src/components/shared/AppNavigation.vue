@@ -3,8 +3,10 @@ import {
   BookOpen,
   ChevronDown,
   LogOut,
+  PackageSearch,
   Shirt,
   SlidersHorizontal,
+  Truck,
   UserRound,
 } from '@lucide/vue';
 import { useRouter } from 'vue-router';
@@ -20,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 const router = useRouter();
+const isAdmin = auth.isAdmin;
 
 function signOut() {
   auth.signOut();
@@ -74,6 +77,26 @@ function signOut() {
                 我的偏好
               </RouterLink>
             </DropdownMenuItem>
+            <template v-if="isAdmin">
+              <DropdownMenuItem as-child>
+                <RouterLink :to="{ name: 'admin-products' }">
+                  <PackageSearch />
+                  商品目录
+                </RouterLink>
+              </DropdownMenuItem>
+              <DropdownMenuItem as-child>
+                <RouterLink :to="{ name: 'admin-orders' }">
+                  <Truck />
+                  订单履约
+                </RouterLink>
+              </DropdownMenuItem>
+              <DropdownMenuItem as-child>
+                <RouterLink :to="{ name: 'admin-users' }">
+                  <UserRound />
+                  用户管理
+                </RouterLink>
+              </DropdownMenuItem>
+            </template>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

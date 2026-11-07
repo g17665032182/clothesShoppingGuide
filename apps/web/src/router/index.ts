@@ -1,4 +1,10 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { watch } from 'vue';
+import {
+  createRouter,
+  createWebHistory,
+  type RouteLocationNormalized,
+  type RouteLocationRaw,
+} from 'vue-router';
 import { auth } from '@/lib/auth';
 
 export const router = createRouter({
@@ -54,16 +60,34 @@ export const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/admin/users',
-      name: 'admin-users',
-      component: () => import('@/pages/admin-users/index.vue'),
+      path: '/admin',
+      component: () => import('@/pages/admin/layout.vue'),
       meta: { requiresAuth: true, adminOnly: true },
+      children: [
+        { path: '', redirect: { name: 'admin-products' } },
+        {
+          path: 'users',
+          name: 'admin-users',
+          component: () => import('@/pages/admin-users/index.vue'),
+        },
+        {
+          path: 'products',
+          name: 'admin-products',
+          component: () => import('@/pages/admin-products/index.vue'),
+        },
+        {
+          path: 'orders',
+          name: 'admin-orders',
+          component: () => import('@/pages/admin-orders/index.vue'),
+        },
+      ],
     },
   ],
 });
 
-router.beforeEach(async (to) => {
-  await auth.hydrate();
+function accessRedirect(
+  to: RouteLocationNormalized,
+): RouteLocationRaw | undefined {
   if (to.meta.guestOnly && auth.isAuthenticated.value) {
     return '/chat';
   }
@@ -73,5 +97,20 @@ router.beforeEach(async (to) => {
   if (to.meta.adminOnly && !auth.isAdmin.value) {
     return { name: 'account-profile' };
   }
-  return true;
+}
+
+router.beforeEach(async (to) => {
+  await auth.hydrate();
+  return accessRedirect(to) ?? true;
 });
+
+// 刷新令牌失效或角色被收回时，立即卸载受保护视图，不等待下一次手动导航。
+watch(
+  [auth.isAuthenticated, auth.isAdmin],
+  ([authenticated, admin], [wasAuthenticated, wasAdmin]) => {
+    if (!auth.state.ready) return;
+    if (!(wasAuthenticated && !authenticated) && !(wasAdmin && !admin)) return;
+    const redirect = accessRedirect(router.currentRoute.value);
+    if (redirect) void router.replace(redirect);
+  },
+);

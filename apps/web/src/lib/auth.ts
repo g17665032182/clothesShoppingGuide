@@ -102,4 +102,5 @@ export const auth = {
 configureAuthTransport({
   refresh: () => auth.refreshAccessToken(),
   onUnauthorized: () => auth.signOut(),
+  onAdminForbidden: () => auth.refreshUser(),
 });

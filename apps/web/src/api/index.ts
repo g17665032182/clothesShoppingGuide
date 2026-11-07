@@ -32,6 +32,7 @@ export interface ApiRequestOptions extends AxiosRequestConfig {
 type AuthTransport = {
   refresh: () => Promise<string | null>;
   onUnauthorized: () => void;
+  onAdminForbidden?: () => Promise<void>;
 };
 
 type ApiAxiosRequestConfig = ApiRequestOptions & {
@@ -41,6 +42,7 @@ type ApiAxiosRequestConfig = ApiRequestOptions & {
 
 let authTransport: AuthTransport | null = null;
 let refreshing: Promise<string | null> | null = null;
+let refreshingAdminRole: Promise<void> | null = null;
 
 // 通过回调解耦请求层与认证状态，避免 API 层直接依赖 Vue 响应式状态。
 export function configureAuthTransport(transport: AuthTransport): void {
@@ -154,6 +156,21 @@ function createApiClient(): AxiosInstance {
         }
 
         authTransport.onUnauthorized();
+      }
+
+      // 管理权限可能已被后台收回；统一同步角色，交由全局路由处理退出管理页。
+      if (
+        axiosError.response?.status === 403 &&
+        originalConfig?.url?.startsWith('/admin/') &&
+        authTransport?.onAdminForbidden
+      ) {
+        refreshingAdminRole ??= authTransport
+          .onAdminForbidden()
+          .catch(() => undefined)
+          .finally(() => {
+            refreshingAdminRole = null;
+          });
+        await refreshingAdminRole;
       }
 
       throw toApiError(error);

@@ -43,6 +43,15 @@ pnpm --filter @clothes-shopping-guide/shared build
 
 前端位于 `apps/web`，使用 Vue 3、Vite、TypeScript、Vue Router、Tailwind CSS 4 和 shadcn-vue。开发服务默认监听 `0.0.0.0`，本地访问地址为 `http://localhost:5173`。shadcn-vue 组件按需通过 CLI 添加，组件源码归前端应用维护。
 
+### 管理员入口
+
+启用的管理员登录后，可从用户菜单进入 `/admin/products`（商品目录）、
+`/admin/orders`（订单履约）或原有 `/admin/users`（用户管理）。
+商品只读，支持分页筛选、SKU 详情和精确库存；订单支持分页筛选、收货/物流详情，
+以及待发货订单整单发货。不提供商品编辑、上下架、库存修改或订单改价/退款。
+页面与接口均受管理员权限保护；完整约定见
+[管理员运营契约](./docs/contracts/admin-management-crud-contract.md)。
+
 ## 后端 API
 
 后端位于 `apps/api`，使用 NestJS 12、MikroORM 7 和 PostgreSQL。复制 `apps/api/.env.example` 为 `.env` 后即可配置连接信息。
