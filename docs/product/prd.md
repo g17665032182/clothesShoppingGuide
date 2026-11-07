@@ -1,5 +1,7 @@
 # 服装购物指南产品需求文档（PRD）
 
+2026-11-07 增量：订单模块首版需求范围已确认，独立 [订单 PRD](../orders/order-module-prd.md)、[设计](../orders/order-module-design.md)和 [CRUD 契约](../contracts/order-crud-contract.md)已形成待审阅初稿，功能尚未实现。下文第一阶段的订单非目标保留原历史范围；新增订单能力按独立文档审批，不表示已经交付。
+
 ## 1. 文档信息
 
 | 项目         | 内容                                                                                                                                                                                                                                       |
