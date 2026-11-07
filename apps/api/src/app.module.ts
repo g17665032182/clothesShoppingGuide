@@ -13,6 +13,7 @@ import { LoggingModule } from './common/logging/logging.module.js';
 import { UsersModule } from './users/users.module.js';
 import { UserMemoryModule } from './user-memory/index.js';
 import { UserPreferencesModule } from './user-preferences/index.js';
+import { OrderCatalogCoordinationModule } from './order-catalog-coordination/order-catalog-coordination.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UserPreferencesModule } from './user-preferences/index.js';
     UsersModule,
     UserMemoryModule,
     UserPreferencesModule,
+    OrderCatalogCoordinationModule,
     AuthModule,
     LlmModule,
     ChatRecordsModule,

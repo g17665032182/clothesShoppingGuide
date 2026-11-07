@@ -2,8 +2,8 @@
 
 ## 文档信息
 
-- 状态：待用户确认；PRD、设计文档、订单 CRUD 契约及商品目录订单增量已确认。
-- 实现状态：尚未实现；本阶段只提交技术方案，不创建业务代码、Migration 或测试。
+- 状态：已确认。
+- 实现状态：技术方案已实现；验证记录见[实施文档](./order-module-implementation.md)。
 - 关联文档：[订单 PRD](./order-module-prd.md)、[订单设计](./order-module-design.md)、[订单 CRUD 契约](../contracts/order-crud-contract.md)、[商品目录技术文档](../product-guide/product-catalog-technical.md)。
 - 所属应用：`apps/api`。
 - 本地依赖：NestJS 12.2.0、MikroORM 7.2.5、PostgreSQL、Zod 4.6.7；不新增运行时依赖。
@@ -163,7 +163,7 @@ CLI 的 dry-run 只解析和报告，不访问写事务。正式 CLI 与 `Produc
 
 端口的 transaction 参数使用 `EntityManager`，只用于确保端口 SQL/Repository 操作加入调用方已经打开的事务，不允许端口自行提交或创建另一个根事务。事务上下文必须取自该 EntityManager。订单模块不导入商品私有 Entity；商品模块不导入订单 Entity。
 
-`OrderCatalogImportService` 是唯一同时调用目录写入入口和订单关闭入口的编排点，拥有目录写事务并保证两侧操作使用同一事务 EntityManager。CLI 通过 Nest 应用上下文获取该编排服务，而不是复制导入逻辑。订单订单操作的事务由订单 Service 开启；目录端口只加入事务，不接管订单状态写入。
+`OrderCatalogImportService` 是唯一同时调用目录写入入口和订单关闭入口的编排点，拥有目录写事务并保证两侧操作使用同一事务 EntityManager。CLI 通过 Nest 应用上下文获取该编排服务，而不是复制导入逻辑。订单操作的事务由订单 Service 开启；目录端口只加入事务，不接管订单状态写入。
 
 ## 超时关闭后台任务
 
@@ -252,12 +252,12 @@ pnpm check
 
 另需在隔离 PostgreSQL 执行新增 Migration 和并发集成测试，并完成规格查询到确认收货的 HTTP Smoke Test。支付路径只验证模拟状态，不连接真实支付服务。文档阶段只做格式与差异检查，不运行代码级验证。
 
-## 技术审批待确认
+## 已确认的技术决策
 
-1. 采用 SKU 行锁与订单状态聚合计算预占，不冗余维护 `reserved_stock` 计数或独立预占实体；所有库存写操作遵循“SKU UUID 升序 -> 订单 UUID 升序”锁序。
-2. 通过 `ProductCatalogOrderPort` 暴露带事务 EntityManager 的窄库存能力；目录导入和 Seeder 通过 `OrderCatalogCoordinationModule` 将商品写入与未支付订单关闭置于同一事务。订单模块不导入商品 Entity，商品模块不导入订单 Entity。
-3. 订单过期关闭使用现有 Nest 生命周期 + 有界轮询模式，不新增 `@nestjs/schedule`。
-4. 金额使用 PostgreSQL 精确 `numeric`、应用层整数分（`bigint`）运算；Migration 明确汇总金额精度。
-5. 超时动作先提交关闭并释放预占，再由事务外返回 409，避免因异常回滚应完成的关闭。
+1. 采用 SKU 行锁与订单状态聚合计算预占；库存写操作遵循 SKU UUID 升序、再订单 UUID 升序的锁序。
+2. 通过公开库存端口与订单目录协调模块保持商品/订单模块边界，并让目录导入和下架关闭处于同一事务。
+3. 到期关闭沿用现有 Nest 生命周期轮询模式，不新增调度依赖。
+4. 金额使用 PostgreSQL 精确 `numeric` 和应用层整数分（`bigint`）运算。
+5. 超时动作先提交关闭并释放预占，再由事务外返回 409。
 
-确认本技术文档后，下一阶段只编写订单实施文档；实施文档确认前不创建或修改订单业务代码、Migration、Seeder、配置或测试。
+订单实现与 PostgreSQL 验证结果记录于[实施文档](./order-module-implementation.md)。

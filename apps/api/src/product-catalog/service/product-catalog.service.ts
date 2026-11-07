@@ -6,6 +6,7 @@ import type { EntityRepository } from '@mikro-orm/postgresql';
 import {
   Injectable,
   BadRequestException,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,6 +14,11 @@ import { z } from 'zod';
 
 import { Product } from '../entity/product.entity.js';
 import { publicProductUrl } from '../public-url.js';
+import {
+  type ProductSkuPageResponse,
+  type ProductSkuResponse,
+} from '../dto/product-sku-response.dto.js';
+import type { ProductSkuQuery } from '../dto/product-sku-query.dto.js';
 
 export const productSearchSchema = z.strictObject({
   category: z
@@ -101,9 +107,21 @@ type ProductSearchRow = {
   lowest_price: string;
   color: string;
   size: string;
-  stock: number;
+  available_stock: number;
   score: number;
   match_reasons: string[];
+};
+
+type ProductSkuRow = {
+  sku_id: string;
+  product_external_id: string;
+  product_name: string;
+  color: string;
+  size: string;
+  unit_price: string;
+  currency: 'CNY';
+  in_stock: boolean;
+  image_url: string | null;
 };
 
 @Injectable()
@@ -113,6 +131,63 @@ export class ProductCatalogService {
     private readonly products: EntityRepository<Product>,
     private readonly config: ConfigService,
   ) {}
+
+  public async listSkus(
+    query: ProductSkuQuery,
+  ): Promise<ProductSkuPageResponse> {
+    const manager = this.products.getEntityManager();
+    const products = await manager
+      .getConnection()
+      .execute<Array<{ id: string }>>(
+        `select id::text as id
+         from products
+         where external_id = ? and is_active = true`,
+        [query.productExternalId],
+      );
+    const productId = products[0]?.id;
+    if (!productId) throw new NotFoundException('商品不存在或不可用');
+
+    const counts = await manager
+      .getConnection()
+      .execute<Array<{ total: string }>>(
+        `select count(*)::text as total
+         from product_skus
+         where product_id = ?::uuid and is_active = true and currency = 'CNY'`,
+        [productId],
+      );
+    const rows = await manager.getConnection().execute<ProductSkuRow[]>(
+      `select s.id::text as sku_id, p.external_id as product_external_id,
+           p.name as product_name, s.color, s.size, s.price::text as unit_price,
+           s.currency,
+           (s.stock - coalesce(r.reserved_quantity, 0)) > 0 as in_stock,
+           s.image_url
+         from product_skus s
+         join products p on p.id = s.product_id
+         left join active_order_sku_reservations r on r.sku_id = s.id
+         where p.id = ?::uuid and p.is_active = true and s.is_active = true
+           and s.currency = 'CNY'
+         order by s.id asc
+         limit ? offset ?`,
+      [productId, query.pageSize, (query.page - 1) * query.pageSize],
+    );
+    const items: ProductSkuResponse[] = rows.map((row) => ({
+      skuId: row.sku_id,
+      productExternalId: row.product_external_id,
+      productName: row.product_name,
+      color: row.color,
+      size: row.size,
+      unitPrice: row.unit_price,
+      currency: row.currency,
+      inStock: row.in_stock,
+      imageUrl: validPublicUrl(row.image_url),
+    }));
+    return {
+      items,
+      total: Number(counts[0]?.total ?? 0),
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
 
   public async search(
     input: ProductSearchInput,
@@ -149,8 +224,10 @@ export class ProductCatalogService {
       add('s.price >= ?::numeric', input.budgetMin);
     if (input.budgetMax !== undefined)
       add('s.price <= ?::numeric', input.budgetMax);
-    if (input.inStock === true) where.push('s.stock > 0');
-    if (input.inStock === false) where.push('s.stock = 0');
+    if (input.inStock === true)
+      where.push('(s.stock - coalesce(r.reserved_quantity, 0)) > 0');
+    if (input.inStock === false)
+      where.push('(s.stock - coalesce(r.reserved_quantity, 0)) = 0');
 
     const scoreParams: unknown[] = [];
     const signals: Array<{
@@ -180,7 +257,10 @@ export class ProductCatalogService {
       });
     }
     if (input.inStock === true)
-      signals.push({ reason: 'stock_available', expression: 's.stock > 0' });
+      signals.push({
+        reason: 'stock_available',
+        expression: '(s.stock - coalesce(r.reserved_quantity, 0)) > 0',
+      });
     if (input.color)
       signals.push({
         reason: 'color_match',
@@ -242,8 +322,11 @@ export class ProductCatalogService {
         select p.id as product_key, p.external_id, s.external_sku_id,
           p.name, p.brand, p.category,
           p.description, p.product_url, s.image_url, s.price, s.color, s.size,
-          s.stock, (${scoreExpression}) as score, ${reasonExpression} as match_reasons
-        from products p join product_skus s on s.product_id = p.id
+          (s.stock - coalesce(r.reserved_quantity, 0))::integer as available_stock,
+          (${scoreExpression}) as score, ${reasonExpression} as match_reasons
+        from products p
+        join product_skus s on s.product_id = p.id
+        left join active_order_sku_reservations r on r.sku_id = s.id
         where ${where.join(' and ')}
       ), scored as (
         select *,
@@ -258,7 +341,7 @@ export class ProductCatalogService {
       )
       select external_id, external_sku_id, name, brand, category, description,
         product_url, image_url, price::text, lowest_price::text, color, size,
-        stock, score, match_reasons
+        available_stock, score, match_reasons
       from products_page
       ${cursorWhere}
       order by score desc, external_id asc, external_sku_id asc
@@ -280,7 +363,7 @@ export class ProductCatalogService {
       if (item) {
         item.sizes.push(row.size);
         item.colors.push(row.color);
-        item.inStock ||= row.stock > 0;
+        item.inStock ||= row.available_stock > 0;
         if (Number(row.price) < Number(item.price)) item.price = row.price;
       } else {
         grouped.set(row.external_id, {
@@ -295,7 +378,7 @@ export class ProductCatalogService {
           currency: 'CNY',
           sizes: [row.size],
           colors: [row.color],
-          inStock: row.stock > 0,
+          inStock: row.available_stock > 0,
           matchReasons: row.match_reasons.filter(isProductMatchReason),
         });
       }
@@ -335,6 +418,50 @@ export class ProductCatalogService {
     manager: EntityManager,
     input: ProductSearchInput,
   ): Promise<ProductSearchResponse['noResultReason']> {
+    if (input.inStock === true) {
+      const filters = [
+        'p.is_active = true',
+        's.is_active = true',
+        "s.currency = 'CNY'",
+      ];
+      const parameters: unknown[] = [];
+      const addFilter = (expression: string, value: unknown) => {
+        filters.push(expression);
+        parameters.push(value);
+      };
+      if (input.category) addFilter('p.category = ?', input.category);
+      if (input.size) addFilter('lower(s.size) = lower(?)', input.size);
+      if (input.color) addFilter('lower(s.color) = lower(?)', input.color);
+      if (input.budgetMin !== undefined)
+        addFilter('s.price >= ?::numeric', input.budgetMin);
+      if (input.budgetMax !== undefined)
+        addFilter('s.price <= ?::numeric', input.budgetMax);
+      if (input.style)
+        addFilter('p.styles @> ?::jsonb', JSON.stringify([input.style]));
+      if (input.occasion)
+        addFilter('p.occasions @> ?::jsonb', JSON.stringify([input.occasion]));
+      if (input.fit)
+        addFilter('p.fits @> ?::jsonb', JSON.stringify([input.fit]));
+      const count = await manager
+        .getConnection()
+        .execute<Array<{ total: string; available: string }>>(
+          `select count(*)::text as total,
+             count(*) filter (
+               where s.stock - coalesce(r.reserved_quantity, 0) > 0
+             )::text as available
+           from products p
+           join product_skus s on s.product_id = p.id
+           left join active_order_sku_reservations r on r.sku_id = s.id
+           where ${filters.join(' and ')}`,
+          parameters,
+        );
+      if (
+        Number(count[0]?.total ?? 0) > 0 &&
+        Number(count[0]?.available ?? 0) === 0
+      ) {
+        return 'OUT_OF_STOCK';
+      }
+    }
     if (input.size) {
       const count = await manager.getConnection().execute<{ count: string }[]>(
         `select count(*)::text as count from products p join product_skus s on s.product_id=p.id
@@ -343,7 +470,6 @@ export class ProductCatalogService {
       );
       if (Number(count[0]?.count ?? 0) === 0) return 'NO_MATCHING_SIZE';
     }
-    if (input.inStock) return 'OUT_OF_STOCK';
     if (input.budgetMax !== undefined) return 'OVER_BUDGET';
     return 'NO_MATCHING_PRODUCT';
   }

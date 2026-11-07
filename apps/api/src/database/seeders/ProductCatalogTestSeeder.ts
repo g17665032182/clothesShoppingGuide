@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto';
-
 import { EntityManager } from '@mikro-orm/core';
 import { Seeder } from '@mikro-orm/seeder';
 
-import { Product } from '../../product-catalog/entity/product.entity.js';
-import { ProductSku } from '../../product-catalog/entity/product-sku.entity.js';
+import {
+  ProductCatalogImportService,
+  ProductCatalogOrderService,
+  productCatalogImportSchema,
+} from '../../product-catalog/index.js';
 
 const TEST_PRODUCTS = [
   {
@@ -300,51 +301,68 @@ const TEST_PRODUCTS = [
 
 export class ProductCatalogTestSeeder extends Seeder {
   public async run(em: EntityManager): Promise<void> {
-    for (const input of TEST_PRODUCTS) {
-      const product = await em.upsert(
-        Product,
-        {
-          id: randomUUID(),
-          externalId: input.externalId,
-          name: input.name,
-          brand: input.brand,
-          category: input.category,
-          description: input.description,
-          styles: [...input.styles],
-          occasions: [...input.occasions],
-          fits: [...input.fits],
-          audience: 'adult',
-          productUrl: input.productUrl,
+    const parsed = productCatalogImportSchema.parse({
+      version: 1,
+      products: TEST_PRODUCTS.map((product) => ({
+        ...product,
+        skus: product.skus.map((sku) => ({
+          ...sku,
+          imageUrl: product.imageUrl,
           isActive: true,
-        },
-        {
-          onConflictFields: ['externalId'],
-          onConflictExcludeFields: ['id', 'createdAt'],
-        },
+        })),
+      })),
+    });
+    const catalog = new ProductCatalogOrderService();
+    const importer = new ProductCatalogImportService();
+
+    await em.transactional(async (transaction) => {
+      const productIds = parsed.products.map((product) => product.externalId);
+      const skuKeys = parsed.products.flatMap((product) =>
+        product.skus.map((sku) => ({
+          productExternalId: product.externalId,
+          externalSkuId: sku.externalSkuId,
+        })),
+      );
+      const identities = await catalog.getSkuIdsForCatalogChanges(
+        transaction,
+        productIds,
+        skuKeys,
+      );
+      const snapshots = await catalog.lockSkus(
+        transaction,
+        identities.map((identity) => identity.skuId),
+      );
+      const reservations = await catalog.getReservedQuantities(
+        transaction,
+        identities.map((identity) => identity.skuId),
+      );
+      const identitiesByKey = new Map(
+        identities.map((identity) => [
+          `${identity.productExternalId}\u0000${identity.externalSkuId}`,
+          identity,
+        ]),
+      );
+      const snapshotsById = new Map(
+        snapshots.map((snapshot) => [snapshot.skuId, snapshot]),
       );
 
-      for (const sku of input.skus) {
-        await em.upsert(
-          ProductSku,
-          {
-            id: randomUUID(),
-            productId: product.id,
-            externalSkuId: sku.externalSkuId,
-            color: sku.color,
-            size: sku.size,
-            price: sku.price,
-            currency: 'CNY',
-            stock: sku.stock,
-            imageUrl: input.imageUrl,
-            isActive: true,
-          },
-          {
-            onConflictFields: ['productId', 'externalSkuId'],
-            onConflictExcludeFields: ['id', 'createdAt'],
-          },
-        );
+      for (const product of parsed.products) {
+        for (const sku of product.skus) {
+          const identity = identitiesByKey.get(
+            `${product.externalId}\u0000${sku.externalSkuId}`,
+          );
+          if (!identity) continue;
+          const snapshot = snapshotsById.get(identity.skuId);
+          if (!snapshot) throw new Error('商品 SKU 在测试 Seeder 中发生变化');
+          if (sku.stock < (reservations.get(identity.skuId) ?? 0)) {
+            throw new Error(
+              `测试商品 ${product.externalId} 的 SKU ${sku.externalSkuId} 库存低于预占量`,
+            );
+          }
+        }
       }
-    }
-    await em.flush();
+
+      await importer.upsertInTransaction(transaction, parsed.products);
+    });
   }
 }

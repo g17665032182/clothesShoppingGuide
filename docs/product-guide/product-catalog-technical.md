@@ -2,18 +2,18 @@
 
 ## 文档信息
 
-- 状态：商品目录既有技术设计及“查看更多商品”直接分页增量均已确认。
+- 状态：商品目录既有技术设计、“查看更多商品”增量及订单规格/库存协作增量均已确认并实现。
 - 关联设计：[服装导购体系设计文档](./product-guide-design.md)。
 - 关联契约：[商品目录 CRUD 契约](../contracts/product-catalog-crud-contract.md)。
 - 所属应用：`apps/api`、`apps/web`。
 - 技术栈：NestJS 12、MikroORM 7.2、PostgreSQL、Zod 4、LangChain/LangGraph、Vue 3。
-- 最后更新：2026-11-05。
+- 最后更新：2026-11-07。
 
 ## 实现目标
 
 新增独立 `ProductCatalogModule`，管理商品及 SKU 导入和查询；以服务端结构化工具把查询能力提供给现有 LLM Graph；聊天模块把安全的商品投影保存到既有公开展示字段；前端在聊天消息中渲染商品卡片和同查询的分页操作。
 
-只复用项目已安装的 NestJS、MikroORM、Zod、LangChain/LangGraph 和现有聊天展示机制，不增加运行时依赖，不引入第二套数据库、管理后台、订单系统或库存锁定。
+商品导购查询和聊天展示只复用项目现有依赖，不增加运行时依赖或第二套数据库。订单能力由独立 `OrdersModule` 实现；商品目录只公开规格和事务内库存端口，不承载订单状态或支付流程。
 
 ## 本地能力与依赖
 
