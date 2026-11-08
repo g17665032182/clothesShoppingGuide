@@ -16,6 +16,8 @@ import { ChatSummaryService } from './service/chat-summary.service.js';
 import { ChatTraceWriterService } from './trace/chat-trace-writer.service.js';
 import { LlmChatController } from './controller/llm-chat.controller.js';
 import { ChatDisplayService } from './display/chat-display.service.js';
+import { ChatPurchaseModule } from '../chat-purchase/index.js';
+import { ChatConversationAccessModule } from './conversation-access/index.js';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { ChatDisplayService } from './display/chat-display.service.js';
     UserMemoryModule,
     UserPreferencesModule,
     ProductCatalogModule,
+    ChatPurchaseModule,
+    ChatConversationAccessModule,
   ],
   controllers: [
     ChatRecordsController,

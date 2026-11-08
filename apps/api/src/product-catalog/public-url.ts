@@ -66,3 +66,7 @@ export function publicProductUrl(value: string): URL | null {
   }
   return parsed;
 }
+
+export function normalizeProductPublicUrl(value: string | null): string | null {
+  return value === null ? null : (publicProductUrl(value)?.toString() ?? null);
+}

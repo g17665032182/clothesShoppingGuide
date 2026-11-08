@@ -97,3 +97,74 @@ test('公开展示元数据不进入下一轮模型历史且不替换 LangChain 
     false,
   );
 });
+
+test('购买调用及结果从历史移除，同批普通商品工具闭环保留', () => {
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 1,
+      messageId: 'mixed',
+      content: '',
+      payload: {
+        toolCalls: [
+          {
+            id: 'purchase-call',
+            name: 'update_purchase_draft',
+            args: { draftId: 'draft', recipient: { address: 'private' } },
+          },
+          {
+            id: 'catalog-call',
+            name: 'search_local_clothing_products',
+            args: { keyword: '大衣' },
+          },
+        ],
+      },
+    },
+    {
+      eventType: 'tool_call',
+      sequence: 2,
+      messageId: 'mixed',
+      toolCallId: 'purchase-call',
+      toolName: 'update_purchase_draft',
+      payload: { args: { recipient: { address: 'private' } } },
+    },
+    {
+      eventType: 'tool_call',
+      sequence: 3,
+      messageId: 'mixed',
+      toolCallId: 'catalog-call',
+      toolName: 'search_local_clothing_products',
+      payload: { args: { keyword: '大衣' } },
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 4,
+      messageId: 'purchase-result',
+      toolCallId: 'purchase-call',
+      toolName: 'update_purchase_draft',
+      content: '{"recipient":{"address":"private"}}',
+      status: 'success',
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 5,
+      messageId: 'catalog-result',
+      toolCallId: 'catalog-call',
+      toolName: 'search_local_clothing_products',
+      content: '{"items":[]}',
+      status: 'success',
+    },
+  ]);
+
+  assert.equal(messages.length, 2);
+  const aiMessage = messages[0]?.message as AIMessage;
+  assert.deepEqual(
+    aiMessage.tool_calls?.map((call) => call.id),
+    ['catalog-call'],
+  );
+  assert.equal(
+    (messages[1]?.message as ToolMessage).tool_call_id,
+    'catalog-call',
+  );
+  assert.equal(JSON.stringify(messages).includes('private'), false);
+});

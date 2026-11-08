@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/spinner';
 import ChatActivityList from './ChatActivityList.vue';
 import ChatProductResults from './ChatProductResults.vue';
 import ChatSources from './ChatSources.vue';
+import { Button } from '@/components/ui/button';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -18,6 +19,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (event: 'moreProducts', messageId: string, resultIndex: number): void;
+  (event: 'buyProduct', externalId: string): void;
+  (event: 'openOrder', orderId: string): void;
 }>();
 
 const isRunning = computed(
@@ -68,7 +71,23 @@ const statusLabel = computed(() => {
         :result-sets="message.productResults"
         :disabled="isRunning"
         @more="(resultIndex) => emit('moreProducts', message.id, resultIndex)"
+        @buy="(externalId) => emit('buyProduct', externalId)"
       />
+      <div
+        v-if="message.purchase?.orderId"
+        class="flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm"
+      >
+        <span class="min-w-0 flex-1 break-all"
+          >本次购买已生成订单，可在这里查看并继续处理。</span
+        >
+        <Button
+          size="sm"
+          variant="outline"
+          @click="emit('openOrder', message.purchase.orderId)"
+        >
+          查看 / 支付订单
+        </Button>
+      </div>
       <MessageFooter
         v-if="statusLabel || message.duration || streamDuration"
         class="gap-2 px-0"

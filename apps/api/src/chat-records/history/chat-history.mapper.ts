@@ -7,6 +7,7 @@ import {
 } from '@langchain/core/messages';
 
 export type ChatTraceEventLike = {
+  runId?: string;
   eventType: 'input' | 'model_response' | 'tool_call' | 'tool_result';
   sequence: number;
   messageId?: string | null;
@@ -21,6 +22,7 @@ export type ChatTraceEventLike = {
 
 export type ChatHistoryMessage = {
   id: string;
+  runId?: string;
   message: BaseMessage;
 };
 
@@ -34,6 +36,16 @@ function asRecord(value: unknown): UnknownRecord {
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
+}
+
+const PURCHASE_TOOL_NAMES = new Set([
+  'get_purchase_draft',
+  'update_purchase_draft',
+  'discard_purchase_draft',
+]);
+
+function isPurchaseTool(name: string): boolean {
+  return PURCHASE_TOOL_NAMES.has(name);
 }
 
 function payloadToolCalls(payload: unknown): Array<{
@@ -52,7 +64,7 @@ function payloadToolCalls(payload: unknown): Array<{
     const id = asString(call.id);
     const name = asString(call.name);
     const args = asRecord(call.args ?? call.arguments);
-    return id && name ? [{ id, name, args }] : [];
+    return id && name && !isPurchaseTool(name) ? [{ id, name, args }] : [];
   });
 }
 
@@ -74,15 +86,30 @@ export function mapTraceEventsToMessages(
     string,
     Array<{ id: string; name: string; args: Record<string, unknown> }>
   >();
+  const purchaseCallIds = new Set<string>();
 
   for (const event of sorted) {
-    if (event.eventType !== 'tool_call') {
-      continue;
+    if (event.eventType === 'model_response') {
+      const record = asRecord(event.payload);
+      const calls = record.toolCalls ?? record.tool_calls;
+      if (Array.isArray(calls)) {
+        for (const item of calls) {
+          const call = asRecord(item);
+          const id = asString(call.id);
+          const name = asString(call.name);
+          if (id && name && isPurchaseTool(name)) purchaseCallIds.add(id);
+        }
+      }
     }
+    if (event.eventType !== 'tool_call') continue;
     const messageId = event.messageId ?? '';
     const toolCallId = event.toolCallId;
     const toolName = event.toolName;
     if (!messageId || !toolCallId || !toolName) {
+      continue;
+    }
+    if (isPurchaseTool(toolName)) {
+      purchaseCallIds.add(toolCallId);
       continue;
     }
     const payload = asRecord(event.payload);
@@ -99,8 +126,13 @@ export function mapTraceEventsToMessages(
     }
 
     const id = event.messageId ?? `trace-${event.sequence}`;
+    const run = event.runId ? { runId: event.runId } : {};
     if (event.eventType === 'input') {
-      messages.push({ id, message: new HumanMessage(messageContent(event)) });
+      messages.push({
+        id,
+        ...run,
+        message: new HumanMessage(messageContent(event)),
+      });
       continue;
     }
 
@@ -113,8 +145,10 @@ export function mapTraceEventsToMessages(
         (call, index, all) =>
           all.findIndex((candidate) => candidate.id === call.id) === index,
       );
+      if (deduplicated.length === 0 && !messageContent(event)) continue;
       messages.push({
         id,
+        ...run,
         message: new AIMessage({
           content: messageContent(event),
           tool_calls: deduplicated,
@@ -125,9 +159,15 @@ export function mapTraceEventsToMessages(
       continue;
     }
 
-    if (event.eventType === 'tool_result' && event.toolCallId) {
+    if (
+      event.eventType === 'tool_result' &&
+      event.toolCallId &&
+      !purchaseCallIds.has(event.toolCallId) &&
+      !isPurchaseTool(event.toolName ?? '')
+    ) {
       messages.push({
         id,
+        ...run,
         message: new ToolMessage({
           content: messageContent(event),
           tool_call_id: event.toolCallId,

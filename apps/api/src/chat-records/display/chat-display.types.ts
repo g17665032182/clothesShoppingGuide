@@ -46,11 +46,18 @@ export type ChatContextUsage = {
   usedTokens: number | null;
 };
 
+export type PurchaseReference = {
+  draftId: string;
+  version: number;
+  orderId: string | null;
+};
+
 export type ChatDisplayData = {
   activities: ChatActivity[];
   sources: ChatSource[];
   productResults: ChatProductResults[];
   context: ChatContextUsage | null;
+  purchase: PurchaseReference | null;
 };
 
 /** 展示消息 ID 独立绑定，保留 trace 自身的 LangChain messageId。 */

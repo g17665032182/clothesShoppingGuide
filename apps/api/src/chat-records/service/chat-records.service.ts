@@ -51,6 +51,13 @@ import type {
 import type { LlmEventStreamResult } from '../../llm/stream/llm-stream.types.js';
 import { ProductCatalogService } from '../../product-catalog/index.js';
 import { createProductSearchTool } from '../../product-catalog/tool/product-search.tool.js';
+import {
+  PurchaseDraftService,
+  createPurchaseTools,
+  type PurchaseRunState,
+} from '../../chat-purchase/index.js';
+import { ChatConversationAccess } from '../conversation-access/index.js';
+import { eligibleSummaryTraceIds } from './chat-summary-source.js';
 
 export type Page<T> = {
   items: T[];
@@ -87,10 +94,12 @@ export type ConversationDetailResponse = ConversationResponse & {
 export type PersistedChatOutput = ChatOutput & {
   conversationId: string;
   title: string;
+  purchase: ChatDisplayData['purchase'];
 };
 
 export type ChatStreamEvent =
   | ChatDisplayEvent
+  | { type: 'purchase'; purchase: NonNullable<ChatDisplayData['purchase']> }
   | {
       type: 'start';
       conversationId: string;
@@ -121,6 +130,9 @@ type PreparedChat = {
   nextSummaryThroughMessageId: string | null | undefined;
   memoryContext: string;
   contextWindowTokens: number;
+  purchaseState: PurchaseRunState;
+  purchaseToolUsed: boolean;
+  purchaseReferencedDraftId?: string;
 };
 
 @Injectable()
@@ -148,6 +160,8 @@ export class ChatRecordsService {
     @Inject(USER_PREFERENCES_READER)
     private readonly preferenceReader: UserPreferencesReader,
     private readonly productCatalog: ProductCatalogService,
+    private readonly purchaseDrafts: PurchaseDraftService,
+    private readonly conversationAccess: ChatConversationAccess,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -158,14 +172,26 @@ export class ChatRecordsService {
         messages: prepared.plan.messages,
       },
       this.traceContext(prepared),
-      [createProductSearchTool(this.productCatalog)],
+      this.tools(prepared),
     );
-    await this.persistChat(prepared, result);
+    if (
+      result.finalTraceSequence === null ||
+      result.finalTraceSequence === undefined
+    )
+      throw new ServiceUnavailableException('最终模型记录缺失，无法保存回复');
+    const display = this.displayService.create(prepared.contextWindowTokens);
+    this.displayService.complete(display, result.usage);
+    await this.persistChat(prepared, result, {
+      data: display,
+      sequence: result.finalTraceSequence,
+    });
+    const { finalTraceSequence: _sequence, ...publicResult } = result;
 
     return {
-      ...result,
+      ...publicResult,
       conversationId: prepared.persistedConversation.id,
       title: prepared.persistedConversation.title,
+      purchase: display.purchase,
     };
   }
 
@@ -203,7 +229,7 @@ export class ChatRecordsService {
         { messages: prepared.plan.messages },
         signal,
         this.traceContext(prepared, signal),
-        [createProductSearchTool(this.productCatalog)],
+        this.tools(prepared),
       );
       let result: LlmEventStreamResult | undefined;
       try {
@@ -237,6 +263,8 @@ export class ChatRecordsService {
         sequence: result.finalTraceSequence,
       });
       persistedMessages = true;
+      if (display.purchase)
+        yield { type: 'purchase', purchase: display.purchase };
       yield {
         type: 'done',
         conversationId: prepared.persistedConversation.id,
@@ -293,7 +321,15 @@ export class ChatRecordsService {
         conversation.id,
         userId,
       );
-      transactionalEntityManager.remove(conversation);
+      await this.conversationAccess.lockOwnedInTransaction(
+        transactionalEntityManager,
+        userId,
+        id,
+      );
+      await transactionalEntityManager.nativeDelete(ChatConversation, {
+        id,
+        userId,
+      });
       await transactionalEntityManager.flush();
     });
   }
@@ -333,6 +369,9 @@ export class ChatRecordsService {
     const conversation = dto.conversationId
       ? await this.getOwnedConversation(user.id, dto.conversationId)
       : null;
+    const purchaseState: PurchaseRunState = conversation
+      ? await this.purchaseDrafts.runState(user.id, conversation.id)
+      : { fingerprint: '', active: false, context: '', reference: null };
     const legacyMessages = conversation
       ? await this.messages.find(
           { conversationId: conversation.id },
@@ -388,11 +427,16 @@ export class ChatRecordsService {
       );
     }
     const history = conversation ? mapTraceEventsToMessages(traceHistory) : [];
+    const summaryEligibleIds = eligibleSummaryTraceIds(
+      traceHistory,
+      legacyMessages,
+    );
     let plan = this.contextService.prepare({
       history: legacyMessages,
       messageHistory: history,
       currentUserMessage: currentUserMessage.content,
       memoryContext,
+      purchaseContext: purchaseState.context,
       contextSummary: conversation?.contextSummary,
       summaryThroughMessageId: conversation?.summaryThroughMessageId,
     });
@@ -400,19 +444,27 @@ export class ChatRecordsService {
     let nextContextSummary: string | null | undefined;
     let nextSummaryThroughMessageId: string | null | undefined;
     if (plan.needsSummary) {
-      const summary = await this.summaryService.summarize(
-        conversation?.contextSummary ?? null,
-        plan.messageSummarySource ?? plan.summarySource,
-      );
-      if (summary && conversation) {
-        nextContextSummary = summary;
+      const summarySource = plan.messageSummarySource
+        ? plan.messageSummarySource.filter((message) =>
+            summaryEligibleIds.has(`${message.runId ?? ''}:${message.id}`),
+          )
+        : plan.summarySource;
+      const summary = summarySource.length
+        ? await this.summaryService.summarize(
+            conversation?.contextSummary ?? null,
+            summarySource,
+          )
+        : null;
+      if ((summary || plan.summaryWatermarkAdvanced) && conversation) {
+        nextContextSummary = summary ?? conversation.contextSummary;
         nextSummaryThroughMessageId = plan.lastIncludedMessageId;
         plan = this.contextService.prepare({
           history: legacyMessages,
           messageHistory: history,
           currentUserMessage: currentUserMessage.content,
           memoryContext,
-          contextSummary: summary,
+          purchaseContext: purchaseState.context,
+          contextSummary: summary ?? conversation.contextSummary,
           summaryThroughMessageId: plan.lastIncludedMessageId,
         });
       }
@@ -435,7 +487,24 @@ export class ChatRecordsService {
       nextSummaryThroughMessageId,
       memoryContext,
       contextWindowTokens: this.contextService.getContextWindow(),
+      purchaseState,
+      purchaseToolUsed: false,
     };
+  }
+
+  private tools(prepared: PreparedChat) {
+    return [
+      createProductSearchTool(this.productCatalog),
+      ...createPurchaseTools(
+        this.purchaseDrafts,
+        prepared.persistedConversation.userId,
+        prepared.persistedConversation.id,
+        (draftId) => {
+          prepared.purchaseToolUsed = true;
+          if (draftId) prepared.purchaseReferencedDraftId = draftId;
+        },
+      ),
+    ];
   }
 
   private traceContext(prepared: PreparedChat, signal?: AbortSignal) {
@@ -461,8 +530,29 @@ export class ChatRecordsService {
     conversation: ChatConversation,
   ): Promise<void> {
     const entityManager = this.conversations.getEntityManager();
-    entityManager.remove(conversation);
-    await entityManager.flush();
+    await entityManager.transactional(async (transaction) => {
+      await this.conversationAccess.lockOwnedInTransaction(
+        transaction,
+        conversation.userId,
+        conversation.id,
+      );
+      const state = await this.purchaseDrafts.runStateInTransaction(
+        transaction,
+        conversation.userId,
+        conversation.id,
+      );
+      if (
+        state.reference ||
+        (await transaction.count(ChatMessage, {
+          conversationId: conversation.id,
+        }))
+      )
+        return;
+      await transaction.nativeDelete(ChatConversation, {
+        id: conversation.id,
+        userId: conversation.userId,
+      });
+    });
   }
 
   private async persistChat(
@@ -489,17 +579,52 @@ export class ChatRecordsService {
 
     const entityManager = this.conversations.getEntityManager();
     await entityManager.transactional(async (transactionalEntityManager) => {
-      // 标量外键不会让 MikroORM 自动推断插入顺序，因此先提交会话再提交消息。
+      await this.conversationAccess.lockOwnedInTransaction(
+        transactionalEntityManager,
+        persistedConversation.userId,
+        persistedConversation.id,
+      );
+      const currentPurchase = await this.purchaseDrafts.runStateInTransaction(
+        transactionalEntityManager,
+        persistedConversation.userId,
+        persistedConversation.id,
+      );
+      const eligible =
+        !prepared.purchaseState.active &&
+        !prepared.purchaseToolUsed &&
+        prepared.purchaseState.fingerprint === currentPurchase.fingerprint;
+      userMessage.memoryExtractionEligible = eligible;
+      assistantMessage.memoryExtractionEligible = eligible;
+      // 重新读取当前会话，禁止将生成前的陈旧对象重新插入或覆盖并发更新。
+      const currentConversation =
+        await transactionalEntityManager.findOneOrFail(ChatConversation, {
+          id: persistedConversation.id,
+          userId: persistedConversation.userId,
+        });
+      currentConversation.updatedAt = new Date();
       if (prepared.nextContextSummary !== undefined) {
-        persistedConversation.contextSummary = prepared.nextContextSummary;
-        persistedConversation.summaryThroughMessageId =
+        currentConversation.contextSummary = prepared.nextContextSummary;
+        currentConversation.summaryThroughMessageId =
           prepared.nextSummaryThroughMessageId ?? null;
       }
-      transactionalEntityManager.persist(persistedConversation);
+      transactionalEntityManager.persist(currentConversation);
       await transactionalEntityManager.flush();
       transactionalEntityManager.persist([userMessage, assistantMessage]);
       await transactionalEntityManager.flush();
       if (display) {
+        // 回复只关联本轮实际使用的草稿，生成期间替换的新草稿不能冒充原购买。
+        const referencedDraftId =
+          prepared.purchaseReferencedDraftId ??
+          prepared.purchaseState.reference?.draftId;
+        const reference = referencedDraftId
+          ? await this.purchaseDrafts.referenceInTransaction(
+              transactionalEntityManager,
+              persistedConversation.userId,
+              persistedConversation.id,
+              referencedDraftId,
+            )
+          : null;
+        this.displayService.setPurchaseReference(display.data, reference);
         await this.displayService.bind(transactionalEntityManager, {
           conversationId: persistedConversation.id,
           runId: prepared.runId,
@@ -515,12 +640,13 @@ export class ChatRecordsService {
         assistantMessageId: assistantMessage.id,
       };
       // Markdown 长期记忆仍由独立后台流程处理；结构化偏好由用户自行维护。
-      await this.enqueueDomain(
-        transactionalEntityManager,
-        'MEMORY',
-        (transaction) =>
-          this.memoryTasks.enqueueInTransaction(transaction, taskInput),
-      );
+      if (eligible)
+        await this.enqueueDomain(
+          transactionalEntityManager,
+          'MEMORY',
+          (transaction) =>
+            this.memoryTasks.enqueueInTransaction(transaction, taskInput),
+        );
     });
   }
 
@@ -643,6 +769,7 @@ export class ChatRecordsService {
       sources: [],
       productResults: [],
       context: null,
+      purchase: null,
     };
   }
 }

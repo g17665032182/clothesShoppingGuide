@@ -41,6 +41,19 @@ function createService(
         throw new Error('database failure');
       }
     },
+    async findOneOrFail() {
+      return persisted.find(
+        (item) => item instanceof ChatConversation,
+      ) as ChatConversation;
+    },
+    async count() {
+      return 0;
+    },
+    async nativeDelete() {
+      const value = persisted.find((item) => item instanceof ChatConversation);
+      if (value) removed.push(value);
+      return value ? 1 : 0;
+    },
     async transactional<T>(
       callback: (transactionalManager: unknown) => Promise<T>,
     ) {
@@ -61,7 +74,12 @@ function createService(
     assertConfigured: () => 'fake-model',
     chatPrepared: async (input: unknown) => {
       modelInputs.push(input);
-      return { content: '回复', model: 'fake-model', usage: null };
+      return {
+        content: '回复',
+        model: 'fake-model',
+        usage: null,
+        finalTraceSequence: 4,
+      };
     },
     async *streamEventsPrepared(): AsyncGenerator<
       LlmStreamEvent,
@@ -129,6 +147,12 @@ function createService(
   };
   const memoryTasks = { enqueueInTransaction: async () => undefined };
   const memoryLifecycle = { markConversationDeleted: async () => undefined };
+  const emptyPurchaseState = {
+    fingerprint: '',
+    active: false,
+    context: '',
+    reference: null,
+  };
   const displayService = new ChatDisplayService({} as never);
   displayService.bind = async (transaction, input) => {
     assert.equal(transaction, manager);
@@ -149,6 +173,11 @@ function createService(
     displayService,
     preferenceReader as never,
     {} as never,
+    {
+      runState: async () => emptyPurchaseState,
+      runStateInTransaction: async () => emptyPurchaseState,
+    } as never,
+    { lockOwnedInTransaction: async () => undefined } as never,
   );
 
   return { service, persisted, removed, modelInputs, bindings, contextInputs };

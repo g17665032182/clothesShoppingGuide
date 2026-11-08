@@ -15,6 +15,14 @@ import {
   streamChat,
 } from '@/api/modules/chat';
 import {
+  confirmPurchase,
+  discardPurchaseDraft,
+  getPurchaseDraft,
+  listPurchaseSkus,
+  patchPurchaseDraft,
+  startPurchase,
+} from '@/api/modules/chat-purchase';
+import {
   getNextProductPage,
   isProductPageResponse,
 } from '@/api/modules/product-catalog';
@@ -24,6 +32,12 @@ import type {
   ChatProductResults,
   Conversation,
 } from '@/api/types/chat';
+import type {
+  PatchPurchasePayload,
+  PurchaseDraftResponse,
+  PurchaseSkuOption,
+  StartPurchasePayload,
+} from '@/api/types/chat-purchase';
 import { auth } from '@/lib/auth';
 import {
   latestDetail,
@@ -86,6 +100,10 @@ export const useChatStore = defineStore('chat', () => {
   let identityVersion = 0;
   let pendingListUpdates: Set<string> | null = null;
   let chatPageVisible = false;
+  const purchaseReadRequests = new Map<string, AbortController>();
+  const purchaseMutationRequests = new Map<string, AbortController>();
+  const purchaseMutationLocks = new Set<string>();
+  let purchaseSequence = 0;
 
   const activeSession = computed(() =>
     activeSessionKey.value ? sessions.value[activeSessionKey.value] : undefined,
@@ -116,6 +134,12 @@ export const useChatStore = defineStore('chat', () => {
   const canSubmit = computed(
     () =>
       !isActiveTaskRunning.value &&
+      !(
+        activeConversationId.value &&
+        purchaseMutationLocks.has(
+          purchaseRequestKey(activeConversationId.value),
+        )
+      ) &&
       (!deletingConversationId.value ||
         deletingConversationId.value !== activeConversationId.value) &&
       !['loading', 'unknown'].includes(status.value),
@@ -166,11 +190,501 @@ export const useChatStore = defineStore('chat', () => {
         ?.context ?? null,
   );
   const contextIsPrevious = computed(() => isSending.value);
+  const purchase = computed(
+    () =>
+      activeSession.value?.purchase ?? {
+        status: 'idle' as const,
+        draft: null,
+        order: null,
+        errorMessage: '',
+        requestVersion: 0,
+        autoPromptedStartKeys: [],
+      },
+  );
 
   function updateSession(key: string, patch: Partial<ChatSession>) {
     const session = sessions.value[key];
     if (session)
       sessions.value = { ...sessions.value, [key]: { ...session, ...patch } };
+  }
+
+  function updatePurchase(
+    key: string,
+    patch: Partial<ChatSession['purchase']>,
+  ): void {
+    const session = sessions.value[key];
+    if (!session) return;
+    updateSession(key, {
+      purchase: { ...session.purchase, ...patch },
+    });
+  }
+
+  function purchaseSession(conversationId: string): ChatSession | undefined {
+    return findSession(conversationId);
+  }
+
+  function purchaseRequestKey(conversationId: string): string {
+    return `${auth.state.user?.id ?? 'anonymous'}:${conversationId}`;
+  }
+
+  function ownsPurchaseSession(
+    identity: { version: number; userId: string | undefined },
+    sessionKey: string,
+    conversationId: string,
+  ): boolean {
+    const session = sessions.value[sessionKey];
+    return (
+      identity.version === identityVersion &&
+      identity.userId === auth.state.user?.id &&
+      session?.conversationId === conversationId
+    );
+  }
+
+  function beginPurchaseMutation(requestKey: string): AbortController | null {
+    if (purchaseMutationLocks.has(requestKey)) return null;
+    purchaseReadRequests.get(requestKey)?.abort();
+    purchaseReadRequests.delete(requestKey);
+    purchaseMutationLocks.add(requestKey);
+    const controller = new AbortController();
+    purchaseMutationRequests.set(requestKey, controller);
+    return controller;
+  }
+
+  function finishPurchaseMutation(
+    requestKey: string,
+    controller: AbortController,
+  ): void {
+    if (purchaseMutationRequests.get(requestKey) !== controller) return;
+    purchaseMutationRequests.delete(requestKey);
+    purchaseMutationLocks.delete(requestKey);
+  }
+
+  async function attachSkuOptions(
+    token: string,
+    response: PurchaseDraftResponse,
+    signal: AbortSignal,
+  ): Promise<PurchaseDraftResponse> {
+    // 规格接口可能分页返回，前端只把服务端真实组合完整收集后交给选择器。
+    const draft = response.draft;
+    if (
+      !draft ||
+      draft.skuOptions?.length ||
+      ['submitted', 'cancelled', 'expired'].includes(draft.status)
+    )
+      return response;
+    const items: PurchaseSkuOption[] = [];
+    let page = 1;
+    let total = 0;
+    do {
+      const result = await listPurchaseSkus(
+        token,
+        draft.productExternalId,
+        page,
+        100,
+        signal,
+      );
+      items.push(...result.items);
+      total = result.total;
+      page += 1;
+      if (!result.items.length) break;
+    } while (items.length < total && page <= 20);
+    return {
+      ...response,
+      draft: { ...draft, skuOptions: items },
+    };
+  }
+
+  async function loadPurchaseDraft(
+    conversationId = activeConversationId.value,
+  ): Promise<PurchaseDraftResponse | null> {
+    const token = auth.state.token;
+    if (!token || !conversationId) return null;
+    const session = purchaseSession(conversationId);
+    if (!session) return null;
+    const requestKey = purchaseRequestKey(conversationId);
+    if (purchaseMutationLocks.has(requestKey)) return null;
+    purchaseReadRequests.get(requestKey)?.abort();
+    const controller = new AbortController();
+    purchaseReadRequests.set(requestKey, controller);
+    const identity = { version: identityVersion, userId: auth.state.user?.id };
+    const requestVersion = ++purchaseSequence;
+    updatePurchase(session.key, {
+      status: 'loading',
+      errorMessage: '',
+      requestVersion,
+    });
+    try {
+      const result = await attachSkuOptions(
+        token,
+        await getPurchaseDraft(token, conversationId, controller.signal),
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted ||
+        purchaseReadRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId) ||
+        purchaseMutationLocks.has(requestKey) ||
+        requestVersion !== sessions.value[session.key]?.purchase.requestVersion
+      )
+        return null;
+      updatePurchase(session.key, {
+        status: result.draft ? 'success' : 'empty',
+        draft: result.draft,
+        order: result.order,
+        errorMessage: '',
+      });
+      return result;
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        purchaseReadRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId) ||
+        purchaseMutationLocks.has(requestKey)
+      )
+        return null;
+      updatePurchase(session.key, {
+        status: 'error',
+        errorMessage:
+          error instanceof Error ? error.message : '购买草稿加载失败',
+      });
+      return null;
+    } finally {
+      if (purchaseReadRequests.get(requestKey) === controller)
+        purchaseReadRequests.delete(requestKey);
+    }
+  }
+
+  async function startPurchaseForProduct(
+    externalId: string,
+    replace = false,
+  ): Promise<boolean> {
+    const token = auth.state.token;
+    const session = activeSession.value;
+    const conversationId = session?.conversationId;
+    if (
+      !token ||
+      !session ||
+      !conversationId ||
+      !externalId.trim() ||
+      session.status === 'streaming' ||
+      ['loading', 'submitting', 'unknown', 'error'].includes(
+        session.purchase.status,
+      )
+    )
+      return false;
+    const current = session.purchase.draft;
+    if (
+      current &&
+      current.status !== 'submitted' &&
+      current.status !== 'cancelled' &&
+      current.status !== 'expired' &&
+      current.productExternalId !== externalId &&
+      !replace
+    ) {
+      updatePurchase(session.key, {
+        status: 'error',
+        errorMessage: '当前会话已有其他商品购买草稿，请先确认替换。',
+      });
+      return false;
+    }
+    const requestKey = purchaseRequestKey(conversationId);
+    const controller = beginPurchaseMutation(requestKey);
+    if (!controller) return false;
+    const identity = { version: identityVersion, userId: auth.state.user?.id };
+    const requestVersion = ++purchaseSequence;
+    updatePurchase(session.key, {
+      status: 'submitting',
+      errorMessage: '',
+      requestVersion,
+    });
+    const payload: StartPurchasePayload = {
+      productExternalId: externalId.trim(),
+      expectedVersion:
+        current &&
+        !['submitted', 'cancelled', 'expired'].includes(current.status)
+          ? current.version
+          : null,
+    };
+    let conflict = false;
+    let shouldAutoPrompt = false;
+    try {
+      const result = await attachSkuOptions(
+        token,
+        await startPurchase(token, conversationId, payload, controller.signal),
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      const draft = result.draft;
+      updatePurchase(session.key, {
+        status: draft ? 'success' : 'empty',
+        draft,
+        order: result.order,
+        errorMessage: '',
+      });
+      if (draft) {
+        const promptKey = draft.id;
+        const prompted =
+          sessions.value[session.key]?.purchase.autoPromptedStartKeys.includes(
+            promptKey,
+          ) ?? false;
+        if (!prompted) {
+          updatePurchase(session.key, {
+            autoPromptedStartKeys: [
+              ...(sessions.value[session.key]?.purchase.autoPromptedStartKeys ??
+                []),
+              promptKey,
+            ],
+          });
+          shouldAutoPrompt = true;
+        }
+      }
+      return Boolean(draft);
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      if (error instanceof ApiError && error.status === 409) {
+        conflict = true;
+      } else {
+        updatePurchase(session.key, {
+          status:
+            error instanceof ApiError && error.status === 0
+              ? 'unknown'
+              : 'error',
+          errorMessage:
+            error instanceof Error ? error.message : '购买草稿创建失败',
+        });
+      }
+    } finally {
+      finishPurchaseMutation(requestKey, controller);
+      if (
+        shouldAutoPrompt &&
+        ownsPurchaseSession(identity, session.key, conversationId) &&
+        sessions.value[session.key]?.status !== 'streaming'
+      )
+        void sendMessage('请帮我继续本次购买');
+    }
+    if (conflict && ownsPurchaseSession(identity, session.key, conversationId))
+      await loadPurchaseDraft(conversationId);
+    return false;
+  }
+
+  async function updatePurchaseDraft(
+    payload: Omit<PatchPurchasePayload, 'expectedVersion'>,
+  ): Promise<boolean> {
+    const token = auth.state.token;
+    const session = activeSession.value;
+    const draft = session?.purchase.draft;
+    if (
+      !token ||
+      !session?.conversationId ||
+      !draft ||
+      session.status === 'streaming' ||
+      session.purchase.status !== 'success' ||
+      !['collecting', 'ready'].includes(draft.status)
+    )
+      return false;
+    const conversationId = session.conversationId;
+    const requestKey = purchaseRequestKey(conversationId);
+    const controller = beginPurchaseMutation(requestKey);
+    if (!controller) return false;
+    const identity = { version: identityVersion, userId: auth.state.user?.id };
+    const requestVersion = ++purchaseSequence;
+    updatePurchase(session.key, {
+      status: 'submitting',
+      errorMessage: '',
+      requestVersion,
+    });
+    let conflict = false;
+    try {
+      const result = await patchPurchaseDraft(
+        token,
+        conversationId,
+        draft.id,
+        { ...payload, expectedVersion: draft.version },
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      updatePurchase(session.key, {
+        status: 'success',
+        draft: {
+          ...result,
+          skuOptions: result.skuOptions ?? draft.skuOptions,
+        },
+        errorMessage: '',
+      });
+      return true;
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      if (error instanceof ApiError && error.status === 409) conflict = true;
+      else
+        updatePurchase(session.key, {
+          status:
+            error instanceof ApiError && error.status === 0
+              ? 'unknown'
+              : 'error',
+          errorMessage:
+            error instanceof Error ? error.message : '购买信息更新失败',
+        });
+    } finally {
+      finishPurchaseMutation(requestKey, controller);
+    }
+    if (conflict && ownsPurchaseSession(identity, session.key, conversationId))
+      await loadPurchaseDraft(conversationId);
+    return false;
+  }
+
+  async function discardPurchase(): Promise<boolean> {
+    const token = auth.state.token;
+    const session = activeSession.value;
+    const draft = session?.purchase.draft;
+    if (
+      !token ||
+      !session?.conversationId ||
+      !draft ||
+      session.status === 'streaming' ||
+      session.purchase.status !== 'success' ||
+      !['collecting', 'ready'].includes(draft.status)
+    )
+      return false;
+    const conversationId = session.conversationId;
+    const requestKey = purchaseRequestKey(conversationId);
+    const controller = beginPurchaseMutation(requestKey);
+    if (!controller) return false;
+    const identity = { version: identityVersion, userId: auth.state.user?.id };
+    updatePurchase(session.key, { status: 'submitting', errorMessage: '' });
+    let conflict = false;
+    try {
+      const result = await discardPurchaseDraft(
+        token,
+        conversationId,
+        draft.id,
+        { expectedVersion: draft.version },
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      updatePurchase(session.key, {
+        status: 'success',
+        draft: { ...result, skuOptions: result.skuOptions ?? draft.skuOptions },
+        errorMessage: '',
+      });
+      return true;
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      if (error instanceof ApiError && error.status === 409) conflict = true;
+      else
+        updatePurchase(session.key, {
+          status:
+            error instanceof ApiError && error.status === 0
+              ? 'unknown'
+              : 'error',
+          errorMessage: error instanceof Error ? error.message : '放弃购买失败',
+        });
+    } finally {
+      finishPurchaseMutation(requestKey, controller);
+    }
+    if (conflict && ownsPurchaseSession(identity, session.key, conversationId))
+      await loadPurchaseDraft(conversationId);
+    return false;
+  }
+
+  async function confirmPurchaseOrder(): Promise<boolean> {
+    const token = auth.state.token;
+    const session = activeSession.value;
+    const draft = session?.purchase.draft;
+    if (
+      !token ||
+      !session?.conversationId ||
+      !draft ||
+      session.status === 'streaming' ||
+      session.purchase.status !== 'success' ||
+      draft.status !== 'ready' ||
+      !draft.confirmation
+    )
+      return false;
+    const conversationId = session.conversationId;
+    const requestKey = purchaseRequestKey(conversationId);
+    const controller = beginPurchaseMutation(requestKey);
+    if (!controller) return false;
+    const identity = { version: identityVersion, userId: auth.state.user?.id };
+    updatePurchase(session.key, { status: 'submitting', errorMessage: '' });
+    let conflict = false;
+    try {
+      const result = await confirmPurchase(
+        token,
+        conversationId,
+        draft.id,
+        { expectedVersion: draft.version },
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      updatePurchase(session.key, {
+        status: result.draft ? 'success' : 'empty',
+        draft: result.draft
+          ? {
+              ...result.draft,
+              skuOptions: result.draft.skuOptions ?? draft.skuOptions,
+            }
+          : null,
+        order: result.order,
+        errorMessage: '',
+      });
+      return Boolean(result.order);
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return false;
+      if (error instanceof ApiError && error.status === 409) conflict = true;
+      else
+        updatePurchase(session.key, {
+          status:
+            error instanceof ApiError && error.status === 0
+              ? 'unknown'
+              : 'error',
+          errorMessage: error instanceof Error ? error.message : '确认下单失败',
+        });
+    } finally {
+      finishPurchaseMutation(requestKey, controller);
+    }
+    if (conflict && ownsPurchaseSession(identity, session.key, conversationId))
+      await loadPurchaseDraft(conversationId);
+    return false;
   }
 
   function findSession(id: string) {
@@ -398,6 +912,7 @@ export const useChatStore = defineStore('chat', () => {
           : '',
         firstLoadedPage: page,
       });
+      void loadPurchaseDraft(detail.id);
     } catch (error) {
       if (controller.signal.aborted || historyRequests.get(key) !== controller)
         return;
@@ -593,6 +1108,11 @@ export const useChatStore = defineStore('chat', () => {
         }
         if (event.type === 'product-results')
           task.pendingProductResults.push(event.results);
+        if (event.type === 'purchase') {
+          const purchaseConversationId = sessions.value[key]?.conversationId;
+          if (purchaseConversationId)
+            void loadPurchaseDraft(purchaseConversationId);
+        }
         applyTurnEvent(task.assistant, event, true);
         if (event.type === 'done' && task.pendingProductResults.length) {
           task.assistant.productResults.push(...task.pendingProductResults);
@@ -742,6 +1262,12 @@ export const useChatStore = defineStore('chat', () => {
     listController = null;
     pendingListUpdates = null;
     uncertainTurns.clear();
+    for (const controller of purchaseReadRequests.values()) controller.abort();
+    purchaseReadRequests.clear();
+    for (const controller of purchaseMutationRequests.values())
+      controller.abort();
+    purchaseMutationRequests.clear();
+    purchaseMutationLocks.clear();
     sessions.value = {};
     activeSessionKey.value = null;
     conversationItems.value = [];
@@ -807,5 +1333,11 @@ export const useChatStore = defineStore('chat', () => {
     setChatPageVisible,
     startNewConversation,
     stopGeneration,
+    purchase,
+    loadPurchaseDraft,
+    startPurchaseForProduct,
+    updatePurchaseDraft,
+    discardPurchase,
+    confirmPurchaseOrder,
   };
 });

@@ -63,8 +63,16 @@ export class ChatExtractionSourceService implements ChatExtractionSource {
         conversationId: input.conversationId,
         role: ChatRecordMessageRole.ASSISTANT,
       });
-      if (!userMessage || !assistantMessage) return null;
+      if (
+        !userMessage ||
+        !assistantMessage ||
+        !userMessage.memoryExtractionEligible ||
+        !assistantMessage.memoryExtractionEligible
+      )
+        return null;
       return {
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
         userMessage: userMessage.content,
         assistantMessage: assistantMessage.content,
       };
@@ -92,6 +100,7 @@ export class ChatExtractionSourceService implements ChatExtractionSource {
         userId: input.userId,
       });
       if (!conversation) return null;
+      if (input.turns.length === 0) return [];
       const userIds = input.turns.map((turn) => turn.userMessageId);
       const assistantIds = input.turns.map((turn) => turn.assistantMessageId);
       const users = await transaction.find(ChatMessage, {
@@ -112,16 +121,20 @@ export class ChatExtractionSourceService implements ChatExtractionSource {
         const userMessage = usersById.get(turn.userMessageId);
         const assistantMessage = assistantsById.get(turn.assistantMessageId);
         if (!userMessage || !assistantMessage) return null;
+        if (
+          !userMessage.memoryExtractionEligible ||
+          !assistantMessage.memoryExtractionEligible
+        )
+          return undefined;
         return {
+          userMessageId: userMessage.id,
+          assistantMessageId: assistantMessage.id,
           userMessage: userMessage.content,
           assistantMessage: assistantMessage.content,
         };
       });
       if (result.some((turn) => turn === null)) return null;
-      return result as Array<{
-        userMessage: string;
-        assistantMessage: string;
-      }>;
+      return result.flatMap((turn) => (turn ? [turn] : []));
     });
   }
 }

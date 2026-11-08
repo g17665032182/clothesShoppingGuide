@@ -159,6 +159,72 @@ test('系统上下文参与预算，但不会进入摘要来源', () => {
   assert.equal(plan.messages[0] instanceof SystemMessage, true);
 });
 
+test('购买运行上下文计入 token 预算且不可提取消息从摘要文本中排除并推进水位', () => {
+  const service = createService(100);
+  const history = Array.from({ length: 12 }, (_, index) => {
+    const item = message(
+      String(index),
+      `历史消息 ${index} `.repeat(8),
+      ChatRecordMessageRole.USER,
+    );
+    if (index === 0 || index === 1) item.memoryExtractionEligible = false;
+    return item;
+  });
+  const messageHistory: ChatHistoryMessage[] = history.flatMap((item) => [
+    {
+      id: item.id,
+      message: new HumanMessage({ content: item.content, id: item.id }),
+    },
+    {
+      id: `assistant-${item.id}`,
+      message: new AIMessage({
+        content:
+          item.id === '0' ? '助手回声中的完整收货地址' : `助手回答 ${item.id}`,
+        id: `assistant-${item.id}`,
+      }),
+    },
+  ]);
+  const plan = service.prepare({
+    history,
+    messageHistory,
+    currentUserMessage: '继续',
+    purchaseContext: '当前购买草稿：正在补充购买信息。',
+  });
+  const withoutPurchase = service.prepare({
+    history,
+    currentUserMessage: '继续',
+  });
+
+  assert.ok(
+    plan.messages.some(
+      (item) =>
+        item instanceof SystemMessage &&
+        item.content === '当前购买草稿：正在补充购买信息。',
+    ),
+  );
+  assert.ok(
+    service.countMessages(plan.messages) >
+      service.countMessages(withoutPurchase.messages),
+  );
+  assert.equal(plan.needsSummary, true);
+  assert.equal(
+    plan.summarySource.every((item) => item.memoryExtractionEligible),
+    true,
+  );
+  assert.equal(
+    plan.messageSummarySource?.some(
+      (item) => item.id === '0' || item.id === '1',
+    ),
+    false,
+  );
+  assert.equal(
+    plan.messageSummarySource?.some((item) => item.id === 'assistant-0'),
+    false,
+  );
+  assert.equal(plan.summaryWatermarkAdvanced, true);
+  assert.ok(plan.lastIncludedMessageId);
+});
+
 test('偏好先占预算，Markdown 使用剩余额度，包装和分隔符计入 512 token', () => {
   const service = createService(8_192);
   for (const [preferences, memory] of [

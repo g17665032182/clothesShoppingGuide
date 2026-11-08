@@ -36,6 +36,8 @@ const emit = defineEmits<{
   (event: 'loadEarlier'): void;
   (event: 'retryHistory'): void;
   (event: 'moreProducts', messageId: string, resultIndex: number): void;
+  (event: 'buyProduct', externalId: string): void;
+  (event: 'openOrder', orderId: string): void;
 }>();
 
 const sessionGapMs = 5 * 60 * 1000;
@@ -143,6 +145,8 @@ function formatSessionTime(createdAt: string): string {
                 (messageId, resultIndex) =>
                   emit('moreProducts', messageId, resultIndex)
               "
+              @buy-product="(externalId) => emit('buyProduct', externalId)"
+              @open-order="(orderId) => emit('openOrder', orderId)"
             />
           </MessageScrollerItem>
           <MessageScrollerItem

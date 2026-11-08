@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { BookOpen, SlidersHorizontal, UserRound } from '@lucide/vue';
+import {
+  BookOpen,
+  SlidersHorizontal,
+  UserRound,
+  ShoppingBag,
+} from '@lucide/vue';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { cn } from '@/lib/utils';
 
 const route = useRoute();
-const isDocumentView = computed(() => route.query.view === 'document');
-const isPreferencesView = computed(() => !isDocumentView.value);
+const isDocumentView = computed(
+  () => route.name === 'account-memories' && route.query.view === 'document',
+);
+const isPreferencesView = computed(
+  () => route.name === 'account-memories' && route.query.view !== 'document',
+);
 </script>
 
 <template>
@@ -31,6 +40,26 @@ const isPreferencesView = computed(() => !isDocumentView.value);
         >
           <UserRound aria-hidden="true" class="size-4" />
           个人资料
+        </a>
+      </RouterLink>
+      <RouterLink
+        v-slot="{ isActive, href, navigate }"
+        :to="{ name: 'account-orders' }"
+        custom
+      >
+        <a
+          :aria-current="isActive ? 'page' : undefined"
+          :class="
+            cn(
+              'flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm transition-colors hover:bg-muted',
+              isActive && 'bg-muted font-medium text-foreground',
+            )
+          "
+          :href="href"
+          @click="navigate"
+        >
+          <ShoppingBag aria-hidden="true" class="size-4" />
+          我的订单
         </a>
       </RouterLink>
       <RouterLink

@@ -22,6 +22,7 @@ import {
   displayEnvelope,
   isRecord,
   jsonBytes,
+  isValidPurchaseReference,
   MAX_DISPLAY_BYTES,
   MAX_TRACE_PAYLOAD_BYTES,
   projectContext,
@@ -35,6 +36,7 @@ import type {
   ChatActivity,
   ChatDisplayData,
   ChatDisplayEvent,
+  PurchaseReference,
 } from './chat-display.types.js';
 
 @Injectable()
@@ -63,6 +65,7 @@ export class ChatDisplayService {
       sources: [],
       productResults: [],
       context: projectContext(contextWindowTokens, null),
+      purchase: null,
     };
     this.sourceNamespaces.set(data, randomUUID());
     return data;
@@ -177,6 +180,23 @@ export class ChatDisplayService {
     return data;
   }
 
+  public setPurchaseReference(
+    data: ChatDisplayData,
+    reference: PurchaseReference | null,
+  ): void {
+    if (!isValidPurchaseReference(reference)) {
+      throw new ServiceUnavailableException('购买引用不符合安全保存要求');
+    }
+    const previous = data.purchase;
+    data.purchase = reference;
+    try {
+      this.assertBudget(data);
+    } catch (error) {
+      data.purchase = previous;
+      throw error;
+    }
+  }
+
   public assertBudget(data: ChatDisplayData): void {
     if (reservedDisplayBytes(data) > MAX_DISPLAY_BYTES) {
       throw new ServiceUnavailableException('聊天展示数据超出安全保存上限');
@@ -278,6 +298,7 @@ export class ChatDisplayService {
         sources: restored.sources,
         productResults: restored.productResults,
         context: restored.context,
+        purchase: restored.purchase,
       });
     }
     return result;

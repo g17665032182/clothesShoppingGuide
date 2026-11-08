@@ -11,6 +11,8 @@ import { ProductCatalogOrderService } from './service/product-catalog-order.serv
 import { PRODUCT_CATALOG_ORDER_PORT } from './service/product-catalog-order.port.js';
 import { AdminProductCatalogController } from './controller/admin-product-catalog.controller.js';
 import { AdminProductCatalogService } from './service/admin-product-catalog.service.js';
+import { ProductCatalogPurchaseService } from './service/product-catalog-purchase.service.js';
+import { PRODUCT_CATALOG_PURCHASE_PORT } from './port/product-catalog-purchase.port.js';
 
 @Module({
   imports: [MikroOrmModule.forFeature([Product, ProductSku])],
@@ -24,6 +26,11 @@ import { AdminProductCatalogService } from './service/admin-product-catalog.serv
     ProductCatalogImportService,
     ProductCatalogOrderService,
     AdminProductCatalogService,
+    ProductCatalogPurchaseService,
+    {
+      provide: PRODUCT_CATALOG_PURCHASE_PORT,
+      useExisting: ProductCatalogPurchaseService,
+    },
     {
       provide: PRODUCT_CATALOG_ORDER_PORT,
       useExisting: ProductCatalogOrderService,
@@ -33,6 +40,7 @@ import { AdminProductCatalogService } from './service/admin-product-catalog.serv
     ProductCatalogService,
     ProductCatalogImportService,
     PRODUCT_CATALOG_ORDER_PORT,
+    PRODUCT_CATALOG_PURCHASE_PORT,
   ],
 })
 export class ProductCatalogModule {}

@@ -89,6 +89,10 @@ data: <JSON object>
 
 关联 [AI Elements 设计文档](../chat-streaming/ai-elements-design.md)及[技术文档](../chat-streaming/ai-elements-technical.md)。设计阶段已确认，技术文档确认后再编写实施文档，实施文档确认后才能改代码。
 
+### 2026-11-08 聊天购买增量（已批准并实现）
+
+[聊天购买契约](./chat-purchase-crud-contract.md)及技术、实施方案均已获确认并完成代码集成，增加购买确认卡及关联订单投影，作为上文 Confirmation 非目标的后续增量。新增 purchase 引用事件，携带草稿 ID、版本及可空订单 ID，不携带收货字段；具体字段与持久化时序见购买契约。delta、done、error 的原语义继续保留。done 只证明聊天保存完成，不能作为订单创建、支付或其他订单动作成功的依据；断流后独立核实购买草稿和本人订单状态，不自动另建订单。具体校验结果及未完成浏览器验收见[实施记录](../chat-purchase/chat-purchase-implementation.md)。
+
 ## HTTP 错误与流内错误
 
 ### 响应开始前

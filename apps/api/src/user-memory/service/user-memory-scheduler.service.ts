@@ -14,6 +14,7 @@ const FAILURE_CODES = new Set([
   'DATABASE_RETRYABLE',
   'EXTRACTION_FAILED',
   'TASK_POLL_FAILED',
+  'SOURCE_CHANGED',
 ]);
 
 @Injectable()

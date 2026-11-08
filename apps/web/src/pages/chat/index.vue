@@ -6,6 +6,10 @@ import ChatComposer from './components/ChatComposer.vue';
 import ChatHeader from './components/ChatHeader.vue';
 import ChatMessageList from './components/ChatMessageList.vue';
 import ChatHistoryNavigation from './components/ChatHistoryNavigation.vue';
+import PurchasePanel from './components/PurchasePanel.vue';
+import PurchaseReplaceDialog from './components/PurchaseReplaceDialog.vue';
+import OrderDetailDialog from '@/components/shared/orders/OrderDetailDialog.vue';
+import OrderActionDialog from '@/components/shared/orders/OrderActionDialog.vue';
 import { useChatPage } from './page';
 
 const {
@@ -42,6 +46,26 @@ const {
   historyError,
   loadEarlierMessages,
   loadMoreProducts,
+  purchase,
+  buyProduct,
+  confirmReplacement,
+  replacementDialogOpen,
+  replacementProductId,
+  updatePurchase,
+  discardPurchase,
+  confirmPurchaseOrder,
+  retryPurchase,
+  detailOpen,
+  actionDialogOpen,
+  actionType,
+  order,
+  detailStatus,
+  actionStatus,
+  error: orderError,
+  loadOrder,
+  requestAction,
+  confirmAction,
+  pay,
 } = useChatPage();
 </script>
 
@@ -99,7 +123,26 @@ const {
               :history-error="historyError"
               @load-earlier="loadEarlierMessages"
               @more-products="loadMoreProducts"
+              @buy-product="buyProduct"
+              @open-order="loadOrder"
               @retry-history="loadEarlierMessages"
+            />
+          </div>
+          <div class="shrink-0 px-4 pb-2 sm:px-6">
+            <PurchasePanel
+              :draft="purchase.draft"
+              :order="purchase.order"
+              :status="
+                purchase.status === 'success' && isSending
+                  ? 'streaming'
+                  : purchase.status
+              "
+              :error-message="purchase.errorMessage"
+              @update="updatePurchase($event)"
+              @discard="discardPurchase"
+              @confirm="confirmPurchaseOrder"
+              @retry="retryPurchase"
+              @open-order="loadOrder"
             />
           </div>
           <div
@@ -200,4 +243,25 @@ const {
       </div>
     </main>
   </section>
+  <PurchaseReplaceDialog
+    v-model:open="replacementDialogOpen"
+    :product-external-id="replacementProductId"
+    @confirm="confirmReplacement"
+  />
+  <OrderDetailDialog
+    v-model="detailOpen"
+    :order="order"
+    :status="detailStatus"
+    :action-status="actionStatus"
+    :error="orderError"
+    @retry="loadOrder()"
+    @pay="pay"
+    @cancel="requestAction('cancel')"
+    @receipt="requestAction('receipt')"
+  />
+  <OrderActionDialog
+    v-model="actionDialogOpen"
+    :action="actionType"
+    @confirm="confirmAction"
+  />
 </template>

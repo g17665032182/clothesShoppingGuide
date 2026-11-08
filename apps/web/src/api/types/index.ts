@@ -18,3 +18,12 @@ export type {
   MessageRole,
   PageResponse,
 } from './chat';
+export type {
+  PurchaseDraft,
+  PurchaseDraftResponse,
+  PurchaseConfirmation,
+  PurchaseReference,
+  PatchPurchasePayload,
+  StartPurchasePayload,
+} from './chat-purchase';
+export type { OrderDetail, OrderPage, OrderQuery, OrderStatus } from './orders';

@@ -39,6 +39,16 @@ export class ProductCatalogOrderService implements ProductCatalogOrderPort {
     if (uniqueSkuIds.length === 0) return [];
     const transactionContext = this.requireTransaction(entityManager);
     const skuPlaceholders = uniqueSkuIds.map(() => '?').join(', ');
+    await entityManager.getConnection().execute(
+      `select s.id from product_skus s
+       where s.id in (${skuPlaceholders})
+       order by s.id asc
+       for update of s`,
+      uniqueSkuIds,
+      'all',
+      transactionContext,
+    );
+    // 等待 SKU 锁的语句可能保留旧的父商品快照，全部加锁后再读取当前投影。
     const rows = await entityManager.getConnection().execute<LockedSkuRow[]>(
       `select s.id::text as sku_id, p.external_id as product_external_id,
            s.external_sku_id, p.name as product_name, s.color, s.size, s.price::text as price,
@@ -47,8 +57,7 @@ export class ProductCatalogOrderService implements ProductCatalogOrderPort {
          from product_skus s
          join products p on p.id = s.product_id
          where s.id in (${skuPlaceholders})
-         order by s.id asc
-         for update of s`,
+         order by s.id asc`,
       uniqueSkuIds,
       'all',
       transactionContext,

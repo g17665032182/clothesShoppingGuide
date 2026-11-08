@@ -44,6 +44,7 @@ function createFixture(
 
 test('锁 SKU 前去重并排序，查询使用调用方事务上下文', async () => {
   const { calls, entityManager, transactionContext, service } = createFixture([
+    [{ id: firstSkuId }],
     [
       {
         sku_id: firstSkuId,
@@ -88,6 +89,9 @@ test('锁 SKU 前去重并排序，查询使用调用方事务上下文', async 
   assert.match(calls[0]?.query ?? '', /where s\.id in \(\?, \?\)/u);
   assert.match(calls[0]?.query ?? '', /order by s\.id asc\s+for update of s/u);
   assert.equal(calls[0]?.context, transactionContext);
+  assert.match(calls[1]?.query ?? '', /join products p/u);
+  assert.doesNotMatch(calls[1]?.query ?? '', /for update/u);
+  assert.equal(calls[1]?.context, transactionContext);
 });
 
 test('预占读取来自公开视图并返回 SKU 数量映射', async () => {

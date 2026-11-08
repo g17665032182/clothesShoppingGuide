@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { ArrowUpRight, Check, ImageOff } from '@lucide/vue';
+import { ArrowUpRight, Check, ImageOff, ShoppingBag } from '@lucide/vue';
 import type { ChatProductResults } from '@/api/types/chat';
 
 const props = defineProps<{
@@ -9,6 +9,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (event: 'more', resultIndex: number): void;
+  (event: 'buy', externalId: string): void;
 }>();
 const failedImages = ref(new Set<string>());
 
@@ -175,6 +176,16 @@ function publicUrl(value: string | null): string | null {
               {{ reason }}
             </span>
           </div>
+          <button
+            v-if="item.inStock"
+            type="button"
+            class="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="disabled"
+            @click="emit('buy', item.externalId)"
+          >
+            <ShoppingBag aria-hidden="true" />
+            购买
+          </button>
         </div>
       </article>
     </div>

@@ -26,6 +26,17 @@ function fixture(
     userMessage?: string;
     operations?: MemoryDocumentOperation[];
     currentDocument?: string;
+    sourceTurns?: Array<{
+      userMessageId: string;
+      assistantMessageId: string;
+    }> | null;
+    availableTurns?: Array<{
+      userMessageId: string;
+      assistantMessageId: string;
+      userMessage: string;
+      assistantMessage: string;
+    }>;
+    onGenerate?: () => void;
   } = {},
 ) {
   const task = Object.assign(new UserMemoryTask(), {
@@ -34,6 +45,7 @@ function fixture(
     conversationId: 'conversation',
     userMessageId: 'user-message',
     assistantMessageId: 'assistant-message',
+    sourceTurns: options.sourceTurns ?? null,
     lockedAt: new Date(),
     attempts: 1,
     status: UserMemoryTaskStatus.PROCESSING,
@@ -44,15 +56,32 @@ function fixture(
   let sourceReads = 0;
   let failApply = false;
   let sourceAvailable = true;
+  let availableTurns = options.availableTurns ?? [
+    {
+      userMessageId: 'user-message',
+      assistantMessageId: 'assistant-message',
+      userMessage: options.userMessage ?? '我长期喜欢棉质衣物',
+      assistantMessage: '好的',
+    },
+  ];
   let modelInput = '';
   let systemPrompt = '';
   let appliedOperations: MemoryDocumentOperation[] = [];
+  const cloneTask = () =>
+    Object.assign(new UserMemoryTask(), {
+      ...task,
+      sourceTurns: task.sourceTurns ? [...task.sourceTurns] : null,
+      candidateOperations: task.candidateOperations
+        ? [...task.candidateOperations]
+        : null,
+    });
   const service = new UserMemoryExtractorService(
     {
       generate: async (input: { user: string; system: string }) => {
         generated++;
         modelInput = input.user;
         systemPrompt = input.system;
+        options.onGenerate?.();
         return {
           content: JSON.stringify({
             operations: options.operations ?? [operation],
@@ -61,14 +90,39 @@ function fixture(
       },
     } as never,
     {
-      readCurrent: async () => (allowed ? task : null),
+      readCurrent: async () => (allowed ? cloneTask() : null),
       saveCandidates: async (
-        _task: unknown,
+        currentTask: unknown,
         operations: typeof task.candidateOperations,
       ) => {
         if (!allowed) return false;
         task.candidateOperations = operations;
+        if (currentTask instanceof UserMemoryTask)
+          currentTask.candidateOperations = operations;
         return true;
+      },
+      normalizeSources: async (
+        _currentTask: unknown,
+        turns: Array<{ userMessageId: string; assistantMessageId: string }>,
+      ) => {
+        const previous =
+          task.sourceTurns ??
+          (task.userMessageId && task.assistantMessageId
+            ? [
+                {
+                  userMessageId: task.userMessageId,
+                  assistantMessageId: task.assistantMessageId,
+                },
+              ]
+            : []);
+        if (
+          task.sourceTurns === null ||
+          JSON.stringify(previous) !== JSON.stringify(turns)
+        ) {
+          task.sourceTurns = turns;
+          task.candidateOperations = null;
+        }
+        return cloneTask();
       },
     } as never,
     {
@@ -79,6 +133,22 @@ function fixture(
           userMessage: options.userMessage ?? '我长期喜欢棉质衣物',
           assistantMessage: '好的',
         };
+      },
+      readTurns: async ({
+        turns,
+      }: {
+        turns: Array<{ userMessageId: string; assistantMessageId: string }>;
+      }) => {
+        sourceReads++;
+        if (!sourceAvailable) return null;
+        const requested = new Set(
+          turns.map(
+            (turn) => `${turn.userMessageId}:${turn.assistantMessageId}`,
+          ),
+        );
+        return availableTurns.filter((turn) =>
+          requested.has(`${turn.userMessageId}:${turn.assistantMessageId}`),
+        );
       },
     } as never,
     {
@@ -111,6 +181,9 @@ function fixture(
     },
     invalidateSource: () => {
       sourceAvailable = false;
+    },
+    setAvailableTurns: (turns: typeof availableTurns) => {
+      availableTurns = turns;
     },
     counts: () => ({ generated, applied, sourceReads }),
     modelInput: () => modelInput,
@@ -178,7 +251,7 @@ test('没有适合保存的信息时允许空候选，不补写用户事实', as
   await f.service.process(f.task);
   assert.deepEqual(f.task.candidateOperations, []);
   assert.deepEqual(f.appliedOperations(), []);
-  assert.deepEqual(f.counts(), { generated: 1, applied: 1, sourceReads: 1 });
+  assert.deepEqual(f.counts(), { generated: 1, applied: 1, sourceReads: 3 });
 });
 
 test('记忆候选仅接受文档补丁并拒绝偏好、敏感信息和未知字段', () => {
@@ -216,7 +289,7 @@ test('候选持久化后应用失败，重试复用候选而不再次生成', as
   assert.deepEqual(f.task.candidateOperations, [operation]);
   f.failApply(false);
   await f.service.process(f.task);
-  assert.deepEqual(f.counts(), { generated: 1, applied: 1, sourceReads: 2 });
+  assert.deepEqual(f.counts(), { generated: 1, applied: 1, sourceReads: 5 });
   assert.equal(JSON.parse(f.modelInput()).currentDocument, '已有的衣物记忆');
 });
 
@@ -228,7 +301,111 @@ test('缓存候选重试仍检查用户与消息来源，来源失效时不再�
   f.failApply(false);
   f.invalidateSource();
   await f.service.process(f.task);
-  assert.deepEqual(f.counts(), { generated: 1, applied: 0, sourceReads: 2 });
+  assert.deepEqual(f.counts(), { generated: 1, applied: 0, sourceReads: 4 });
+});
+
+test('混合批次只把合法来源送给模型，全部被过滤时不调用模型', async () => {
+  const sourceTurns = [
+    { userMessageId: 'user-1', assistantMessageId: 'assistant-1' },
+    { userMessageId: 'user-2', assistantMessageId: 'assistant-2' },
+  ];
+  const f = fixture({
+    sourceTurns,
+    availableTurns: [
+      {
+        ...sourceTurns[1]!,
+        userMessage: '我喜欢宽松版型',
+        assistantMessage: '记下了',
+      },
+    ],
+  });
+  await f.service.process(f.task);
+  assert.deepEqual(f.task.sourceTurns, [sourceTurns[1]]);
+  assert.deepEqual(JSON.parse(f.modelInput()).turns, [
+    { userMessage: '我喜欢宽松版型', assistantMessage: '记下了' },
+  ]);
+  assert.equal(f.counts().generated, 1);
+
+  const empty = fixture({ sourceTurns, availableTurns: [] });
+  await empty.service.process(empty.task);
+  assert.deepEqual(empty.task.sourceTurns, []);
+  assert.equal(empty.counts().generated, 0);
+  assert.equal(empty.counts().applied, 0);
+});
+
+test('来源集合变化时清除候选缓存并只对新合法来源重新生成', async () => {
+  const sourceTurns = [
+    { userMessageId: 'user-1', assistantMessageId: 'assistant-1' },
+    { userMessageId: 'user-2', assistantMessageId: 'assistant-2' },
+  ];
+  const f = fixture({
+    sourceTurns,
+    availableTurns: sourceTurns.map((turn, index) => ({
+      ...turn,
+      userMessage: `合法来源 ${index + 1}`,
+      assistantMessage: '已收到',
+    })),
+  });
+  f.failApply(true);
+  await assert.rejects(f.service.process(f.task), ServiceUnavailableException);
+  assert.equal(f.counts().generated, 1);
+  f.failApply(false);
+  f.setAvailableTurns([
+    {
+      ...sourceTurns[1]!,
+      userMessage: '剩余合法来源',
+      assistantMessage: '继续',
+    },
+  ]);
+  await f.service.process(f.task);
+  assert.equal(f.counts().generated, 2);
+  assert.deepEqual(JSON.parse(f.modelInput()).turns, [
+    { userMessage: '剩余合法来源', assistantMessage: '继续' },
+  ]);
+});
+
+test('模型生成期间来源集合变化时清除候选并要求租约重试', async () => {
+  const sourceTurns = [
+    { userMessageId: 'user-1', assistantMessageId: 'assistant-1' },
+    { userMessageId: 'user-2', assistantMessageId: 'assistant-2' },
+  ];
+  let f: ReturnType<typeof fixture>;
+  f = fixture({
+    sourceTurns,
+    availableTurns: sourceTurns.map((turn, index) => ({
+      ...turn,
+      userMessage: `合法来源 ${index + 1}`,
+      assistantMessage: '已收到',
+    })),
+    onGenerate: () =>
+      f.setAvailableTurns([
+        {
+          ...sourceTurns[1]!,
+          userMessage: '变化后的合法来源',
+          assistantMessage: '继续',
+        },
+      ]),
+  });
+  let sourceChangeError: unknown;
+  try {
+    await f.service.process(f.task);
+  } catch (error) {
+    sourceChangeError = error;
+  }
+  assert.equal(f.service.getFailureCode(sourceChangeError), 'SOURCE_CHANGED');
+  assert.equal(f.task.candidateOperations, null);
+  f.setAvailableTurns([
+    {
+      ...sourceTurns[1]!,
+      userMessage: '变化后的合法来源',
+      assistantMessage: '继续',
+    },
+  ]);
+  await f.service.process(f.task);
+  assert.equal(f.counts().generated, 2);
+  assert.deepEqual(JSON.parse(f.modelInput()).turns, [
+    { userMessage: '变化后的合法来源', assistantMessage: '继续' },
+  ]);
 });
 
 test('区分模型输出、存储故障和数据库故障，不输出未知异常正文', () => {

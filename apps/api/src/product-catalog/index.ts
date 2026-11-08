@@ -13,6 +13,13 @@ export { ProductCatalogImportService } from './service/product-catalog-import.se
 export type { ProductCatalogImportResult } from './service/product-catalog-import.service.js';
 export { ProductCatalogOrderService } from './service/product-catalog-order.service.js';
 export {
+  PRODUCT_CATALOG_PURCHASE_PORT,
+  type ProductCatalogPurchasePort,
+  type ProductCatalogPurchaseProjection,
+} from './port/product-catalog-purchase.port.js';
+export type { ProductSkuResponse } from './dto/product-sku-response.dto.js';
+export { normalizeProductPublicUrl } from './public-url.js';
+export {
   productCatalogImportSchema,
   type ProductCatalogImport,
 } from './import/product-catalog-import.schema.js';

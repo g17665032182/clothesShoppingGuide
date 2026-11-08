@@ -20,6 +20,7 @@ export type ContextPlan = {
   summarySource: ChatMessage[];
   messageSummarySource?: ChatHistoryMessage[];
   lastIncludedMessageId: string | null;
+  summaryWatermarkAdvanced: boolean;
   hardLimit: number;
 };
 
@@ -110,6 +111,7 @@ export class ChatContextService {
     messageHistory?: ChatHistoryMessage[];
     currentUserMessage: string;
     memoryContext?: string;
+    purchaseContext?: string;
     contextSummary?: string | null | undefined;
     summaryThroughMessageId?: string | null | undefined;
   }): ContextPlan {
@@ -121,6 +123,9 @@ export class ChatContextService {
     const system = [
       this.llmService.createSystemContextMessage(),
       ...(input.memoryContext ? [new SystemMessage(input.memoryContext)] : []),
+      ...(input.purchaseContext
+        ? [new SystemMessage(input.purchaseContext)]
+        : []),
     ];
     const current = new HumanMessage(input.currentUserMessage);
     const allHistory =
@@ -143,6 +148,7 @@ export class ChatContextService {
         needsSummary: false,
         summarySource: [],
         lastIncludedMessageId: allHistory.at(-1)?.id ?? null,
+        summaryWatermarkAdvanced: false,
         hardLimit,
       };
     }
@@ -169,12 +175,32 @@ export class ChatContextService {
     const firstRecentIndex = recent.length
       ? groups.indexOf(recent[0]!)
       : groups.length;
-    const messageSummarySource = groups
-      .slice(coveredIndex + 1, firstRecentIndex)
-      .flatMap((group) => group.items);
+    const coveredGroups = groups.slice(coveredIndex + 1, firstRecentIndex);
+    const coveredMessages = coveredGroups.flatMap((group) => group.items);
+    const messageFlags = new Map(
+      (input.history ?? []).map((item) => [
+        item.id,
+        item.memoryExtractionEligible !== false,
+      ]),
+    );
+    let turnEligible = true;
+    const messageSummarySource: ChatHistoryMessage[] = [];
+    groups.slice(0, firstRecentIndex).forEach((group, index) => {
+      const humanMessage = group.items.find(
+        (item) => item.message instanceof HumanMessage,
+      );
+      if (humanMessage) {
+        turnEligible = messageFlags.get(humanMessage.id) ?? true;
+      }
+      if (index <= coveredIndex || !turnEligible) return;
+      messageSummarySource.push(
+        ...group.items.filter((item) => messageFlags.get(item.id) !== false),
+      );
+    });
     const summaryIds = new Set(messageSummarySource.map((item) => item.id));
-    const summarySource = (input.history ?? []).filter((item) =>
-      summaryIds.has(item.id),
+    const summarySource = (input.history ?? []).filter(
+      (item) =>
+        summaryIds.has(item.id) && item.memoryExtractionEligible !== false,
     );
 
     const messages: BaseMessage[] = [
@@ -203,13 +229,15 @@ export class ChatContextService {
 
     return {
       messages,
-      needsSummary: messageSummarySource.length > 0,
+      // 即使范围内只有被隔离的消息，也要让调用方推进摘要水位，但不能把空内容送给模型。
+      needsSummary: coveredMessages.length > 0,
       summarySource,
       messageSummarySource,
       lastIncludedMessageId:
-        messageSummarySource.at(-1)?.id ??
-        input.summaryThroughMessageId ??
-        null,
+        coveredMessages.at(-1)?.id ?? input.summaryThroughMessageId ?? null,
+      summaryWatermarkAdvanced:
+        coveredMessages.length > 0 &&
+        coveredMessages.at(-1)?.id !== input.summaryThroughMessageId,
       hardLimit,
     };
   }

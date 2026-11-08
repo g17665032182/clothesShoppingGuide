@@ -8,6 +8,8 @@ import { MikroORM } from '@mikro-orm/postgresql';
 
 import config from '../../mikro-orm.config.js';
 import { ProductCatalogOrderService } from '../service/product-catalog-order.service.js';
+import { ProductCatalogPurchaseService } from '../service/product-catalog-purchase.service.js';
+import { ServiceUnavailableException } from '@nestjs/common';
 
 const productId = randomUUID();
 const skuId = randomUUID();
@@ -146,6 +148,58 @@ test(
           service.getReservedQuantities(transaction, [skuId]),
         );
       assert.equal(afterClose.get(skuId), 2);
+
+      // 第 21 个规格仍有货，完整读取不能因默认第一页只见一个有货而自动选择。
+      const lastSkuId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      for (let index = 0; index < 20; index += 1) {
+        const id =
+          index === 19
+            ? lastSkuId
+            : `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+        await connection.execute(
+          `insert into "${schema}".product_skus
+           (id, product_id, external_sku_id, color, size, price, currency, stock, is_active)
+           values (?, ?, ?, ?, 'M', 899.00, 'CNY', ?, true)`,
+          [
+            id,
+            productId,
+            `complete-${index}`,
+            `颜色${index}`,
+            index === 19 ? 1 : 0,
+          ],
+        );
+      }
+      const purchase = new ProductCatalogPurchaseService();
+      const complete = await orm.em
+        .fork()
+        .transactional((transaction) =>
+          purchase.getPurchaseSpecifications(transaction, 'coat-1'),
+        );
+      assert.equal(complete?.skus.length, 21);
+      assert.equal(complete?.skus.at(-1)?.skuId, lastSkuId);
+      assert.equal(complete?.skus.filter((sku) => sku.inStock).length, 2);
+      assert.equal(
+        JSON.stringify(complete).includes('reserved_quantity'),
+        false,
+      );
+      assert.equal(JSON.stringify(complete).includes('"stock"'), false);
+
+      for (let index = 0; index < 80; index += 1) {
+        await connection.execute(
+          `insert into "${schema}".product_skus
+           (id, product_id, external_sku_id, color, size, price, currency, stock, is_active)
+           values (?, ?, ?, '黑色', 'M', 899.00, 'CNY', 1, true)`,
+          [randomUUID(), productId, `overflow-${index}`],
+        );
+      }
+      await assert.rejects(
+        orm.em
+          .fork()
+          .transactional((transaction) =>
+            purchase.getPurchaseSpecifications(transaction, 'coat-1'),
+          ),
+        ServiceUnavailableException,
+      );
     } finally {
       await connection.execute(`drop schema if exists "${schema}" cascade`);
       await orm.close(true);

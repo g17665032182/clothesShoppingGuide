@@ -55,6 +55,8 @@ export type ChatOutput = {
   content: string;
   model: string;
   usage: LlmUsage | null;
+  /** 内部展示绑定使用，HTTP 响应必须显式剔除。 */
+  finalTraceSequence?: number | null;
 };
 
 export type LlmGraph = ReturnType<typeof createLlmGraph>;
@@ -171,6 +173,9 @@ export class LlmService {
       content: normalizeContent(response.content),
       model,
       usage: normalizeUsage(response) ?? null,
+      ...(traceContext
+        ? { finalTraceSequence: result.finalTraceSequence ?? null }
+        : {}),
     };
   }
 

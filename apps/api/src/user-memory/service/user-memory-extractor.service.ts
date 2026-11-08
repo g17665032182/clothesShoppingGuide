@@ -20,6 +20,10 @@ import type { UserMemoryTask } from '../entity/user-memory-task.entity.js';
 import { UserMemoryDocumentService } from './user-memory-document.service.js';
 import { UserMemoryTaskService } from './user-memory-task.service.js';
 
+class MemorySourceChangedError extends Error {
+  public readonly code = 'SOURCE_CHANGED';
+}
+
 @Injectable()
 export class UserMemoryExtractorService {
   public constructor(
@@ -34,29 +38,39 @@ export class UserMemoryExtractorService {
   public async process(task: UserMemoryTask): Promise<void> {
     const current = await this.tasks.readCurrent(task);
     if (!current || !task.conversationId) return;
-    // 缓存只复用生成结果，每次重试仍须校验用户和消息来源的当前有效性。
-    const turns = task.sourceTurns
-      ? this.source.readTurns
-        ? await this.source.readTurns({
-            userId: task.userId,
-            conversationId: task.conversationId,
-            turns: task.sourceTurns,
-          })
-        : null
-      : task.userMessageId && task.assistantMessageId
+    // 来源读取和租约内归一化必须绑定同一组实际消息，防止过滤后沿用旧候选。
+    const requestedTurns =
+      task.sourceTurns ??
+      (task.userMessageId && task.assistantMessageId
         ? [
-            await this.source.readTurn({
-              userId: task.userId,
-              conversationId: task.conversationId,
+            {
               userMessageId: task.userMessageId,
               assistantMessageId: task.assistantMessageId,
-            }),
+            },
           ]
-        : null;
-    if (!turns || turns.some((turn) => turn === null)) return;
-    let operations = current.candidateOperations;
+        : null);
+    if (!requestedTurns || !this.source.readTurns) return;
+    const sourceTurns = await this.source.readTurns({
+      userId: task.userId,
+      conversationId: task.conversationId,
+      turns: requestedTurns,
+    });
+    if (!sourceTurns) return;
+    let activeTask = await this.tasks.normalizeSources(
+      task,
+      sourceTurns.map(({ userMessageId, assistantMessageId }) => ({
+        userMessageId,
+        assistantMessageId,
+      })),
+    );
+    if (!activeTask || sourceTurns.length === 0) return;
+    const turns = sourceTurns.map(({ userMessage, assistantMessage }) => ({
+      userMessage,
+      assistantMessage,
+    }));
+    let operations = activeTask.candidateOperations;
     if (operations === null) {
-      const document = await this.documents.get(task.userId);
+      const document = await this.documents.get(activeTask.userId);
       const generated = await this.textGenerator.generate({
         system: [
           '你负责抽取用户明确表达、对后续服装选择有帮助的 Markdown 记忆，不要求用户说出“长期”“经常”或重复表达。',
@@ -84,22 +98,70 @@ export class UserMemoryExtractorService {
       operations = memoryCandidateSchema.parse(
         JSON.parse(generated.content) as unknown,
       ).operations;
-      // 模型调用不占数据库锁；保存前重新校验租约、开关和清空代次。
-      if (!(await this.tasks.saveCandidates(task, operations))) return;
+      const currentSources = await this.source.readTurns({
+        userId: activeTask.userId,
+        conversationId: activeTask.conversationId!,
+        turns: activeTask.sourceTurns ?? [],
+      });
+      if (!currentSources) return;
+      const currentTask = await this.tasks.normalizeSources(
+        activeTask,
+        currentSources.map(({ userMessageId, assistantMessageId }) => ({
+          userMessageId,
+          assistantMessageId,
+        })),
+      );
+      if (
+        !currentTask ||
+        JSON.stringify(currentTask.sourceTurns) !==
+          JSON.stringify(activeTask.sourceTurns)
+      ) {
+        if (currentTask?.sourceTurns?.length) {
+          throw new MemorySourceChangedError();
+        }
+        return;
+      }
+      // 模型调用不占数据库锁；候选写入仍复核来源、租约、开关和清空代次。
+      if (!(await this.tasks.saveCandidates(currentTask, operations))) return;
+      activeTask = currentTask;
     } else {
       operations = memoryDocumentOperationsSchema.parse(operations);
     }
+    const verifiedSources = await this.source.readTurns({
+      userId: activeTask.userId,
+      conversationId: activeTask.conversationId!,
+      turns: activeTask.sourceTurns ?? [],
+    });
+    if (!verifiedSources) return;
+    const verifiedTask = await this.tasks.normalizeSources(
+      activeTask,
+      verifiedSources.map(({ userMessageId, assistantMessageId }) => ({
+        userMessageId,
+        assistantMessageId,
+      })),
+    );
+    if (
+      !verifiedTask ||
+      JSON.stringify(verifiedTask.sourceTurns) !==
+        JSON.stringify(activeTask.sourceTurns)
+    ) {
+      if (verifiedTask?.sourceTurns?.length) {
+        throw new MemorySourceChangedError();
+      }
+      return;
+    }
     await this.documents.applyExtractedOperations({
-      userId: task.userId,
-      taskId: task.id,
-      documentGeneration: task.documentGeneration,
-      taskAttempts: task.attempts,
-      taskLockedAt: task.lockedAt!,
+      userId: activeTask.userId,
+      taskId: activeTask.id,
+      documentGeneration: activeTask.documentGeneration,
+      taskAttempts: activeTask.attempts,
+      taskLockedAt: activeTask.lockedAt!,
       operations,
     });
   }
 
   public getFailureCode(error: unknown): string {
+    if (error instanceof MemorySourceChangedError) return error.code;
     if (error instanceof StructuredTextGenerationError) return error.code;
     if (error instanceof SyntaxError || error instanceof ZodError)
       return 'INVALID_OUTPUT';

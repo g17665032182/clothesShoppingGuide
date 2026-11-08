@@ -26,6 +26,13 @@ export class ChatMessage {
   @Property({ type: 'text' })
   public content!: string;
 
+  @Property({
+    type: 'boolean',
+    fieldName: 'memory_extraction_eligible',
+    default: true,
+  })
+  public memoryExtractionEligible = true;
+
   @Property({ type: 'string', length: 100, nullable: true })
   public model: string | null = null;
 

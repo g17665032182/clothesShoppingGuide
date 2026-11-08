@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -16,6 +17,7 @@ import { EntityRepository } from '@mikro-orm/postgresql';
 
 import {
   PRODUCT_CATALOG_ORDER_PORT,
+  normalizeProductPublicUrl,
   type ProductCatalogOrderPort,
   type ProductCatalogOrderSku,
 } from '../../product-catalog/index.js';
@@ -46,6 +48,12 @@ import type {
   OrderPageResponseDto,
   OrderSummaryResponseDto,
 } from '../dto/order-response.dto.js';
+import type {
+  ConfirmedOrderInput,
+  ConfirmedOrderResult,
+  ConfirmedOrderSnapshot,
+  OrderConfirmedCreationPort,
+} from '../port/order-confirmed-creation.port.js';
 
 type OrderPageQuery = CustomerOrderQueryDto | AdminOrderQueryDto;
 type CreateOrderResult = {
@@ -60,9 +68,17 @@ type ActionResult<T> = {
   value: T;
   expired: boolean;
 };
+type CreationLine = {
+  snapshot: ProductCatalogOrderSku;
+  quantity: number;
+  unitPrice: string;
+  lineAmount: string;
+};
 
 @Injectable()
-export class OrdersService implements OrderCatalogImportPort {
+export class OrdersService
+  implements OrderCatalogImportPort, OrderConfirmedCreationPort
+{
   public constructor(
     @InjectRepository(Order)
     private readonly orders: EntityRepository<Order>,
@@ -77,128 +93,226 @@ export class OrdersService implements OrderCatalogImportPort {
     const requestHash = this.hashRequest(input);
     try {
       return await this.manager().transactional(async (em) => {
-        // 按用户和幂等键串行化首次请求，避免相同请求排队后误报库存不足。
-        await em
-          .getConnection()
-          .execute(
-            'select pg_advisory_xact_lock(hashtextextended(?, 0))',
-            [`order-idempotency:${userId}:${input.idempotencyKey}`],
-            'run',
-            em.getTransactionContext(),
-          );
-        const previous = await em.findOne(OrderIdempotency, {
+        const result = await this.createInTransaction(
+          em,
           userId,
-          idempotencyKey: input.idempotencyKey,
-        });
-        if (previous) {
-          if (previous.requestHash !== requestHash)
-            throw new ConflictException('幂等键已用于不同的下单请求');
-          const order = await em.findOne(Order, { id: previous.orderId });
-          if (!order) throw new ConflictException('订单幂等记录不一致');
-          await this.closeIfExpired(em, order.id);
-          const current = await em.findOneOrFail(Order, { id: order.id });
-          return {
-            order: await this.detailProjection(em, current, false),
-            created: false,
-          };
-        }
-
-        const skuIds = input.items
-          .map((item) => item.skuId)
-          .sort((left, right) => left.localeCompare(right));
-        const snapshots = await this.catalog.lockSkus(em, skuIds);
-        const snapshotById = new Map(
-          snapshots.map((snapshot) => [snapshot.skuId, snapshot]),
-        );
-        const reserved = await this.catalog.getReservedQuantities(em, skuIds);
-        const lines: Array<{
-          snapshot: ProductCatalogOrderSku;
-          quantity: number;
-          unitPrice: string;
-          lineAmount: string;
-        }> = [];
-        let totalMinor = 0n;
-
-        for (const item of input.items) {
-          const snapshot = snapshotById.get(item.skuId);
-          if (
-            !snapshot ||
-            !snapshot.isProductActive ||
-            !snapshot.isSkuActive ||
-            snapshot.currency !== 'CNY'
-          ) {
-            throw new NotFoundException('商品规格不存在或不可下单');
-          }
-          const reservedQuantity = reserved.get(item.skuId) ?? 0;
-          if (snapshot.stock - reservedQuantity < item.quantity)
-            throw new ConflictException('商品规格库存不足');
-
-          const unitMinor = this.toMinorUnits(snapshot.price);
-          const lineMinor = unitMinor * BigInt(item.quantity);
-          totalMinor += lineMinor;
-          lines.push({
-            snapshot,
-            quantity: item.quantity,
-            unitPrice: this.formatMinorUnits(unitMinor),
-            lineAmount: this.formatMinorUnits(lineMinor),
-          });
-        }
-
-        const now = await this.databaseNow(em);
-        const order = em.create(Order, {
-          orderNo: this.newOrderNumber(),
-          userId,
-          status: OrderStatus.PENDING_PAYMENT,
-          closeReason: null,
-          currency: 'CNY',
-          itemsAmount: this.formatMinorUnits(totalMinor),
-          shippingAmount: '0.00',
-          discountAmount: '0.00',
-          payableAmount: this.formatMinorUnits(totalMinor),
-          paymentMode: 'simulated',
-          recipientName: input.recipient.name,
-          recipientPhone: input.recipient.phone,
-          recipientAddress: input.recipient.address,
-          expiresAt: new Date(now.getTime() + 30 * 60_000),
-          createdAt: now,
-          updatedAt: now,
-        });
-        em.persist(order);
-        await em.flush();
-        const orderItems = lines.map(
-          ({ snapshot, quantity, unitPrice, lineAmount }) =>
-            em.create(OrderItem, {
-              orderId: order.id,
-              skuId: snapshot.skuId,
-              productExternalId: snapshot.productExternalId,
-              productName: snapshot.productName,
-              color: snapshot.color,
-              size: snapshot.size,
-              imageUrl: snapshot.imageUrl,
-              unitPrice,
-              quantity,
-              lineAmount,
-            }),
-        );
-        em.persist(orderItems);
-        await em.flush();
-        em.create(OrderIdempotency, {
-          userId,
-          idempotencyKey: input.idempotencyKey,
+          input,
           requestHash,
-          orderId: order.id,
-          createdAt: now,
-        });
-        await em.flush();
+        );
+        if (result.kind === 'unavailable')
+          throw new NotFoundException('商品规格不存在或不可下单');
+        if (result.kind === 'insufficient_stock')
+          throw new ConflictException('商品规格库存不足');
+        if (!('order' in result))
+          throw new Error('直接下单返回了不支持的确认结果');
         return {
-          order: await this.detailProjection(em, order, false),
-          created: true,
+          order: result.order,
+          created: result.kind === 'created',
         };
       });
     } catch (error) {
       if (!(error instanceof UniqueConstraintViolationException)) throw error;
       return this.readIdempotentRetry(userId, input, requestHash);
     }
+  }
+
+  public async createConfirmedInTransaction(
+    em: EntityManager,
+    userId: string,
+    input: ConfirmedOrderInput,
+    expectedSnapshot: ConfirmedOrderSnapshot,
+  ): Promise<ConfirmedOrderResult> {
+    if (!em.getTransactionContext())
+      throw new Error('确认下单必须加入调用方事务');
+    if (
+      input.items.length !== 1 ||
+      input.items[0]?.skuId !== expectedSnapshot.skuId ||
+      !Number.isFinite(expectedSnapshot.expiresAt.getTime())
+    ) {
+      throw new BadRequestException('确认下单条件无效');
+    }
+    // 不捕获数据库异常：调用方必须先回滚，再在新事务恢复同一次确认。
+    return this.createInTransaction(
+      em,
+      userId,
+      input,
+      this.hashRequest(input),
+      expectedSnapshot,
+    );
+  }
+
+  private async createInTransaction(
+    em: EntityManager,
+    userId: string,
+    input: CreateOrderInput,
+    requestHash: string,
+    expected?: ConfirmedOrderSnapshot,
+  ): Promise<ConfirmedOrderResult> {
+    // 幂等命中早于报价和截止校验，后续商品变化不能让成功重试再建订单。
+    await em
+      .getConnection()
+      .execute(
+        'select pg_advisory_xact_lock(hashtextextended(?, 0))',
+        [`order-idempotency:${userId}:${input.idempotencyKey}`],
+        'run',
+        em.getTransactionContext(),
+      );
+    const previous = await em.findOne(OrderIdempotency, {
+      userId,
+      idempotencyKey: input.idempotencyKey,
+    });
+    if (previous) {
+      if (previous.requestHash !== requestHash)
+        throw new ConflictException('幂等键已用于不同的下单请求');
+      const order = await em.findOne(Order, {
+        id: previous.orderId,
+        userId,
+      });
+      if (!order) throw new ConflictException('订单幂等记录不一致');
+      await this.closeIfExpired(em, order.id);
+      const current = await em.findOneOrFail(Order, { id: order.id, userId });
+      return {
+        kind: 'replayed',
+        order: await this.detailProjection(em, current, false),
+      };
+    }
+
+    const skuIds = input.items
+      .map((item) => item.skuId)
+      .sort((left, right) => left.localeCompare(right));
+    const snapshots = await this.catalog.lockSkus(em, skuIds);
+    const snapshotById = new Map(
+      snapshots.map((snapshot) => [snapshot.skuId, snapshot]),
+    );
+    const reserved = await this.catalog.getReservedQuantities(em, skuIds);
+    // now() 固定为事务起点；新确认必须在竞争锁全部取得后读取实际时钟。
+    const confirmationTime = expected
+      ? await this.databaseNow(em, true)
+      : undefined;
+    if (
+      expected &&
+      confirmationTime!.getTime() >= expected.expiresAt.getTime()
+    ) {
+      return { kind: 'draft_expired' };
+    }
+    const lines: CreationLine[] = [];
+    let totalMinor = 0n;
+    for (const item of input.items) {
+      const snapshot = snapshotById.get(item.skuId);
+      if (
+        !snapshot ||
+        !snapshot.isProductActive ||
+        !snapshot.isSkuActive ||
+        snapshot.currency !== 'CNY'
+      ) {
+        return { kind: 'unavailable' };
+      }
+      const unitMinor = this.toMinorUnits(snapshot.price);
+      const unitPrice = this.formatMinorUnits(unitMinor);
+      if (expected && !this.matchesConfirmation(snapshot, unitPrice, expected))
+        return { kind: 'quote_changed' };
+      if (snapshot.stock - (reserved.get(item.skuId) ?? 0) < item.quantity)
+        return { kind: 'insufficient_stock' };
+      const lineMinor = unitMinor * BigInt(item.quantity);
+      totalMinor += lineMinor;
+      lines.push({
+        snapshot: expected
+          ? {
+              ...snapshot,
+              imageUrl: normalizeProductPublicUrl(snapshot.imageUrl),
+            }
+          : snapshot,
+        quantity: item.quantity,
+        unitPrice,
+        lineAmount: this.formatMinorUnits(lineMinor),
+      });
+    }
+    return this.persistCreatedOrder(
+      em,
+      userId,
+      input,
+      requestHash,
+      lines,
+      totalMinor,
+      confirmationTime ?? (await this.databaseNow(em)),
+    );
+  }
+
+  private matchesConfirmation(
+    sku: ProductCatalogOrderSku,
+    unitPrice: string,
+    expected: ConfirmedOrderSnapshot,
+  ): boolean {
+    return (
+      sku.skuId === expected.skuId &&
+      sku.productExternalId === expected.productExternalId &&
+      sku.productName === expected.productName &&
+      sku.color === expected.color &&
+      sku.size === expected.size &&
+      sku.currency === expected.currency &&
+      unitPrice === expected.unitPrice &&
+      normalizeProductPublicUrl(sku.imageUrl) === expected.imageUrl
+    );
+  }
+
+  private async persistCreatedOrder(
+    em: EntityManager,
+    userId: string,
+    input: CreateOrderInput,
+    requestHash: string,
+    lines: CreationLine[],
+    totalMinor: bigint,
+    now: Date,
+  ): Promise<ConfirmedOrderResult> {
+    const order = em.create(Order, {
+      orderNo: this.newOrderNumber(),
+      userId,
+      status: OrderStatus.PENDING_PAYMENT,
+      closeReason: null,
+      currency: 'CNY',
+      itemsAmount: this.formatMinorUnits(totalMinor),
+      shippingAmount: '0.00',
+      discountAmount: '0.00',
+      payableAmount: this.formatMinorUnits(totalMinor),
+      paymentMode: 'simulated',
+      recipientName: input.recipient.name,
+      recipientPhone: input.recipient.phone,
+      recipientAddress: input.recipient.address,
+      expiresAt: new Date(now.getTime() + 30 * 60_000),
+      createdAt: now,
+      updatedAt: now,
+    });
+    em.persist(order);
+    await em.flush();
+    const orderItems = lines.map(
+      ({ snapshot, quantity, unitPrice, lineAmount }) =>
+        em.create(OrderItem, {
+          orderId: order.id,
+          skuId: snapshot.skuId,
+          productExternalId: snapshot.productExternalId,
+          productName: snapshot.productName,
+          color: snapshot.color,
+          size: snapshot.size,
+          imageUrl: snapshot.imageUrl,
+          unitPrice,
+          quantity,
+          lineAmount,
+        }),
+    );
+    em.persist(orderItems);
+    await em.flush();
+    em.create(OrderIdempotency, {
+      userId,
+      idempotencyKey: input.idempotencyKey,
+      requestHash,
+      orderId: order.id,
+      createdAt: now,
+    });
+    await em.flush();
+    return {
+      kind: 'created',
+      order: await this.detailProjection(em, order, false),
+    };
   }
 
   public async listForUser(
@@ -665,11 +779,16 @@ export class OrdersService implements OrderCatalogImportPort {
     return now.getTime() >= order.expiresAt.getTime();
   }
 
-  private async databaseNow(em: EntityManager): Promise<Date> {
+  private async databaseNow(
+    em: EntityManager,
+    actualClock = false,
+  ): Promise<Date> {
     const rows = await em
       .getConnection()
       .execute<Array<{ database_now: Date }>>(
-        'select now() as database_now',
+        actualClock
+          ? 'select clock_timestamp() as database_now'
+          : 'select now() as database_now',
         [],
         'all',
         em.getTransactionContext(),

@@ -265,3 +265,82 @@ test('空对象模型 payload 绑定公开展示后可重复重放，不能混�
     /幂等冲突/u,
   );
 });
+
+test('独立及嵌套购买调用、非法调用和结果仅保存白名单副本且不改写原事件', async () => {
+  const { writer, rows } = createWriter();
+  const nested = {
+    toolCalls: [
+      {
+        id: 'nested-call',
+        name: 'update_purchase_draft',
+        args: {
+          draftId: '11111111-1111-4111-8111-111111111111',
+          expectedVersion: 4,
+          recipient: { name: '张三', phone: '13812345678' },
+          address: '完整地址',
+          privateError: 'secret',
+        },
+      },
+    ],
+    invalid_tool_calls: [
+      {
+        id: 'invalid-call',
+        name: 'get_purchase_draft',
+        args: '{"draftId":"11111111-1111-4111-8111-111111111111","private":"secret"}',
+        error: 'raw private error',
+      },
+    ],
+  };
+  const original = structuredClone(nested);
+  await writer.writeEvents(context, [
+    {
+      sequence: 1,
+      type: 'model_response',
+      messageId: 'model',
+      content: '',
+      model: 'model',
+      usage: null,
+      payload: nested,
+    },
+    {
+      sequence: 2,
+      type: 'tool_call',
+      messageId: 'model',
+      toolCallId: 'independent-call',
+      toolName: 'update_purchase_draft',
+      args: {
+        draftId: '11111111-1111-4111-8111-111111111111',
+        expectedVersion: 5,
+        skuId: 'private-sku',
+        quantity: 2,
+        recipient: { address: 'secret address' },
+      },
+    },
+    {
+      sequence: 3,
+      type: 'tool_result',
+      messageId: 'tool',
+      toolCallId: 'independent-call',
+      toolName: 'update_purchase_draft',
+      content:
+        '{"draftId":"11111111-1111-4111-8111-111111111111","version":6,"status":"ready","issues":[{"code":"missing_field","field":"phone","message":"private"}],"recipient":{"address":"secret address"}}',
+      status: 'success',
+      payload: {
+        draftId: '11111111-1111-4111-8111-111111111111',
+        recipient: { phone: '13812345678' },
+      },
+    },
+  ]);
+
+  assert.deepEqual(nested, original);
+  assert.equal(rows.length, 3);
+  const serialized = JSON.stringify(rows);
+  assert.equal(serialized.includes('张三'), false);
+  assert.equal(serialized.includes('13812345678'), false);
+  assert.equal(serialized.includes('完整地址'), false);
+  assert.equal(serialized.includes('secret address'), false);
+  assert.equal(serialized.includes('raw private error'), false);
+  assert.equal(serialized.includes('privateError'), false);
+  assert.match(serialized, /"version":4/u);
+  assert.match(serialized, /"changedFields":\["name","phone","recipient"\]/u);
+});

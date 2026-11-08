@@ -5,6 +5,7 @@ import { EntityRepository } from '@mikro-orm/postgresql';
 import {
   CHAT_EXTRACTION_SOURCE,
   type ChatExtractionSource,
+  type ChatExtractionTurn,
 } from '../../chat-records/extraction-source/index.js';
 import type {
   EnqueueMemoryTaskInput,
@@ -232,6 +233,33 @@ export class UserMemoryTaskService implements UserMemoryTasks {
         return true;
       })) ?? false
     );
+  }
+
+  public async normalizeSources(
+    task: UserMemoryTask,
+    sourceTurns: ChatExtractionTurn[],
+  ): Promise<UserMemoryTask | null> {
+    return this.withLease(task, async (transaction, current) => {
+      const previous =
+        current.sourceTurns ??
+        (current.userMessageId && current.assistantMessageId
+          ? [
+              {
+                userMessageId: current.userMessageId,
+                assistantMessageId: current.assistantMessageId,
+              },
+            ]
+          : []);
+      const changed =
+        current.sourceTurns === null ||
+        JSON.stringify(previous) !== JSON.stringify(sourceTurns);
+      if (changed) {
+        current.sourceTurns = sourceTurns;
+        current.candidateOperations = null;
+        await transaction.flush();
+      }
+      return current;
+    });
   }
 
   private async withLease<T>(

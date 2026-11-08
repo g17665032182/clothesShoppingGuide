@@ -5,6 +5,7 @@ import {
   LogOut,
   PackageSearch,
   Shirt,
+  ShoppingBag,
   SlidersHorizontal,
   Truck,
   UserRound,
@@ -56,6 +57,12 @@ function signOut() {
               <RouterLink :to="{ name: 'account-profile' }">
                 <UserRound aria-hidden="true" />
                 个人资料
+              </RouterLink>
+            </DropdownMenuItem>
+            <DropdownMenuItem as-child>
+              <RouterLink :to="{ name: 'account-orders' }">
+                <ShoppingBag aria-hidden="true" />
+                我的订单
               </RouterLink>
             </DropdownMenuItem>
             <DropdownMenuItem as-child>

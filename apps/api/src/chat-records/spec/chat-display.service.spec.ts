@@ -21,6 +21,11 @@ import {
 const conversationId = '11111111-1111-4111-8111-111111111111';
 const runId = '22222222-2222-4222-8222-222222222222';
 const assistantMessageId = '33333333-3333-4333-8333-333333333333';
+const purchaseReference = {
+  draftId: '44444444-4444-4444-8444-444444444444',
+  version: 12,
+  orderId: null,
+};
 
 function createState() {
   const rows: ChatTraceEvent[] = [];
@@ -192,6 +197,24 @@ test('商品工具结果非法时不生成公开商品投影', () => {
     context: null,
   };
   assert.deepEqual(restoreDisplay(oldSnapshot)?.productResults, []);
+  assert.equal(restoreDisplay(oldSnapshot)?.purchase, null);
+});
+
+test('购买引用恢复为可空投影且容量预留包含最大合法引用', () => {
+  const { display } = createState();
+  const data = display.create(1_000);
+  const before = reservedDisplayBytes(data);
+  display.setPurchaseReference(data, purchaseReference);
+  const restored = restoreDisplay(displayEnvelope(data, assistantMessageId));
+  assert.deepEqual(restored?.purchase, purchaseReference);
+  assert.ok(reservedDisplayBytes(data) >= before);
+
+  const invalid = { ...purchaseReference, version: 0 };
+  assert.throws(
+    () => display.setPurchaseReference(data, invalid),
+    /安全保存要求/u,
+  );
+  assert.deepEqual(data.purchase, purchaseReference);
 });
 
 test('正文不会派生 reasoning，只有显式公开摘要可以更新活动', () => {

@@ -176,6 +176,21 @@ test(
       new ChatDisplayService(em.getRepository(ChatTraceEvent)),
       preferenceReader,
       {} as never,
+      {
+        runState: async () => ({
+          fingerprint: '',
+          active: false,
+          context: '',
+          reference: null,
+        }),
+        runStateInTransaction: async () => ({
+          fingerprint: '',
+          active: false,
+          context: '',
+          reference: null,
+        }),
+      } as never,
+      { lockOwnedInTransaction: async () => undefined } as never,
     );
     const chat = () =>
       service.chat(owner, {
@@ -281,6 +296,8 @@ test(
       await chat();
       assert.ok(captured);
       assert.deepEqual(await source.readTurn(captured), {
+        userMessageId: captured.userMessageId,
+        assistantMessageId: captured.assistantMessageId,
         userMessage: 'style 通勤',
         assistantMessage: 'fixture reply',
       });

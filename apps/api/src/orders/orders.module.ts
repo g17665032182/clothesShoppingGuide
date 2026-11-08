@@ -10,6 +10,7 @@ import { OrderItem } from './entity/order-item.entity.js';
 import { OrderExpirationService } from './service/order-expiration.service.js';
 import { OrdersService } from './service/orders.service.js';
 import { ORDER_CATALOG_IMPORT_PORT } from './port/order-catalog-import.port.js';
+import { ORDER_CONFIRMED_CREATION_PORT } from './port/order-confirmed-creation.port.js';
 
 @Module({
   imports: [
@@ -24,7 +25,15 @@ import { ORDER_CATALOG_IMPORT_PORT } from './port/order-catalog-import.port.js';
       provide: ORDER_CATALOG_IMPORT_PORT,
       useExisting: OrdersService,
     },
+    {
+      provide: ORDER_CONFIRMED_CREATION_PORT,
+      useExisting: OrdersService,
+    },
   ],
-  exports: [OrdersService, ORDER_CATALOG_IMPORT_PORT],
+  exports: [
+    OrdersService,
+    ORDER_CATALOG_IMPORT_PORT,
+    ORDER_CONFIRMED_CREATION_PORT,
+  ],
 })
 export class OrdersModule {}

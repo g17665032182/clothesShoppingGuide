@@ -11,12 +11,23 @@ import type {
   ChatDisplayData,
   ChatProductResults,
   ChatSource,
+  PurchaseReference,
   PublicDisplayEnvelope,
 } from './chat-display.types.js';
 
 export const MAX_DISPLAY_BYTES = 16_384;
 export const MAX_TRACE_PAYLOAD_BYTES = 32_768;
 const BINDING_ID_RESERVATION = '00000000-0000-4000-8000-000000000000';
+const PURCHASE_REFERENCE_RESERVATION: PurchaseReference = {
+  draftId: BINDING_ID_RESERVATION,
+  version: Number.MAX_SAFE_INTEGER,
+  orderId: BINDING_ID_RESERVATION,
+};
+const purchaseReferenceSchema = z.strictObject({
+  draftId: z.uuid(),
+  version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  orderId: z.uuid().nullable(),
+});
 
 const activitySchema = z.discriminatedUnion('type', [
   z.object({
@@ -89,6 +100,7 @@ const envelopeSchema = z.object({
   ),
   // 缺字段兼容导购上线前已保存的聊天快照。
   productResults: z.array(productResultsSchema).max(5).default([]),
+  purchase: purchaseReferenceSchema.nullable().default(null),
   context: z
     .object({
       contextWindowTokens: z
@@ -252,7 +264,14 @@ export function displayEnvelope(
     sources: data.sources,
     productResults: data.productResults,
     context: data.context,
+    purchase: data.purchase,
   };
+}
+
+export function isValidPurchaseReference(
+  value: unknown,
+): value is PurchaseReference | null {
+  return value === null || purchaseReferenceSchema.safeParse(value).success;
 }
 
 export function reservedDisplayBytes(data: ChatDisplayData): number {
@@ -261,6 +280,8 @@ export function reservedDisplayBytes(data: ChatDisplayData): number {
       activities: data.activities,
       sources: data.sources,
       productResults: data.productResults,
+      // 预留流末绑定最大合法购买引用所需空间。
+      purchase: PURCHASE_REFERENCE_RESERVATION,
       // 在发送活动前预留最终用量数字，避免实时成功而最终绑定超限。
       context: {
         contextWindowTokens:
@@ -339,7 +360,7 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
       })
     : null;
   return displayEnvelope(
-    { activities, sources, productResults, context },
+    { activities, sources, productResults, context, purchase: source.purchase },
     source.assistantMessageId,
   );
 }

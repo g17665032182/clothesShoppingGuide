@@ -15,6 +15,7 @@ export function toChatMessage(message: ChatApiMessage): ChatMessage {
     sources: message.sources ?? [],
     productResults: message.productResults ?? [],
     context: message.context ?? null,
+    purchase: message.purchase ?? null,
     status: 'saved',
   };
 }
@@ -33,6 +34,7 @@ export function createPendingMessage(
     sources: [],
     productResults: [],
     context: null,
+    purchase: null,
     status: 'submitted',
   };
 }
@@ -51,6 +53,7 @@ export function applyTurnEvent(
     else message.activities[index] = event.activity;
   }
   if (event.type === 'sources') message.sources = event.sources;
+  if (event.type === 'purchase') message.purchase = event.purchase;
   if (event.type === 'product-results') {
     if (!deferProductResults) message.productResults.push(event.results);
     const index = message.activities.findIndex(

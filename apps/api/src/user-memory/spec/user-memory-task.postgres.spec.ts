@@ -118,11 +118,19 @@ test(
       taskService,
       {
         readTurn: async () => ({
+          userMessageId: randomUUID(),
+          assistantMessageId: randomUUID(),
           userMessage: '长期喜欢棉质衣物',
           assistantMessage: '好的',
         }),
-        readTurns: async ({ turns }: { turns: Array<unknown> }) =>
-          turns.map(() => ({
+        readTurns: async ({
+          turns,
+        }: {
+          turns: Array<{ userMessageId: string; assistantMessageId: string }>;
+        }) =>
+          turns.map((turn) => ({
+            userMessageId: turn.userMessageId,
+            assistantMessageId: turn.assistantMessageId,
             userMessage: '长期喜欢棉质衣物',
             assistantMessage: '好的',
           })),

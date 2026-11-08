@@ -1,3 +1,5 @@
+import type { PurchaseReference } from './chat-purchase';
+
 export type MessageRole = 'assistant' | 'user';
 
 export type JsonValue =
@@ -82,6 +84,7 @@ export interface ChatMessage {
   sources: ChatSource[];
   productResults: ChatProductResults[];
   context: ChatContextUsage | null;
+  purchase: PurchaseReference | null;
   status: ChatTurnStatus;
 }
 
@@ -106,6 +109,7 @@ export interface ChatApiMessage {
   sources?: ChatSource[];
   productResults?: ChatProductResults[];
   context?: ChatContextUsage | null;
+  purchase?: PurchaseReference | null;
 }
 
 export interface ChatApiConversation {
@@ -168,6 +172,7 @@ export type ChatStreamEvent =
       results: ChatProductResults;
       activity: Extract<ChatActivity, { type: 'tool' }>;
     }
+  | { type: 'purchase'; purchase: PurchaseReference | null }
   | {
       type: 'error';
       message: string;

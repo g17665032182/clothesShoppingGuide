@@ -15,6 +15,42 @@ import {
 } from '../entity/chat-trace-event.entity.js';
 
 const MAX_PAYLOAD_BYTES = 32_768;
+const PURCHASE_TOOL_NAMES = new Set([
+  'get_purchase_draft',
+  'update_purchase_draft',
+  'discard_purchase_draft',
+]);
+const PURCHASE_STATUSES = new Set([
+  'collecting',
+  'ready',
+  'submitted',
+  'cancelled',
+  'expired',
+]);
+const PURCHASE_ISSUES = new Set([
+  'missing_field',
+  'sku_selection_required',
+  'product_unavailable',
+  'sku_unavailable',
+  'insufficient_stock',
+  'price_changed',
+  'specification_changed',
+  'expired',
+  'version_conflict',
+  'not_found',
+  'unavailable',
+]);
+const PURCHASE_FIELDS = new Set([
+  'skuId',
+  'quantity',
+  'recipient',
+  'name',
+  'phone',
+  'address',
+  'recipient.name',
+  'recipient.phone',
+  'recipient.address',
+]);
 const CREDENTIAL_KEY_PATTERN =
   /password|secret|token|api[_-]?key|authorization|credential/i;
 const REDACTED_VALUE = '[REDACTED]';
@@ -127,6 +163,121 @@ function normalizeContent(content: string): string {
   return normalized;
 }
 
+function isPurchaseTool(name: string | null | undefined): boolean {
+  return Boolean(name && PURCHASE_TOOL_NAMES.has(name));
+}
+
+function safePurchaseProjection(value: unknown): Record<string, unknown> {
+  const source =
+    typeof value === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(value) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : value;
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const envelope = source as Record<string, unknown>;
+  const record =
+    typeof envelope.result === 'object' &&
+    envelope.result !== null &&
+    !Array.isArray(envelope.result)
+      ? (envelope.result as Record<string, unknown>)
+      : envelope;
+  const result: Record<string, unknown> = {};
+  if (
+    typeof record.draftId === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      record.draftId,
+    )
+  ) {
+    result.draftId = record.draftId;
+  }
+  const version =
+    typeof record.version === 'number'
+      ? record.version
+      : record.expectedVersion;
+  if (
+    typeof version === 'number' &&
+    Number.isSafeInteger(version) &&
+    version > 0
+  ) {
+    result.version = version;
+  }
+  if (typeof record.status === 'string' && PURCHASE_STATUSES.has(record.status))
+    result.status = record.status;
+  const changedFields = new Set<string>();
+  if (Array.isArray(record.changedFields)) {
+    for (const field of record.changedFields) {
+      if (typeof field === 'string' && PURCHASE_FIELDS.has(field))
+        changedFields.add(field);
+    }
+  }
+  if (Object.hasOwn(record, 'skuId')) changedFields.add('skuId');
+  if (Object.hasOwn(record, 'quantity')) changedFields.add('quantity');
+  if (typeof record.recipient === 'object' && record.recipient !== null) {
+    changedFields.add('recipient');
+    for (const field of Object.keys(record.recipient)) {
+      if (PURCHASE_FIELDS.has(field)) changedFields.add(field);
+    }
+  }
+  if (changedFields.size > 0) result.changedFields = [...changedFields].sort();
+  const issues = Array.isArray(record.issues)
+    ? record.issues.flatMap((issue) => {
+        if (typeof issue !== 'object' || issue === null || Array.isArray(issue))
+          return [];
+        const entry = issue as Record<string, unknown>;
+        if (typeof entry.code !== 'string' || !PURCHASE_ISSUES.has(entry.code))
+          return [];
+        const safeIssue: Record<string, string> = { code: entry.code };
+        if (typeof entry.field === 'string' && PURCHASE_FIELDS.has(entry.field))
+          safeIssue.field = entry.field;
+        return [safeIssue];
+      })
+    : [];
+  if (typeof envelope.code === 'string' && PURCHASE_ISSUES.has(envelope.code)) {
+    issues.push({ code: envelope.code });
+  }
+  if (issues.length > 0) result.issues = issues;
+  return result;
+}
+
+function safePurchaseCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return {};
+  const call = value as Record<string, unknown>;
+  const id = typeof call.id === 'string' ? call.id.slice(0, 128) : null;
+  const name = typeof call.name === 'string' ? call.name : null;
+  if (!isPurchaseTool(name)) return redactValue(value);
+  return {
+    ...(id ? { id } : {}),
+    name,
+    ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
+    args: safePurchaseProjection(call.args ?? call.arguments ?? call.input),
+  };
+}
+
+function sanitizeNestedPurchaseCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedPurchaseCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map(safePurchaseCall)
+        : sanitizeNestedPurchaseCalls(entry),
+    ]),
+  );
+}
+
+function safePurchaseResult(content: string): string {
+  return JSON.stringify(safePurchaseProjection(content));
+}
+
 function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
   if (
     event.type === 'model_response' &&
@@ -157,7 +308,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         ...base,
         content: event.content,
         payload:
-          event.payload === undefined ? null : normalizePayload(event.payload),
+          event.payload === undefined
+            ? null
+            : normalizePayload(sanitizeNestedPurchaseCalls(event.payload)),
         model: event.model,
         usage: event.usage
           ? {
@@ -172,7 +325,11 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         ...base,
         toolCallId: event.toolCallId,
         toolName: event.toolName,
-        payload: normalizePayload(event.args),
+        payload: normalizePayload(
+          isPurchaseTool(event.toolName)
+            ? safePurchaseProjection(event.args)
+            : event.args,
+        ),
       };
     case 'tool_result':
       return {
@@ -182,13 +339,21 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         content:
           event.status === 'failed'
             ? '工具执行失败'
-            : normalizeContent(event.content),
+            : isPurchaseTool(event.toolName)
+              ? safePurchaseResult(event.content)
+              : normalizeContent(event.content),
         status:
           event.status === 'success'
             ? ChatTraceEventStatus.SUCCESS
             : ChatTraceEventStatus.FAILED,
         payload:
-          event.payload === undefined ? null : normalizePayload(event.payload),
+          event.payload === undefined
+            ? null
+            : normalizePayload(
+                isPurchaseTool(event.toolName)
+                  ? safePurchaseProjection(event.payload)
+                  : event.payload,
+              ),
       };
   }
 }

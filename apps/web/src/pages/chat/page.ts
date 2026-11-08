@@ -1,10 +1,15 @@
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useChatStore } from '@/stores/chat';
+import type { PatchPurchasePayload } from '@/api/types/chat-purchase';
+import { useChatOrder } from '@/components/shared/orders/useChatOrder';
 
 export function useChatPage() {
   const chat = useChatStore();
+  const orderActions = useChatOrder();
   const draft = ref('');
+  const replacementProductId = ref<string | null>(null);
+  const replacementDialogOpen = ref(false);
   const canSend = computed(
     () =>
       draft.value.trim().length > 0 &&
@@ -30,6 +35,33 @@ export function useChatPage() {
 
   function loadMoreProducts(messageId: string, resultIndex: number) {
     void chat.loadMoreProducts(messageId, resultIndex);
+  }
+
+  function buyProduct(externalId: string): void {
+    const current = chat.purchase.draft;
+    if (
+      current &&
+      current.productExternalId !== externalId &&
+      !['submitted', 'cancelled', 'expired'].includes(current.status)
+    ) {
+      replacementProductId.value = externalId;
+      replacementDialogOpen.value = true;
+      return;
+    }
+    void chat.startPurchaseForProduct(externalId);
+  }
+
+  function confirmReplacement(): void {
+    const externalId = replacementProductId.value;
+    replacementProductId.value = null;
+    replacementDialogOpen.value = false;
+    if (externalId) void chat.startPurchaseForProduct(externalId, true);
+  }
+
+  function updatePurchase(
+    payload: Omit<PatchPurchasePayload, 'expectedVersion'>,
+  ): void {
+    void chat.updatePurchaseDraft(payload);
   }
 
   function selectConversation(id: string) {
@@ -66,10 +98,18 @@ export function useChatPage() {
   return {
     ...storeToRefs(chat),
     draft,
+    replacementProductId,
+    replacementDialogOpen,
     canSend,
     handleKeydown,
     sendMessage,
     loadMoreProducts,
+    buyProduct,
+    confirmReplacement,
+    updatePurchase,
+    discardPurchase: chat.discardPurchase,
+    confirmPurchaseOrder: chat.confirmPurchaseOrder,
+    retryPurchase: () => chat.loadPurchaseDraft(chat.activeConversationId),
     selectConversation,
     startNewConversation,
     loadConversations: chat.loadConversations,
@@ -78,5 +118,6 @@ export function useChatPage() {
     refreshUncertainTurn: chat.refreshUncertainTurn,
     removeConversation: chat.removeConversation,
     stopGeneration: chat.stopGeneration,
+    ...orderActions,
   };
 }

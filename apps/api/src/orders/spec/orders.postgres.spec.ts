@@ -18,6 +18,10 @@ import { Order, OrderStatus } from '../entity/order.entity.js';
 import { OrderIdempotency } from '../entity/order-idempotency.entity.js';
 import { OrderItem } from '../entity/order-item.entity.js';
 import { OrdersService } from '../service/orders.service.js';
+import type {
+  ConfirmedOrderInput,
+  ConfirmedOrderSnapshot,
+} from '../port/order-confirmed-creation.port.js';
 
 const ownerId = randomUUID();
 const otherOwnerId = randomUUID();
@@ -32,7 +36,7 @@ test(
     skip: process.env.RUN_ORDERS_POSTGRES_TEST !== '1',
     timeout: 60_000,
   },
-  async () => {
+  async (t) => {
     const dbName = process.env.ORDERS_TEST_DB ?? '';
     assert.match(dbName, /^clothes_guide_orders_test_[a-z0-9_]+$/u);
     assert.notEqual(dbName, config.dbName);
@@ -284,6 +288,229 @@ test(
       });
       assert.equal(completed.items[0]?.lineAmount, '998.00');
       assert.equal(completed.paymentMode, 'simulated');
+
+      const confirmedInput = (): ConfirmedOrderInput => ({
+        idempotencyKey: randomUUID(),
+        items: [{ skuId: secondSkuId, quantity: 1 }],
+        recipient: {
+          name: '确认事务测试收件人',
+          phone: '13800138000',
+          address: '确认事务测试地址',
+        },
+      });
+      const confirmedSnapshot = (): ConfirmedOrderSnapshot => ({
+        productExternalId: `orders-test-${productId}`,
+        skuId: secondSkuId,
+        productName: '并发测试大衣',
+        color: '深蓝',
+        size: 'L',
+        unitPrice: '499.00',
+        currency: 'CNY',
+        imageUrl: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await t.test('共享调用方写入和订单创建在同一事务内回滚', async () => {
+        const input = confirmedInput();
+        const expected = { ...confirmedSnapshot(), productName: '应回滚名称' };
+        await assert.rejects(
+          orm.em.fork().transactional(async (transaction) => {
+            await transaction.nativeUpdate(
+              Product,
+              { id: productId },
+              {
+                name: expected.productName,
+              },
+            );
+            const created = await service.createConfirmedInTransaction(
+              transaction,
+              ownerId,
+              input,
+              expected,
+            );
+            assert.equal(created.kind, 'created');
+            throw new Error('caller-rollback');
+          }),
+          /caller-rollback/u,
+        );
+        const verify = orm.em.fork();
+        assert.equal(
+          await verify.count(OrderIdempotency, {
+            userId: ownerId,
+            idempotencyKey: input.idempotencyKey,
+          }),
+          0,
+        );
+        assert.equal(
+          (await verify.findOneOrFail(Product, { id: productId })).name,
+          '并发测试大衣',
+        );
+        const remaining = await verify.transactional((transaction) =>
+          new ProductCatalogOrderService().getReservedQuantities(transaction, [
+            secondSkuId,
+          ]),
+        );
+        assert.equal(remaining.get(secondSkuId) ?? 0, 0);
+      });
+
+      await t.test(
+        '确认条件失败可提交业务失效结果，不写入订单和额外预占',
+        async () => {
+          for (const mismatch of [
+            { unitPrice: '498.00' },
+            { productName: '旧商品名称' },
+            { color: '旧颜色' },
+            { size: '旧尺码' },
+            { imageUrl: 'https://example.com/old.png' },
+          ]) {
+            const input = confirmedInput();
+            const result = await orm.em.fork().transactional((transaction) =>
+              service.createConfirmedInTransaction(
+                transaction,
+                ownerId,
+                input,
+                {
+                  ...confirmedSnapshot(),
+                  ...mismatch,
+                },
+              ),
+            );
+            assert.deepEqual(result, { kind: 'quote_changed' });
+            assert.equal(
+              await orm.em.fork().count(OrderIdempotency, {
+                idempotencyKey: input.idempotencyKey,
+              }),
+              0,
+            );
+          }
+        },
+      );
+
+      await t.test(
+        '等待 SKU 锁跨草稿期限后拒绝，支付期限从锁后实际时钟计算',
+        async () => {
+          const input = confirmedInput();
+          const catalog = new ProductCatalogOrderService();
+          const blocker = orm.em.fork();
+          await blocker.begin();
+          try {
+            await catalog.lockSkus(blocker, [secondSkuId]);
+            const times = await blocker
+              .getConnection()
+              .execute<Array<{ deadline: Date }>>(
+                "select clock_timestamp() + interval '150 milliseconds' as deadline",
+                [],
+                'all',
+                blocker.getTransactionContext(),
+              );
+            const resultPromise = orm.em.fork().transactional((transaction) =>
+              service.createConfirmedInTransaction(
+                transaction,
+                ownerId,
+                input,
+                {
+                  ...confirmedSnapshot(),
+                  expiresAt: new Date(times[0]!.deadline),
+                },
+              ),
+            );
+            // 必须在截止后才放锁，事务起点的 now() 不能用于这次确认。
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            await blocker.commit();
+            const result = await resultPromise;
+            assert.deepEqual(result, { kind: 'draft_expired' });
+            assert.equal(
+              await orm.em.fork().count(OrderIdempotency, {
+                idempotencyKey: input.idempotencyKey,
+              }),
+              0,
+            );
+          } finally {
+            if (blocker.getTransactionContext()) await blocker.rollback();
+          }
+
+          const successInput = confirmedInput();
+          const success = await orm.em
+            .fork()
+            .transactional(async (transaction) => {
+              const times = await transaction
+                .getConnection()
+                .execute<Array<{ started: Date }>>(
+                  'select now() as started',
+                  [],
+                  'all',
+                  transaction.getTransactionContext(),
+                );
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              const result = await service.createConfirmedInTransaction(
+                transaction,
+                ownerId,
+                successInput,
+                confirmedSnapshot(),
+              );
+              assert.ok('order' in result);
+              assert.ok(
+                new Date(result.order.createdAt).getTime() >
+                  new Date(times[0]!.started).getTime(),
+              );
+              assert.equal(
+                new Date(result.order.expiresAt).getTime() -
+                  new Date(result.order.createdAt).getTime(),
+                30 * 60_000,
+              );
+              return result;
+            });
+          assert.ok('order' in success);
+          await service.cancelForUser(ownerId, success.order.id);
+        },
+      );
+
+      await t.test(
+        '等待 SKU 锁后重新读取父商品字段，不能接受等待前的旧名称',
+        async () => {
+          const input = confirmedInput();
+          const blocker = orm.em.fork();
+          await blocker.begin();
+          try {
+            await new ProductCatalogOrderService().lockSkus(blocker, [
+              secondSkuId,
+            ]);
+            const confirmation = orm.em
+              .fork()
+              .transactional((transaction) =>
+                service.createConfirmedInTransaction(
+                  transaction,
+                  ownerId,
+                  input,
+                  confirmedSnapshot(),
+                ),
+              );
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            await blocker.nativeUpdate(
+              Product,
+              { id: productId },
+              { name: '锁后新名称' },
+            );
+            await blocker.commit();
+            assert.deepEqual(await confirmation, { kind: 'quote_changed' });
+            assert.equal(
+              await orm.em.fork().count(OrderIdempotency, {
+                idempotencyKey: input.idempotencyKey,
+              }),
+              0,
+            );
+          } finally {
+            if (blocker.getTransactionContext()) await blocker.rollback();
+            await orm.em
+              .fork()
+              .nativeUpdate(
+                Product,
+                { id: productId },
+                { name: '并发测试大衣' },
+              );
+          }
+        },
+      );
     } finally {
       if (migrated) {
         await connection.execute(

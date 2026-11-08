@@ -11,6 +11,7 @@ import type {
   JsonValue,
   PageResponse,
 } from '@/api/types/chat';
+import type { PurchaseReference } from '@/api/types/chat-purchase';
 
 const conversationPageSize = 10;
 const messagePageSize = 100;
@@ -84,6 +85,7 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'activity',
       'sources',
       'product-results',
+      'purchase',
       'done',
       'error',
     ].includes(eventName)
@@ -121,6 +123,20 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
   }
   if (eventName === 'sources' && isRecord(data) && isSources(data.sources)) {
     return { type: 'sources', sources: data.sources };
+  }
+  if (
+    eventName === 'purchase' &&
+    isRecord(data) &&
+    (data.purchase === null ||
+      isPurchaseReference(data.purchase) ||
+      isPurchaseReference(data))
+  ) {
+    return {
+      type: 'purchase',
+      purchase: isPurchaseReference(data)
+        ? data
+        : (data.purchase as PurchaseReference | null),
+    };
   }
   if (
     eventName === 'product-results' &&
@@ -239,6 +255,18 @@ export async function* streamChat(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isPurchaseReference(value: unknown): value is PurchaseReference {
+  if (!isRecord(value)) return false;
+  const version = value.version;
+  return (
+    typeof value.draftId === 'string' &&
+    typeof version === 'number' &&
+    Number.isSafeInteger(version) &&
+    version > 0 &&
+    (value.orderId === null || typeof value.orderId === 'string')
+  );
 }
 
 function hasString(
