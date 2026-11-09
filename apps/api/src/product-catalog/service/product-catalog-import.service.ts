@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { EntityManager } from '@mikro-orm/core';
+import { randomUUID } from 'node:crypto';
 
 import type { ProductCatalogImport } from '../import/product-catalog-import.schema.js';
 import { Product } from '../entity/product.entity.js';
@@ -27,7 +28,8 @@ export class ProductCatalogImportService {
       const product = await entityManager.upsert(
         Product,
         {
-          ...(existing ? { id: existing.id } : {}),
+          // 原生 upsert 不会触发 Entity 字段初始化，新增记录必须显式生成主键。
+          id: existing?.id ?? randomUUID(),
           externalId: input.externalId,
           name: input.name,
           brand: input.brand ?? null,
@@ -55,7 +57,7 @@ export class ProductCatalogImportService {
         await entityManager.upsert(
           ProductSku,
           {
-            ...(existingSku ? { id: existingSku.id } : {}),
+            id: existingSku?.id ?? randomUUID(),
             productId: product.id,
             externalSkuId: sku.externalSkuId,
             color: sku.color,
