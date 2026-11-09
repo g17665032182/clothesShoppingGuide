@@ -49,6 +49,13 @@ export class TryOnTask {
   @Property({ type: 'text', fieldName: 'garment_image_url', nullable: true })
   public garmentImageUrl: string | null = null;
 
+  @Property({
+    type: 'text',
+    fieldName: 'garment_image_object_key',
+    nullable: true,
+  })
+  public garmentImageObjectKey: string | null = null;
+
   @Property({ type: 'uuid', fieldName: 'source_photo_id', nullable: true })
   public sourcePhotoId: string | null = null;
 

@@ -38,6 +38,7 @@ type ProductSummaryRow = {
 };
 
 type ProductDetailRow = ProductSummaryRow & {
+  has_try_on_image: boolean;
   description: string | null;
   styles: string[];
   occasions: string[];
@@ -114,6 +115,7 @@ export class AdminProductCatalogService {
       `select p.id::text as id, p.external_id, p.name, p.brand, p.category,
               p.product_url, p.is_active, p.try_on_enabled, p.description, p.styles, p.occasions,
               p.fits, p.created_at, p.updated_at,
+              (p.try_on_image_key is not null) as has_try_on_image,
               count(s.id)::text as sku_count,
               min(s.price)::text as lowest_price,
               coalesce(sum(s.stock), 0)::text as total_stock,
@@ -147,6 +149,7 @@ export class AdminProductCatalogService {
 
     return {
       ...this.toSummary(product),
+      hasTryOnImage: product.has_try_on_image,
       description: product.description,
       styles: product.styles ?? [],
       occasions: product.occasions ?? [],

@@ -1,5 +1,9 @@
 export { ProductCatalogModule } from './product-catalog.module.js';
 export {
+  PRODUCT_TRY_ON_IMAGE_STORE,
+  type ProductTryOnImageStore,
+} from './port/product-try-on-image-store.port.js';
+export {
   ProductCatalogService,
   productSearchQuerySchema,
   productSearchSchema,

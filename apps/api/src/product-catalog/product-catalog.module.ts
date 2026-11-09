@@ -15,6 +15,11 @@ import { ProductCatalogPurchaseService } from './service/product-catalog-purchas
 import { PRODUCT_CATALOG_PURCHASE_PORT } from './port/product-catalog-purchase.port.js';
 import { PRODUCT_CATALOG_TRY_ON_PORT } from './port/product-catalog-try-on.port.js';
 import { ProductCatalogTryOnService } from './service/product-catalog-try-on.service.js';
+import { AdminProductTryOnImageController } from './controller/admin-product-try-on-image.controller.js';
+import { ProductTryOnImageService } from './service/product-try-on-image.service.js';
+import { ProductTryOnImageProcessingService } from './service/product-try-on-image-processing.service.js';
+import { QiniuProductTryOnImageStoreService } from './service/qiniu-product-try-on-image-store.service.js';
+import { PRODUCT_TRY_ON_IMAGE_STORE } from './port/product-try-on-image-store.port.js';
 
 @Module({
   imports: [MikroOrmModule.forFeature([Product, ProductSku])],
@@ -22,6 +27,7 @@ import { ProductCatalogTryOnService } from './service/product-catalog-try-on.ser
     ProductCatalogController,
     ProductSkuController,
     AdminProductCatalogController,
+    AdminProductTryOnImageController,
   ],
   providers: [
     ProductCatalogService,
@@ -30,6 +36,13 @@ import { ProductCatalogTryOnService } from './service/product-catalog-try-on.ser
     AdminProductCatalogService,
     ProductCatalogPurchaseService,
     ProductCatalogTryOnService,
+    ProductTryOnImageService,
+    ProductTryOnImageProcessingService,
+    QiniuProductTryOnImageStoreService,
+    {
+      provide: PRODUCT_TRY_ON_IMAGE_STORE,
+      useExisting: QiniuProductTryOnImageStoreService,
+    },
     {
       provide: PRODUCT_CATALOG_PURCHASE_PORT,
       useExisting: ProductCatalogPurchaseService,
@@ -49,6 +62,7 @@ import { ProductCatalogTryOnService } from './service/product-catalog-try-on.ser
     PRODUCT_CATALOG_ORDER_PORT,
     PRODUCT_CATALOG_PURCHASE_PORT,
     PRODUCT_CATALOG_TRY_ON_PORT,
+    PRODUCT_TRY_ON_IMAGE_STORE,
   ],
 })
 export class ProductCatalogModule {}

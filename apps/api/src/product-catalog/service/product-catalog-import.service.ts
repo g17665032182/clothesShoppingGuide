@@ -44,8 +44,13 @@ export class ProductCatalogImportService {
         },
         {
           onConflictFields: ['externalId'],
-          // 试穿开关由管理员维护，导入默认值不得覆盖已有设置。
-          onConflictExcludeFields: ['id', 'createdAt', 'tryOnEnabled'],
+          // 管理员维护的试穿开关与私有图片不受目录导入覆盖。
+          onConflictExcludeFields: [
+            'id',
+            'createdAt',
+            'tryOnEnabled',
+            'tryOnImageKey',
+          ],
         },
       );
       existing ? updated++ : created++;

@@ -73,10 +73,18 @@ const page = reactive(useAdminProductsPage());
       :try-on-saving="page.tryOnSaving"
       :can-save-try-on="page.canSaveTryOn"
       :try-on-save-result-unknown="page.tryOnSaveResultUnknown"
+      :can-upload-image="page.canUploadImage"
+      :image-uploading="page.imageUploading"
+      :image-upload-result-unknown="page.imageUploadResultUnknown"
+      :image-preview-status="page.imagePreviewStatus"
+      :image-preview-url="page.imagePreviewUrl"
       @update:open="!$event && page.closeDetail()"
       @update:try-on-enabled="page.setTryOnDraft"
       @save-try-on="page.saveTryOn"
       @retry="page.retryDetail"
+      @upload-image="page.uploadTryOnImage"
+      @retry-image="page.loadImagePreview"
+      @image-error="page.imagePreviewFailed"
     />
   </section>
 </template>

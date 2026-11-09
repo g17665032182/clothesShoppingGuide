@@ -57,6 +57,41 @@ export async function updateAdminProductTryOn(
   return response;
 }
 
+export async function uploadAdminProductTryOnImage(
+  token: string,
+  productId: string,
+  file: File,
+  signal?: AbortSignal,
+): Promise<AdminProductDetail> {
+  const data = new FormData();
+  data.append('file', file);
+  const response = await apiRequest<AdminProductDetail>(
+    `/admin/product-catalog/products/${productId}/try-on-image`,
+    { method: 'POST', token, signal, data },
+  );
+  if (
+    !isAdminProductDetail(response) ||
+    response.id !== productId ||
+    !response.hasTryOnImage
+  )
+    throw new ApiError('图片上传响应无效，请重新读取商品状态。', 502);
+  return response;
+}
+
+export async function getAdminProductTryOnImage(
+  token: string,
+  productId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const image = await apiRequest<Blob>(
+    `/admin/product-catalog/products/${productId}/try-on-image`,
+    { token, signal, responseType: 'blob' },
+  );
+  if (!(image instanceof Blob) || image.type !== 'image/webp' || !image.size)
+    throw new ApiError('试穿图片预览响应无效。', 502);
+  return image;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
@@ -103,6 +138,7 @@ export function isAdminProductDetail(
 ): value is AdminProductDetail {
   if (!isRecord(value) || !isProductSummary(value)) return false;
   return (
+    typeof value.hasTryOnImage === 'boolean' &&
     (value.description === null || typeof value.description === 'string') &&
     ['styles', 'occasions', 'fits'].every(
       (key) =>

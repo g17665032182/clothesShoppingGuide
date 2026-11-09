@@ -6,6 +6,7 @@ import {
   PackageSearch,
   RefreshCw,
   Save,
+  Upload,
 } from '@lucide/vue';
 import type { AdminProductDetail } from '@/api/types/admin-products';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -28,6 +29,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -49,7 +51,13 @@ const props = defineProps<{
   tryOnSaving: boolean;
   canSaveTryOn: boolean;
   tryOnSaveResultUnknown: boolean;
+  canUploadImage: boolean;
+  imageUploading: boolean;
+  imageUploadResultUnknown: boolean;
+  imagePreviewStatus: 'idle' | 'loading' | 'success' | 'empty' | 'error';
+  imagePreviewUrl: string;
 }>();
+const selectedImage = ref<File | null>(null);
 const failedImages = ref(new Set<string>());
 const categoryLabel = computed(() => {
   const labels = {
@@ -69,6 +77,17 @@ watch(
   },
 );
 
+watch(
+  () => [props.product?.id, props.product?.hasTryOnImage],
+  () => {
+    selectedImage.value = null;
+  },
+);
+
+function selectImage(event: Event): void {
+  selectedImage.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+}
+
 function markImageFailed(skuId: string): void {
   failedImages.value = new Set([...failedImages.value, skuId]);
 }
@@ -78,6 +97,9 @@ const emit = defineEmits<{
   (event: 'retry'): void;
   (event: 'update:tryOnEnabled', value: boolean): void;
   (event: 'save-try-on'): void;
+  (event: 'upload-image', file: File): void;
+  (event: 'retry-image'): void;
+  (event: 'image-error'): void;
 }>();
 
 function formatMoney(value: string) {
@@ -150,6 +172,88 @@ function safeUrl(value: string | null): string | null {
             <ExternalLink />
           </a>
         </div>
+        <FieldGroup v-if="product.hasTryOnImage || canUploadImage">
+          <Field>
+            <FieldLabel
+              :for="!product.hasTryOnImage ? 'product-try-on-image' : undefined"
+              >商品试穿图片</FieldLabel
+            >
+            <template v-if="product.hasTryOnImage">
+              <Skeleton
+                v-if="imagePreviewStatus === 'loading'"
+                class="h-48 w-full"
+              />
+              <img
+                v-else-if="imagePreviewStatus === 'success' && imagePreviewUrl"
+                :src="imagePreviewUrl"
+                :alt="`${product.name}试穿图片`"
+                class="h-48 w-full rounded-md object-contain"
+                @error="emit('image-error')"
+              />
+              <div v-else class="flex items-center gap-2" role="status">
+                <span class="text-sm text-muted-foreground"
+                  >图片预览暂不可用</span
+                >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  @click="emit('retry-image')"
+                >
+                  <RefreshCw data-icon="inline-start" />
+                  重试
+                </Button>
+              </div>
+            </template>
+            <template v-else>
+              <Input
+                :key="product.id"
+                id="product-try-on-image"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                :disabled="
+                  imageUploading || tryOnSaving || imageUploadResultUnknown
+                "
+                aria-describedby="product-try-on-image-description"
+                @change="selectImage"
+              />
+              <FieldDescription id="product-try-on-image-description">
+                JPEG、PNG 或 WebP，最大 10 MiB，最长边 4096
+                像素。所有颜色共用，已有颜色图片优先；上传后不能替换或删除。
+              </FieldDescription>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <template v-if="imageUploadResultUnknown">
+                  <span class="text-sm text-muted-foreground" role="status"
+                    >上传结果待核实</span
+                  >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    @click="emit('retry')"
+                  >
+                    <RefreshCw data-icon="inline-start" />重新读取状态
+                  </Button>
+                </template>
+                <Button
+                  type="button"
+                  size="sm"
+                  :disabled="
+                    !selectedImage ||
+                    imageUploading ||
+                    tryOnSaving ||
+                    imageUploadResultUnknown
+                  "
+                  @click="selectedImage && emit('upload-image', selectedImage)"
+                >
+                  <Spinner v-if="imageUploading" data-icon="inline-start" />
+                  <Upload v-else data-icon="inline-start" />
+                  {{ imageUploading ? '正在上传' : '上传试穿图片' }}
+                </Button>
+              </div>
+            </template>
+          </Field>
+        </FieldGroup>
         <form
           class="flex min-w-0 flex-col gap-3"
           :aria-busy="tryOnSaving"

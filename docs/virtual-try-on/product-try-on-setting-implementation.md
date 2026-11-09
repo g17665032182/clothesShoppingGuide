@@ -2,10 +2,10 @@
 
 ## 状态与依据
 
-- 状态：待用户确认；尚未启动子代理、修改业务代码或执行数据库迁移。
+- 状态：原商品开关已实施；商品试穿图片上传增量实施计划于 2026-11-09 获用户确认，正在实施。
 - 日期：2026-11-09。
 - 已确认：[设计](./product-try-on-setting-design.md)、[CRUD 契约](../contracts/product-try-on-setting-crud-contract.md)、[技术方案](./product-try-on-setting-technical.md)。
-- 本文获确认后，开始按以下边界实施和验证，不再重复询问已确定的默认值、权限或接口。
+- 本文获确认后，开始按以下边界实施和验证，不再重复询问已确定的图片归属、权限、存储目录或移除范围。
 - 已有未提交文档、公开测试素材及本地试穿配置均须保留；不提交或打印真实密钥。
 
 ## 交付范围
@@ -20,135 +20,70 @@
 关闭后阻止新任务；已接受任务与本人历史结果保留。
 重复导入保留管理员设置，不增加商品其他字段编辑、批量配置或任意商品图入口。
 
+### 图片上传增量
+
+- 管理员在商品详情上传一张商品级试穿图，供所有颜色共用；现有 SKU 图优先，商品级图作为缺图颜色的后备。
+- 无可用 SKU 图和商品级图时，开关保持禁用并显示上传入口；图片保存成功后重新读取详情和资格。
+- 图片使用 JPEG、PNG、WebP 输入，最大 10 MiB、最长边 4096；服务端验证真实内容、拒绝动画，旋转并剥离 EXIF 后转为 WebP。
+- 商品图片使用独立私有 Qiniu 对象键；用户人像、生成结果、商品图片保持命名空间隔离，前端不接触对象键或长期签名 URL。
+- 当前商品保存私有对象键，任务在使用商品级图片时保存该键快照；管理员上传后不能替换或移除，避免历史任务图片引用变化。
+- SKU 导入、SKU 图片、库存、商品其他字段和用户人像流程不在本增量内。
+
 ## 实施顺序
 
-| 阶段                  | 负责人     | 完成条件                                                |
-| --------------------- | ---------- | ------------------------------------------------------- |
-| 0. 公共接口与组件准备 | 主代理     | 核对工作树，先固定端口和投影类型，添加缺失的官方 Switch |
-| 1. 领域与界面开发     | 三个子代理 | 各自仅修改授权文件，补充对应后端测试并提交报告          |
-| 2. 主代理集成         | 主代理     | 完成 Module 接线、全部调用方和夹具适配，类型检查通过    |
-| 3. 增量迁移验证       | 主代理     | SQL 审查、旧数据升级及新数据默认值在独立库验证          |
-| 4. 自动化与浏览器验收 | 主代理     | 后端用例、门控数据库用例和关键浏览器流程有实际结果      |
-| 5. 开发环境接入与交付 | 主代理     | 开发库增量升级、服务可访问，记录结果、限制和清理情况    |
+| 阶段                      | 负责人 | 完成条件                                                               |
+| ------------------------- | ------ | ---------------------------------------------------------------------- |
+| 1. 商品图片存储与管理 API | 主代理 | 专属私有对象键、内容校验、上传补偿、管理员鉴权预览和单元/HTTP 测试完成 |
+| 2. 资格与任务快照         | 主代理 | 商品统一资格投影包含图片后备；任务持久化对象键；Worker 可读取私有图    |
+| 3. 前端上传与预览         | 主代理 | 详情上传、上传状态、受鉴权 Blob 预览和 URL 生命周期处理完成            |
+| 4. 增量迁移验证           | 主代理 | 仅新增 nullable 图片键字段；旧商品、SKU、任务数据保留并在隔离库验证    |
+| 5. 全链路验证             | 主代理 | API/前端检查、隔离库测试和可用环境下的浏览器流程完成                   |
+| 6. 开发环境接入与交付     | 主代理 | 开发库仅应用增量 Migration，记录限制和临时资源清理情况                 |
 
-本增量跨商品、聊天、试穿及前端边界，实施时使用三个子代理分别负责明确文件；
-本审批阶段不启动开发代理。公共文件由主代理统一维护。
+本增量跨商品目录、对象存储、任务 Worker 和前端；公共端口、模块接线和迁移强关联，
+由主代理统一维护，不并行修改共享文件。本期不启动子代理。
 
 ## 文件所有权
 
 以下后端路径均以 `apps/api/src/` 为起点，前端路径以 `apps/web/src/` 为起点。
-子代理不得为了修复编译错误修改其他负责人的文件，应向主代理报告接线需求。
+主代理按模块边界顺序实施并验证接线。
 新增文件仍必须位于所属模块的职责目录，必要注释使用中文。
 
-### 主代理
+### 后端商品目录
 
-独占维护：
+- `product-catalog/entity/product.entity.ts`、商品试穿 DTO/响应 DTO。
+- 商品管理 Controller、`AdminProductCatalogService`、统一试穿资格服务和目录导入适配。
+- 新增商品级图片处理、Qiniu 私有存储适配器及 `PRODUCT_TRY_ON_IMAGE_STORE` 公开模块端口。
+- `product-catalog/product-catalog.module.ts`、`index.ts`、商品与图片上传测试。
 
-- `product-catalog/port/product-catalog-try-on.port.ts` 和 `product-catalog/index.ts`。
-- `product-catalog/product-catalog.module.ts`、`chat-records/chat-records.module.ts` 及确有需要的其他 Module 接线。
-- `database/migrations/` 下本次增量 Migration 与现有 ORM 快照。
-- 拟新增 `database/spec/product-try-on-setting-migration.postgres.spec.ts`。
-- 根配置、包清单、锁文件、`components.json` 和 CLI 新增的 `components/ui/switch/`。
-- 本业务文档、集成测试执行与浏览器验证记录。
+管理员上传和预览必须复用现有 JWT、账号状态和角色 Guard；商品图对象键不得出现在前端 DTO、日志或错误文本中。
+资格仅从商品服务公开投影提供，不向其他模块泄露 Entity/Repository。
 
-先固定批量端口和 `tryOnEnabled` / `tryOnEligible` 投影类型，再启动下列代理。
-CLI 使用当前项目配置及官方 `@shadcn` 注册表，只添加缺失组件；
-先读取 CLI 将新增的文件，不覆盖现有组件或切换预设。
-如 CLI 变更了依赖、锁文件或配置，主代理逐项审查，去除无关变更。
+### 后端任务与存储接线
 
-### 子代理一：商品配置与资格
+- `virtual-try-on/entity/try-on-task.entity.ts`、`service/try-on-task.service.ts`、`service/try-on-worker.service.ts`。
+- 与上述行为相关的 `virtual-try-on/spec/` 测试和 `VirtualTryOnModule`。
+- Worker 支持既有公开 SKU 图片 URL 与私有商品图对象键两种快照；私有图通过商品目录存储端口读取 Buffer。
+- 任务创建仍先校验商品开关、当前资格和颜色，拒绝时不绑定照片、不创建任务、不扣额度。
+- 已接受任务保留创建时的对象键；不增加 Worker 商品开关二次校验。
 
-独占维护：
-
-- `product-catalog/entity/product.entity.ts`。
-- 新增 `product-catalog/dto/admin-product-try-on.dto.ts`。
-- `product-catalog/dto/admin-product-response.dto.ts`。
-- `product-catalog/controller/admin-product-catalog.controller.ts`。
-- `product-catalog/service/admin-product-catalog.service.ts`。
-- `product-catalog/service/product-catalog-try-on.service.ts`。
-- `product-catalog/service/product-catalog.service.ts`。
-- `product-catalog/service/product-catalog-import.service.ts`。
-- `product-catalog/spec/` 中与以上改动对应的测试与夹具。
-
-实施要求：
-
-1. Entity 与数据库默认值一致，管理员列表和详情返回原始保存值。
-2. 单商品与批量读取共用资格逻辑，单批最多 200 个 ID，去重且处理空集合。
-3. PATCH 使用现有角色 Guard、严格 Zod 与 Nest 参数 Pipe。
-4. 更新在事务内锁定商品，只修改试穿字段和更新时间；非法开启整体回滚。
-5. 商品搜索只在已完成分页的结果上批量补充资格，不改排序、价格和游标。
-6. 导入冲突更新明确排除 `tryOnEnabled`，不使用先读旧值再覆盖的方式保存设置。
-7. 补齐 schema、真实 HTTP 校验、权限、Service、资格与隔离数据库用例。
-
-禁止修改 Migration、公开端口、Module、聊天、试穿任务和前端文件。
-需要复用事务时，只在商品模块具体服务内部传递 EntityManager，不扩展跨模块端口为数据库接口。
-
-### 子代理二：聊天与任务准入
-
-独占维护：
-
-- `chat-records/display/chat-display.types.ts`。
-- `chat-records/display/chat-display.projection.ts`。
-- `chat-records/display/chat-display.service.ts`。
-- `chat-records/spec/chat-display.service.spec.ts` 及其他确受影响的聊天测试。
-- `virtual-try-on/service/try-on-task.service.ts`。
-- `virtual-try-on/spec/try-on-task.service.spec.ts` 及其他确受影响的试穿测试。
-
-实施要求：
-
-1. 旧快照缺字段默认关闭，解析不得使整条消息丢失。
-2. 历史读取后收集外部 ID，通过公开端口去重、分批校正当前资格，避免逐卡查询。
-3. 不回写 `publicDisplay`，不改变历史价格、名称、图片、购买引用或 trace 内容。
-4. 资格读取失败时仅将试穿标记降为关闭，不中断聊天历史，日志不包含敏感载荷。
-5. 创建任务独立校验开关、资格和所选颜色可用图片；校验在绑定照片和写任务之前。
-6. 明确验证拒绝任务时无任务、照片绑定、成功额度或供应商副作用。
-7. 不增加 Worker 二次商品开关检查；关闭前已接受任务继续原流程。
-
-禁止修改商品 Entity、Service、DTO、公开端口、Module、Migration 或前端。
-新增构造依赖时通知主代理更新 Module；代理自行适配其负责的测试构造与替身。
-
-### 子代理三：管理界面与商品卡
-
-独占维护：
+### 前端
 
 - `api/types/admin-products.ts`、`api/modules/admin-products.ts`。
-- `api/types/chat.ts`，以及发现确有需要的对应商品响应类型和适配器。
-- `pages/admin-products/page.ts`、`pages/admin-products/index.vue`。
-- `pages/admin-products/components/ProductDetailDialog.vue`。
-- `pages/chat/components/ChatProductResults.vue`。
+- `pages/admin-products/page.ts`、`pages/admin-products/index.vue`、
+  `pages/admin-products/components/ProductDetailDialog.vue`。
+- 详情状态管理上传和带认证的 Blob 预览；对象 URL 在关闭、切换商品和卸载时释放。
+- 使用现有 Field、Button、Input、Switch 与 Toast；不新增依赖或基础 UI 组件。
+- 上传期间防止重复提交；失败保留页面状态并允许重试；只有服务端确认上传后才显示已保存图片。
+- 无可用图片时禁用开关并提供上传控件；旧的已开启设置失去资格后仍允许管理员关闭。
 
-实施要求：
+### 主代理集成与数据库
 
-1. 使用项目 `shadcn-vue` Skill，开始前阅读规则和官方组件文档。
-2. API 模块封装 PATCH，响应运行时校验必须检查布尔设置。
-3. 状态、草稿和异步控制放在 `page.ts`；组件显式声明 Props 和 Emits。
-4. Switch 配合 Field、标签和独立保存按钮，原保存值已开启但资格失效时仍允许关闭。
-5. 无改动或提交中禁用保存；关闭、切换商品和卸载时取消请求并使旧响应失效。
-6. 成功收到响应后更新快照和列表，失败保留草稿；成功和错误均用现有 Sonner Toast。
-7. 商品卡同时检查服务端标记和服装品类，旧字段缺失安全隐藏入口。
-8. 保留原 Dialog 键盘操作、焦点和响应式布局，不引入全局草稿或新的前端测试设施。
-
-禁止修改后端、基础 UI 实现、包清单、锁文件或根配置。
-若发现其他卡片投影入口，先报告主代理，不直接扩大到无关页面。
-
-## 子代理开始前与完成报告
-
-主代理给每个代理提供已确认的三份文档、最新工作树状态、确切授权文件和公开接口签名。
-代理先核对本地依赖与相应官方文档，保留用户改动，不执行 `migration:fresh`、
-真实供应商调用、真实用户照片上传或自行启动默认数据库迁移。
-
-每个代理完成后必须报告：
-
-```text
-修改文件
-执行命令
-测试结果
-未解决风险
-越界修改
-```
-
-未执行的测试明确写出原因；不得将“已增加测试”表述为“测试已通过”。
-主代理在合并接线前审查职责边界和报告，避免多人同时修改同一文件。
+- `product-catalog/port/`、`product-catalog/index.ts`、商品和试穿模块接线。
+- `database/migrations/` 中新增 Migration 与 `.snapshot-clothes_guide.json`。
+- 新增迁移 PostgreSQL 用例；只新增 `products.try_on_image_key` 与
+  `try_on_tasks.garment_image_object_key` nullable 字段。
+- 不改动 Seeder 批量开启逻辑、包清单、锁文件或第三方密钥。
 
 ## 主代理集成与迁移
 
@@ -156,10 +91,10 @@ CLI 使用当前项目配置及官方 `@shadcn` 注册表，只添加缺失组�
 2. 更新公开端口 Token 的注入和现有构造测试替身；不让其他模块引用商品私有实现。
 3. 审查资格判断只有一处服务端规则，搜索、历史和任务没有各自重新猜测准入。
 4. Entity 完成后用现有 MikroORM CLI 生成迁移，审查 SQL 与 `.snapshot-clothes_guide.json`。
-5. 预期 SQL 仅为商品表增加 `boolean not null default false` 字段；出现删表、
+5. 预期 SQL 仅增加 `products.try_on_image_key` 和 `try_on_tasks.garment_image_object_key` 两个 nullable 字段；出现删表、
    无关字段/索引或其他模块重建即停止执行并排查元数据差异。
 6. 独立迁移测试先应用截至本次增量前的迁移，写入旧商品、SKU 和关联业务夹具，
-   再升级到最新版本；比对原字段及关联记录，确认旧行与新增行均默认关闭。
+   再升级到最新版本；比对原字段及关联记录，确认旧行与新增行图片键均为 null，保留已开启设置。
 7. 验证管理员开启后重复导入仍保留设置；并发设置返回合法状态且库存不变。
 8. 验证完毕后对当前本地开发库仅执行审查过的增量升级，重启或使用现有开发服务加载代码；
    不清空用户数据库、不自动开启所有商品，也不替换已保存的私有存储配置。

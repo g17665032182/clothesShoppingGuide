@@ -49,6 +49,7 @@ test('试穿商品投影按颜色稳定去重并选择首个可用图片', async
     category: 'outerwear',
     tryOnEnabled: true,
     tryOnEligible: true,
+    tryOnImageObjectKey: null,
     mainImageUrl: 'https://images.example.org/gray.webp',
     colors: [
       { color: '深灰', imageUrl: 'https://images.example.org/gray.webp' },
@@ -80,6 +81,7 @@ test('不安全商品图片不会进入试穿投影', async () => {
     category: 'outerwear',
     tryOnEnabled: true,
     tryOnEligible: false,
+    tryOnImageObjectKey: null,
     mainImageUrl: null,
     colors: [{ color: '深灰', imageUrl: null }],
   });
@@ -156,6 +158,7 @@ test('无图颜色可以回退商品主图；批量查询去重、空集合跳�
     'tops',
   );
   assert.equal(product?.tryOnEligible, true);
+  assert.equal(product?.tryOnImageObjectKey, null);
   assert.equal(product?.colors[0]?.imageUrl, null);
   assert.equal(product?.mainImageUrl, 'https://images.example.org/black.webp');
   assert.deepEqual(calls[0]?.[1], ['tops']);

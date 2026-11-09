@@ -9,6 +9,7 @@ export type TryOnProductProjection = {
   /** 管理员保存的开关与当前目录资格分离，避免把失效商品误判为可试穿。 */
   tryOnEnabled: boolean;
   tryOnEligible: boolean;
+  tryOnImageObjectKey: string | null;
   mainImageUrl: string | null;
   colors: Array<{
     color: string;

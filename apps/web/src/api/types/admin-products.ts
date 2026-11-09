@@ -49,6 +49,7 @@ export type AdminProductSku = {
 };
 
 export type AdminProductDetail = AdminProductSummary & {
+  hasTryOnImage: boolean;
   description: string | null;
   styles: string[];
   occasions: string[];

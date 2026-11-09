@@ -15,6 +15,7 @@ type TryOnProductRow = {
   product_name: string;
   category: string;
   try_on_enabled: boolean;
+  try_on_image_key: string | null;
   color: string | null;
   image_url: string | null;
 };
@@ -52,7 +53,7 @@ export class ProductCatalogTryOnService implements ProductCatalogTryOnPort {
     if (ids.length === 0) return result;
     const rows = await manager.getConnection().execute<TryOnProductRow[]>(
       `select p.external_id as product_external_id, p.name as product_name,
-                p.category, p.try_on_enabled, s.color, s.image_url
+                p.category, p.try_on_enabled, p.try_on_image_key, s.color, s.image_url
            from products p
            left join product_skus s
              on s.product_id = p.id and s.is_active = true and s.currency = 'CNY'
@@ -73,6 +74,7 @@ export class ProductCatalogTryOnService implements ProductCatalogTryOnPort {
           category: row.category as TryOnProductProjection['category'],
           tryOnEnabled: row.try_on_enabled,
           tryOnEligible: false,
+          tryOnImageObjectKey: row.try_on_image_key ?? null,
           mainImageUrl: null,
           colors: [],
         };
@@ -94,7 +96,9 @@ export class ProductCatalogTryOnService implements ProductCatalogTryOnPort {
       // 资格不依赖库存、搜索筛选或管理员开关，所有消费方共享同一事实。
       product.tryOnEligible =
         TRY_ON_CATEGORIES.has(product.category) &&
-        product.colors.some((color) => color.imageUrl || product.mainImageUrl);
+        product.colors.some(
+          (color) => color.imageUrl || product.tryOnImageObjectKey,
+        );
     }
     return result;
   }

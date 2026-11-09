@@ -29,6 +29,7 @@ function createAdmissionFixture() {
     category: 'outerwear',
     tryOnEnabled: true,
     tryOnEligible: true,
+    tryOnImageObjectKey: null,
     mainImageUrl: 'https://images.example.com/main.webp',
     colors: [
       { color: '黑色', imageUrl: 'https://images.example.com/black.webp' },
@@ -286,10 +287,12 @@ test('商品不存在或颜色缺失沿用既有错误，无可用颜色图片�
   assert.equal(noImage.counts.flushes, 0);
 });
 
-test('合格商品颜色无图时回退主图，关闭前已接受的任务仍可成功并计入额度', async () => {
+test('SKU 图片优先；缺图时使用商品级私有图片快照', async () => {
   const fixture = createAdmissionFixture();
   fixture.setProduct({
     ...fixture.product,
+    tryOnImageObjectKey:
+      'product-try-on/22345678-1234-1234-1234-123456789abc/42345678-1234-1234-1234-123456789abc.webp',
     colors: [{ color: '黑色', imageUrl: null }],
   });
   const response = await fixture.service.create(
@@ -297,9 +300,10 @@ test('合格商品颜色无图时回退主图，关闭前已接受的任务仍�
     fixture.input,
   );
   assert.equal(response.status, TryOnTaskStatus.QUEUED);
+  assert.equal(fixture.tasks[0]?.garmentImageUrl, null);
   assert.equal(
-    response.product.imageUrl,
-    'https://images.example.com/main.webp',
+    fixture.tasks[0]?.garmentImageObjectKey,
+    fixture.product.tryOnImageObjectKey,
   );
   assert.equal(fixture.tasks.length, 1);
   assert.equal(fixture.counts.bindings, 1);

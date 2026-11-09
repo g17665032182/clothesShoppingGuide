@@ -126,6 +126,7 @@ function tryOnProduct(
     category: 'outerwear',
     tryOnEnabled: enabled,
     tryOnEligible: eligible,
+    tryOnImageObjectKey: null,
     mainImageUrl: 'https://images.example.com/current-coat.webp',
     colors: [{ color: '黑色', imageUrl: null }],
   };

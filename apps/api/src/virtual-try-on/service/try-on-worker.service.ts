@@ -14,6 +14,10 @@ import { EntityRepository } from '@mikro-orm/postgresql';
 import { TryOnPhoto, TryOnPhotoStatus } from '../entity/try-on-photo.entity.js';
 import { TryOnTask } from '../entity/try-on-task.entity.js';
 import {
+  PRODUCT_TRY_ON_IMAGE_STORE,
+  type ProductTryOnImageStore,
+} from '../../product-catalog/index.js';
+import {
   TRY_ON_IMAGE_PROVIDER,
   TryOnProviderError,
   type TryOnImageProvider,
@@ -75,6 +79,8 @@ export class TryOnWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly imageProcessing: TryOnImageProcessingService,
     private readonly config: ConfigService,
     @Inject(MikroORM) private readonly orm: MikroORM,
+    @Inject(PRODUCT_TRY_ON_IMAGE_STORE)
+    private readonly productImages: ProductTryOnImageStore,
   ) {}
 
   public onModuleInit(): void {
@@ -133,7 +139,10 @@ export class TryOnWorkerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async process(task: TryOnTask): Promise<void> {
-    if (!task.sourcePhotoId || !task.garmentImageUrl)
+    if (
+      !task.sourcePhotoId ||
+      (!task.garmentImageUrl && !task.garmentImageObjectKey)
+    )
       throw new TryOnProviderError('INVALID_PROVIDER_OUTPUT');
     const photo = await this.photos.findOne({
       id: task.sourcePhotoId,
@@ -144,7 +153,9 @@ export class TryOnWorkerService implements OnModuleInit, OnModuleDestroy {
 
     const [personRaw, garmentRaw] = await Promise.all([
       this.objectStore.getObject(photo.objectKey),
-      this.fetchPublicImage(task.garmentImageUrl),
+      task.garmentImageObjectKey
+        ? this.productImages.getObject(task.garmentImageObjectKey)
+        : this.fetchPublicImage(task.garmentImageUrl!),
     ]);
     const person = await this.imageProcessing.normalize(personRaw);
     const garment = await this.imageProcessing.normalize(garmentRaw);

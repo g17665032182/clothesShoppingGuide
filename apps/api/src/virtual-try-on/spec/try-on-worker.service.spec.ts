@@ -27,6 +27,7 @@ function createWorker(provider: TryOnImageProvider, attempts: number[]) {
     garmentImageUrl: 'https://catalog.example.test/item.webp',
     providerModel: 'test-model',
     attempts: 1,
+    garmentImageObjectKey: null,
   });
   const taskService = {
     recoverExpiredProcessing: async () => {},
@@ -76,6 +77,11 @@ function createWorker(provider: TryOnImageProvider, attempts: number[]) {
     } as unknown as TryOnImageProcessingService,
     new ConfigService({ TRY_ON_PROCESSING_TIMEOUT_MS: 1000 }),
     {} as never,
+    {
+      putImage: async () => '',
+      getObject: async () => Buffer.from('private-garment'),
+      deleteObject: async () => {},
+    },
   );
   Object.defineProperty(worker, 'fetchPublicImage', {
     value: async () => Buffer.from('garment'),

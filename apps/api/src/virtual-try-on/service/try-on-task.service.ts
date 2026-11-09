@@ -108,8 +108,12 @@ export class TryOnTaskService {
           message: '当前颜色不可用',
         });
       }
-      const garmentImageUrl = color.imageUrl || product.mainImageUrl;
-      if (!garmentImageUrl) {
+      const garmentImageUrl = color.imageUrl;
+      // 缺图颜色只使用管理员上传的商品级后备，不借用其他颜色的 SKU 图。
+      const garmentImageObjectKey = garmentImageUrl
+        ? null
+        : product.tryOnImageObjectKey;
+      if (!garmentImageUrl && !garmentImageObjectKey) {
         throw new ConflictException({
           code: 'PRODUCT_NOT_TRYON_SUPPORTED',
           message: '当前商品颜色没有可用的试穿图片',
@@ -144,6 +148,7 @@ export class TryOnTaskService {
         productCategory: product.category,
         color: color.color,
         garmentImageUrl,
+        garmentImageObjectKey,
         sourcePhotoId: photo.id,
         consentVersion,
         consentedAt: new Date(),

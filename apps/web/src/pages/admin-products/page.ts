@@ -14,6 +14,8 @@ import {
   getAdminProduct,
   listAdminProducts,
   updateAdminProductTryOn,
+  uploadAdminProductTryOnImage,
+  getAdminProductTryOnImage,
 } from '@/api/modules/admin-products';
 import type {
   AdminProductCategory,
@@ -45,6 +47,12 @@ export function useAdminProductsPage() {
   const tryOnSaveStatus = ref<SaveStatus>('idle');
   const tryOnSaveError = ref('');
   const tryOnSaveResultUnknown = ref(false);
+  const imageUploadStatus = ref<SaveStatus>('idle');
+  const imagePreviewStatus = ref<RequestStatus>('idle');
+  const imagePreviewUrl = ref('');
+  const imageError = ref('');
+  const imageUploadResultUnknown = ref(false);
+  useErrorToast(() => imageError.value);
   const error = ref('');
   const detailError = ref('');
   useErrorToast(() => error.value);
@@ -72,6 +80,9 @@ export function useAdminProductsPage() {
   let detailController: AbortController | null = null;
   let tryOnSaveController: AbortController | null = null;
   let tryOnSaveVersion = 0;
+  let imageUploadController: AbortController | null = null;
+  let imagePreviewController: AbortController | null = null;
+  let imageVersion = 0;
   let pendingQuery: LocationQueryRaw | null = null;
   let querySyncRunning = false;
   let disposed = false;
@@ -79,6 +90,19 @@ export function useAdminProductsPage() {
   const loading = computed(() => listStatus.value === 'loading');
   const detailLoading = computed(() => detailStatus.value === 'loading');
   const tryOnSaving = computed(() => tryOnSaveStatus.value === 'loading');
+  const imageUploading = computed(() => imageUploadStatus.value === 'loading');
+  const canUploadImage = computed(() => {
+    const product = selectedProduct.value;
+    return Boolean(
+      product &&
+      product.isActive &&
+      product.category !== 'shoes' &&
+      !product.hasTryOnImage &&
+      product.skus.some(
+        (sku) => sku.isActive && sku.currency === 'CNY' && sku.color.trim(),
+      ),
+    );
+  });
   const tryOnDisabledReason = computed(() => {
     const product = selectedProduct.value;
     if (!product) return '';
@@ -88,13 +112,17 @@ export function useAdminProductsPage() {
       (sku) => sku.isActive && sku.currency === 'CNY' && sku.color.trim(),
     );
     if (activeSkus.length === 0) return '商品缺少有效的颜色规格。';
-    if (!activeSkus.some((sku) => hasProductImage(sku.imageUrl)))
+    if (
+      !product.hasTryOnImage &&
+      !activeSkus.some((sku) => hasProductImage(sku.imageUrl))
+    )
       return '商品缺少可用于试穿的图片。';
     return '';
   });
   const tryOnSwitchDisabled = computed(
     () =>
       tryOnSaving.value ||
+      imageUploading.value ||
       (!tryOnDraft.value && Boolean(tryOnDisabledReason.value)),
   );
   const canSaveTryOn = computed(
@@ -103,6 +131,7 @@ export function useAdminProductsPage() {
       selectedProduct.value !== null &&
       tryOnDraft.value !== selectedProduct.value.tryOnEnabled &&
       !tryOnSaving.value &&
+      !imageUploading.value &&
       (!tryOnDraft.value || !tryOnDisabledReason.value),
   );
   const totalPages = computed(() =>
@@ -243,6 +272,7 @@ export function useAdminProductsPage() {
   async function loadDetail(productId: string): Promise<void> {
     if (!auth.state.token) return;
     invalidateTryOnSave();
+    invalidateImage();
     detailController?.abort();
     const controller = new AbortController();
     detailController = controller;
@@ -266,6 +296,7 @@ export function useAdminProductsPage() {
       selectedProduct.value = detail;
       tryOnDraft.value = detail.tryOnEnabled;
       detailStatus.value = 'success';
+      if (detail.hasTryOnImage) void loadImagePreview();
     } catch (cause) {
       if (
         disposed ||
@@ -293,6 +324,7 @@ export function useAdminProductsPage() {
     detailController?.abort();
     detailRequestVersion.value++;
     invalidateTryOnSave();
+    invalidateImage();
     selectedProduct.value = null;
     selectedProductId.value = null;
     detailStatus.value = 'idle';
@@ -307,6 +339,126 @@ export function useAdminProductsPage() {
     tryOnSaveError.value = '';
     tryOnSaveResultUnknown.value = false;
     tryOnDraft.value = false;
+  }
+
+  function releaseImagePreview(): void {
+    if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value);
+    imagePreviewUrl.value = '';
+  }
+
+  function invalidateImage(): void {
+    imageVersion++;
+    imageUploadController?.abort();
+    imagePreviewController?.abort();
+    imageUploadController = null;
+    imagePreviewController = null;
+    releaseImagePreview();
+    imageUploadStatus.value = 'idle';
+    imagePreviewStatus.value = 'idle';
+    imageUploadResultUnknown.value = false;
+    imageError.value = '';
+  }
+
+  async function loadImagePreview(): Promise<void> {
+    const product = selectedProduct.value;
+    if (!auth.state.token || !product?.hasTryOnImage || disposed) return;
+    imagePreviewController?.abort();
+    const controller = new AbortController();
+    imagePreviewController = controller;
+    const version = imageVersion;
+    imagePreviewStatus.value = 'loading';
+    imageError.value = '';
+    const isCurrent = () =>
+      !disposed &&
+      !controller.signal.aborted &&
+      version === imageVersion &&
+      detailOpen.value &&
+      selectedProductId.value === product.id;
+    try {
+      const blob = await getAdminProductTryOnImage(
+        auth.state.token,
+        product.id,
+        controller.signal,
+      );
+      if (!isCurrent()) return;
+      releaseImagePreview();
+      imagePreviewUrl.value = URL.createObjectURL(blob);
+      imagePreviewStatus.value = 'success';
+    } catch (cause) {
+      if (!isCurrent()) return;
+      imagePreviewStatus.value = 'error';
+      imageError.value =
+        cause instanceof Error ? cause.message : '无法读取试穿图片。';
+    } finally {
+      if (imagePreviewController === controller) imagePreviewController = null;
+    }
+  }
+
+  function imagePreviewFailed(): void {
+    releaseImagePreview();
+    imagePreviewStatus.value = 'error';
+    imageError.value = '试穿图片无法显示，请重试。';
+  }
+
+  async function uploadTryOnImage(file: File): Promise<void> {
+    const product = selectedProduct.value;
+    if (
+      !auth.state.token ||
+      !product ||
+      !canUploadImage.value ||
+      imageUploading.value ||
+      tryOnSaving.value ||
+      imageUploadResultUnknown.value
+    )
+      return;
+    imageError.value = '';
+    if (
+      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+      file.size === 0 ||
+      file.size > 10 * 1024 * 1024
+    ) {
+      imageError.value = '请选择 JPEG、PNG 或 WebP 图片，最大 10 MiB。';
+      imageUploadStatus.value = 'error';
+      return;
+    }
+    const controller = new AbortController();
+    imageUploadController = controller;
+    const version = imageVersion;
+    imageUploadStatus.value = 'loading';
+    const isCurrent = () =>
+      !disposed &&
+      !controller.signal.aborted &&
+      version === imageVersion &&
+      detailOpen.value &&
+      selectedProductId.value === product.id;
+    try {
+      const detail = await uploadAdminProductTryOnImage(
+        auth.state.token,
+        product.id,
+        file,
+        controller.signal,
+      );
+      if (!isCurrent()) return;
+      selectedProduct.value = detail;
+      tryOnDraft.value = detail.tryOnEnabled;
+      imageUploadStatus.value = 'success';
+      toast.success('商品试穿图片已上传。');
+      void loadImagePreview();
+      void loadProducts();
+    } catch (cause) {
+      if (!isCurrent()) return;
+      imageUploadStatus.value = 'error';
+      // 上传超时或冲突时先核实服务端状态，避免已经保存的图片被重复提交。
+      imageUploadResultUnknown.value =
+        !(cause instanceof ApiError) ||
+        cause.status === 0 ||
+        cause.status === 409 ||
+        cause.status >= 500;
+      imageError.value =
+        cause instanceof Error ? cause.message : '商品试穿图片上传失败。';
+    } finally {
+      if (imageUploadController === controller) imageUploadController = null;
+    }
   }
 
   function setTryOnDraft(value: boolean): void {
@@ -391,6 +543,7 @@ export function useAdminProductsPage() {
     listController?.abort();
     detailController?.abort();
     invalidateTryOnSave();
+    invalidateImage();
   });
 
   return {
@@ -426,6 +579,14 @@ export function useAdminProductsPage() {
     tryOnSaveStatus,
     tryOnSaving,
     tryOnSwitchDisabled,
+    canUploadImage,
+    imageUploading,
+    imageUploadResultUnknown,
+    imagePreviewStatus,
+    imagePreviewUrl,
+    loadImagePreview,
+    imagePreviewFailed,
+    uploadTryOnImage,
   };
 }
 

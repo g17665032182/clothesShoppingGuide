@@ -2720,6 +2720,23 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "datetime"
+        },
+        "try_on_image_key": {
+          "name": "try_on_image_key",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
         }
       },
       "indexes": [
@@ -4226,6 +4243,23 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "uuid"
+        },
+        "garment_image_object_key": {
+          "name": "garment_image_object_key",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
         }
       },
       "indexes": [

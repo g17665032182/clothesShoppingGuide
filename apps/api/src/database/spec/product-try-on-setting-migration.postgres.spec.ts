@@ -93,21 +93,38 @@ test(
         reservations: await connection.execute(
           'select * from active_order_sku_reservations',
         ),
-        tasks: await connection.execute('select * from try_on_tasks'),
+        tasks: await connection.execute(
+          `select id,user_id,status,product_external_id,product_name,
+                  product_category,color,garment_image_url,source_photo_id,
+                  consent_version,consented_at,attempts,available_at,locked_at,
+                  failure_code,provider_model,provider_request_id,
+                  notification_read_at,created_at,updated_at,completed_at,deleted_at
+             from try_on_tasks`,
+        ),
       });
       const before = await readLegacy();
       const oldMigrations = await orm.migrator.getExecuted();
       await orm.migrator.up();
       assert.equal(
         (await orm.migrator.getExecuted()).length,
-        oldMigrations.length + 1,
-        '本增量必须只新增一条字段迁移',
+        oldMigrations.length + 2,
+        '试穿开关迁移和本次图片增量各新增一条迁移',
       );
       assert.deepEqual(await readLegacy(), before, '升级不得改写既有业务记录');
       const [legacy] = await connection.execute<
         Array<{ try_on_enabled: boolean }>
       >('select try_on_enabled from products where id=?', [productId]);
       assert.equal(legacy?.try_on_enabled, false);
+      const [legacyImage] = await connection.execute<
+        Array<{ try_on_image_key: string | null }>
+      >('select try_on_image_key from products where id=?', [productId]);
+      assert.equal(legacyImage?.try_on_image_key, null);
+      const [legacyTask] = await connection.execute<
+        Array<{ garment_image_object_key: string | null }>
+      >('select garment_image_object_key from try_on_tasks where id=?', [
+        taskId,
+      ]);
+      assert.equal(legacyTask?.garment_image_object_key, null);
 
       const newProductId = randomUUID();
       await connection.execute(

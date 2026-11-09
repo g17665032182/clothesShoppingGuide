@@ -59,6 +59,9 @@ export class Product {
   @Property({ type: 'boolean', fieldName: 'try_on_enabled', default: false })
   public tryOnEnabled = false;
 
+  @Property({ type: 'text', fieldName: 'try_on_image_key', nullable: true })
+  public tryOnImageKey: string | null = null;
+
   @Property({
     type: 'timestamptz',
     fieldName: 'created_at',

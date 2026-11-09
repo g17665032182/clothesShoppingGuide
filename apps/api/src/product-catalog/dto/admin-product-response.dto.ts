@@ -80,6 +80,9 @@ export class AdminProductSkuDto {
 }
 
 export class AdminProductDetailDto extends AdminProductSummaryDto {
+  @ApiProperty({ description: '是否已保存商品级私有试穿图片' })
+  public hasTryOnImage!: boolean;
+
   @ApiPropertyOptional({ nullable: true })
   public description!: string | null;
 
