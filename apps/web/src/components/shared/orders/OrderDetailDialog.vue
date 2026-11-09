@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import OrderStatusBadge from './OrderStatusBadge.vue';
+import OrderProgress from './OrderProgress.vue';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -91,12 +92,6 @@ onBeforeUnmount(clearPaymentTimer);
 const actionsDisabled = computed(
   () => props.status !== 'success' || props.actionStatus !== 'idle',
 );
-
-function formatDate(value: string | null): string {
-  return value
-    ? new Date(value).toLocaleString('zh-CN', { hour12: false })
-    : '-';
-}
 </script>
 
 <template>
@@ -188,21 +183,8 @@ function formatDate(value: string | null): string {
               }}
             </dd>
           </div>
-          <div>
-            <dt class="text-muted-foreground">创建 / 支付截止 / 支付</dt>
-            <dd class="mt-1">
-              {{ formatDate(order.createdAt) }} /
-              {{ formatDate(order.expiresAt) }} / {{ formatDate(order.paidAt) }}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-muted-foreground">发货 / 完成</dt>
-            <dd class="mt-1">
-              {{ formatDate(order.shippedAt) }} /
-              {{ formatDate(order.completedAt) }}
-            </dd>
-          </div>
         </dl>
+        <OrderProgress :order="order" />
         <div class="overflow-x-auto rounded-lg border">
           <Table class="min-w-[560px]">
             <TableHeader

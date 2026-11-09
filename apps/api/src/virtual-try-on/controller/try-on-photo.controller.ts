@@ -15,6 +15,7 @@ import {
   ApiBody,
   ApiCreatedResponse,
   ApiNoContentResponse,
+  ApiOkResponse,
   ApiTags,
 } from '@nestjs/swagger';
 
@@ -23,6 +24,7 @@ import type { User } from '../../users/entity/user.entity.js';
 import { TryOnPhotoService } from '../service/try-on-photo.service.js';
 import {
   photoSaveSchema,
+  TryOnPhotoPageDto,
   type TryOnPhotoDto,
 } from '../dto/try-on-photo.dto.js';
 import { tryOnUuidParamSchema } from '../dto/try-on-param.dto.js';
@@ -60,6 +62,7 @@ export class TryOnPhotoController {
   }
 
   @Get()
+  @ApiOkResponse({ type: TryOnPhotoPageDto })
   public list(@CurrentUser() user: User) {
     return this.photos.listSaved(user.id);
   }

@@ -13,8 +13,9 @@ import {
   markTryOnNotificationRead,
   uploadTryOnPhoto,
 } from '@/api/modules/try-on';
-import type { TryOnPhoto, TryOnTask } from '@/api/types/try-on';
+import type { TryOnPhoto, TryOnPhotoPage, TryOnTask } from '@/api/types/try-on';
 import { auth } from '@/lib/auth';
+import { getPhotoUploadError } from './photo-upload';
 
 type AsyncStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 
@@ -26,6 +27,7 @@ export function useMyTryOnsPage() {
   const resultImageUrls = ref<Record<string, string>>({});
   const resultImageExpiresAt = ref<Record<string, number>>({});
   const savedPhotos = ref<TryOnPhoto[]>([]);
+  const availability = ref<TryOnPhotoPage['availability'] | null>(null);
   const listStatus = ref<AsyncStatus>('idle');
   const listError = ref('');
   const photoStatus = ref<AsyncStatus>('idle');
@@ -71,8 +73,29 @@ export function useMyTryOnsPage() {
     tasks.value.find((task) => ['queued', 'processing'].includes(task.status)),
   );
 
+  const canUpload = computed(
+    () =>
+      ['success', 'empty'].includes(photoStatus.value) &&
+      (availability.value === 'available' ||
+        availability.value === 'test_only'),
+  );
+
+  const availabilityMessage = computed(() => {
+    switch (availability.value) {
+      case 'disabled':
+        return '当前环境尚未开放试穿，暂不能上传照片或生成试穿图。';
+      case 'test_images_unconfigured':
+        return '当前环境尚未配置测试图片，暂不能上传照片或生成试穿图。';
+      case 'test_only':
+        return '当前仅支持已登记的合成或公开测试图片，暂不接收真实用户照片。';
+      default:
+        return '';
+    }
+  });
+
   const canSubmit = computed(
     () =>
+      canUpload.value &&
       Boolean(product.value) &&
       Boolean(selectedColor.value) &&
       Boolean(selectedPhotoId.value) &&
@@ -172,11 +195,13 @@ export function useMyTryOnsPage() {
     const controller = new AbortController();
     photoController = controller;
     photoStatus.value = 'loading';
+    availability.value = null;
     photoError.value = '';
     try {
       const result = await listSavedTryOnPhotos(token, controller.signal);
       if (controller.signal.aborted || disposed) return;
       savedPhotos.value = result.items;
+      availability.value = result.availability;
       photoStatus.value = result.items.length ? 'success' : 'empty';
     } catch (error) {
       if (!controller.signal.aborted && !disposed && !isAbort(error)) {
@@ -185,6 +210,10 @@ export function useMyTryOnsPage() {
           error instanceof Error ? error.message : '照片列表加载失败';
       }
     }
+  }
+
+  async function refreshTryOns() {
+    await Promise.all([loadTasks(), loadSavedPhotos()]);
   }
 
   function startPolling() {
@@ -199,9 +228,14 @@ export function useMyTryOnsPage() {
 
   async function uploadPhoto(file: File, save: boolean) {
     const token = auth.state.token;
-    if (!token || submitting.value) return;
+    if (!token || submitting.value || !canUpload.value) return;
     const isCurrent = captureIdentity();
     actionError.value = '';
+    const validationError = getPhotoUploadError(file);
+    if (validationError) {
+      actionError.value = validationError;
+      return;
+    }
     submitting.value = true;
     try {
       const result = await uploadTryOnPhoto(
@@ -233,6 +267,7 @@ export function useMyTryOnsPage() {
     const currentProduct = product.value;
     if (
       !token ||
+      !canUpload.value ||
       !currentProduct ||
       !selectedPhotoId.value ||
       !selectedColor.value ||
@@ -385,7 +420,7 @@ export function useMyTryOnsPage() {
   onMounted(async () => {
     await auth.hydrate();
     if (!auth.state.token) return;
-    await Promise.all([loadTasks(), loadSavedPhotos()]);
+    await refreshTryOns();
     if (activeTask.value) startPolling();
   });
 
@@ -402,6 +437,8 @@ export function useMyTryOnsPage() {
     tasks,
     resultImageUrls,
     savedPhotos,
+    canUpload,
+    availabilityMessage,
     listStatus,
     listError,
     photoStatus,
@@ -417,6 +454,7 @@ export function useMyTryOnsPage() {
     canSubmit,
     loadTasks,
     loadSavedPhotos,
+    refreshTryOns,
     uploadPhoto,
     submitTask,
     confirmConsent,

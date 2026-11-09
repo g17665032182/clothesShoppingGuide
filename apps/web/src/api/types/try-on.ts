@@ -48,6 +48,8 @@ export interface TryOnTaskPage {
 
 export interface TryOnPhotoPage {
   items: TryOnPhoto[];
+  availability:
+    'disabled' | 'test_images_unconfigured' | 'test_only' | 'available';
 }
 
 export interface UploadTryOnPhotoResponse {

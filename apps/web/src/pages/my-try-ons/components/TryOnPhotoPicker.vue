@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import { ImagePlus, Trash2, Upload } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import type { TryOnPhoto } from '@/api/types/try-on';
+import { Field, FieldLabel } from '@/components/ui/field';
+import { getPhotoUploadError } from '../photo-upload';
 
 const props = defineProps<{
   photos: TryOnPhoto[];
   selectedPhotoId: string | null;
   disabled?: boolean;
+  uploadDisabled?: boolean;
   deletingPhotoId?: string | null;
 }>();
 const emit = defineEmits<{
@@ -17,51 +21,73 @@ const emit = defineEmits<{
   (event: 'upload', file: File, save: boolean): void;
   (event: 'delete', id: string): void;
 }>();
-const fileInput = ref<HTMLInputElement | null>(null);
+const fileInput = shallowRef<HTMLInputElement | null>(null);
 const saveUpload = ref(false);
-const selectedFileName = ref('');
 const selectedFile = ref<File | null>(null);
-const uploadDisabled = computed(() => props.disabled || !selectedFile.value);
+const fileInvalid = ref(false);
+const uploadDisabled = computed(
+  () => props.disabled || props.uploadDisabled || !selectedFile.value,
+);
 
 function chooseFile(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+  const input = event.target as HTMLInputElement;
+  fileInput.value = input;
+  const file = input.files?.[0] ?? null;
+  fileInvalid.value = false;
+  const error = file && getPhotoUploadError(file);
+  if (error) {
+    selectedFile.value = null;
+    input.value = '';
+    fileInvalid.value = true;
+    toast.error(error);
+    return;
+  }
   selectedFile.value = file;
-  selectedFileName.value = file?.name ?? '';
 }
 
 function upload() {
-  if (!selectedFile.value) return;
+  if (uploadDisabled.value || !selectedFile.value) return;
   emit('upload', selectedFile.value, saveUpload.value);
-  selectedFile.value = null;
-  selectedFileName.value = '';
-  if (fileInput.value) fileInput.value.value = '';
 }
+
+// 仅在父级确认上传成功后清空，失败时保留文件以便重试。
+watch(
+  () => props.selectedPhotoId,
+  (id) => {
+    if (!id) return;
+    selectedFile.value = null;
+    fileInvalid.value = false;
+    if (fileInput.value) fileInput.value.value = '';
+  },
+);
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="flex flex-col gap-4">
     <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-      <div class="flex min-w-0 items-center gap-2">
+      <Field
+        :data-invalid="fileInvalid || undefined"
+        :data-disabled="disabled || props.uploadDisabled || undefined"
+      >
+        <FieldLabel for="try-on-photo" class="sr-only">试穿照片</FieldLabel>
         <Input
-          ref="fileInput"
+          id="try-on-photo"
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          :disabled="disabled"
+          :aria-invalid="fileInvalid || undefined"
+          :disabled="disabled || props.uploadDisabled"
           @change="chooseFile"
         />
-        <span
-          v-if="selectedFileName"
-          class="truncate text-xs text-muted-foreground"
-        >
-          {{ selectedFileName }}
-        </span>
-      </div>
+      </Field>
       <Button :disabled="uploadDisabled" @click="upload">
         <Upload data-icon="inline-start" />上传照片
       </Button>
     </div>
     <label class="flex items-center gap-2 text-sm">
-      <Checkbox v-model="saveUpload" :disabled="disabled" />
+      <Checkbox
+        v-model="saveUpload"
+        :disabled="disabled || props.uploadDisabled"
+      />
       保存这张照片，方便下次复用
     </label>
     <div v-if="photos.length" class="grid gap-2 sm:grid-cols-2">

@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import OrderProgress from '@/components/shared/orders/OrderProgress.vue';
 import {
   Table,
   TableBody,
@@ -36,12 +37,6 @@ const emit = defineEmits<{
   (event: 'ship'): void;
   (event: 'retry'): void;
 }>();
-
-function formatDate(value: string | null): string {
-  return value
-    ? new Date(value).toLocaleString('zh-CN', { hour12: false })
-    : '-';
-}
 </script>
 
 <template>
@@ -104,24 +99,8 @@ function formatDate(value: string | null): string {
               }}
             </dd>
           </div>
-          <div>
-            <dt class="text-muted-foreground">创建 / 支付</dt>
-            <dd class="mt-1">
-              {{ formatDate(order.createdAt) }} / {{ formatDate(order.paidAt) }}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-muted-foreground">发货 / 完成</dt>
-            <dd class="mt-1">
-              {{ formatDate(order.shippedAt) }} /
-              {{ formatDate(order.completedAt) }}
-            </dd>
-          </div>
-          <div v-if="order.closedAt">
-            <dt class="text-muted-foreground">关闭时间</dt>
-            <dd class="mt-1">{{ formatDate(order.closedAt) }}</dd>
-          </div>
         </dl>
+        <OrderProgress :order="order" />
         <div class="overflow-x-auto rounded-lg border">
           <Table class="min-w-[560px]">
             <TableHeader

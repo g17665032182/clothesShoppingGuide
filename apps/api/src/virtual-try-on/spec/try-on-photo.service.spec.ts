@@ -12,7 +12,12 @@ const testDigest = createHash('sha256').update(testBody).digest('hex');
 
 function createService(configValues: Record<string, string>) {
   let createdPhoto: Record<string, unknown> | undefined;
+  let listFilter: unknown;
   const photoRepository = {
+    find: async (filter: unknown) => {
+      listFilter = filter;
+      return [];
+    },
     create: (input: Record<string, unknown>) => {
       createdPhoto = Object.assign(
         { id: '00000000-0000-4000-8000-000000000001' },
@@ -49,6 +54,9 @@ function createService(configValues: Record<string, string>) {
     get createdPhoto() {
       return createdPhoto;
     },
+    get listFilter() {
+      return listFilter;
+    },
   };
 }
 
@@ -59,6 +67,77 @@ test('默认关闭时拒绝照片上传', async () => {
     (error: unknown) =>
       error instanceof ConflictException && error.getStatus() === 409,
   );
+});
+
+test('照片列表提前报告上传准入状态，不暴露白名单且保持本人隔离', async () => {
+  const cases = [
+    { config: {}, availability: 'disabled' },
+    {
+      config: { TRY_ON_ENABLED: 'true', NODE_ENV: 'development' },
+      availability: 'test_images_unconfigured',
+    },
+    {
+      config: {
+        TRY_ON_ENABLED: 'true',
+        NODE_ENV: 'development',
+        TRY_ON_ALLOWED_TEST_IMAGE_SHA256: 'invalid',
+      },
+      availability: 'test_images_unconfigured',
+    },
+    {
+      config: {
+        TRY_ON_ENABLED: 'true',
+        NODE_ENV: 'development',
+        TRY_ON_REAL_PHOTOS_ENABLED: 'true',
+      },
+      availability: 'test_images_unconfigured',
+    },
+    {
+      config: {
+        TRY_ON_ENABLED: 'true',
+        NODE_ENV: 'development',
+        TRY_ON_ALLOWED_TEST_IMAGE_SHA256: testDigest,
+      },
+      availability: 'test_only',
+    },
+    {
+      config: {
+        TRY_ON_ENABLED: 'true',
+        NODE_ENV: 'production',
+        TRY_ON_ALLOWED_TEST_IMAGE_SHA256: testDigest,
+      },
+      availability: 'disabled',
+    },
+    {
+      config: {
+        TRY_ON_ENABLED: 'true',
+        NODE_ENV: 'production',
+        TRY_ON_REAL_PHOTOS_ENABLED: 'true',
+      },
+      availability: 'available',
+    },
+    {
+      config: {
+        TRY_ON_ENABLED: 'false',
+        NODE_ENV: 'production',
+        TRY_ON_REAL_PHOTOS_ENABLED: 'true',
+      },
+      availability: 'disabled',
+    },
+  ];
+  for (const entry of cases) {
+    const fixture = createService(entry.config as Record<string, string>);
+    const result = await fixture.service.listSaved('current-user');
+    assert.deepEqual(result, {
+      items: [],
+      availability: entry.availability,
+    });
+    assert.deepEqual(fixture.listFilter, {
+      userId: 'current-user',
+      kind: 'saved',
+      status: 'active',
+    });
+  }
 });
 
 test('开发测试模式只接受规范化后命中服务端 SHA-256 白名单的图片', async () => {

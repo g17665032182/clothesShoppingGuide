@@ -22,6 +22,10 @@ import {
   type TryOnObjectStore,
 } from '../port/try-on-object-store.port.js';
 import { TryOnImageProcessingService } from './image-processing.service.js';
+import type {
+  TryOnAvailability,
+  TryOnPhotoPageDto,
+} from '../dto/try-on-photo.dto.js';
 
 @Injectable()
 export class TryOnPhotoService {
@@ -81,7 +85,7 @@ export class TryOnPhotoService {
     }
   }
 
-  public async listSaved(userId: string) {
+  public async listSaved(userId: string): Promise<TryOnPhotoPageDto> {
     const rows = await this.photos.find(
       {
         userId,
@@ -90,7 +94,10 @@ export class TryOnPhotoService {
       },
       { orderBy: { createdAt: 'DESC' } },
     );
-    return { items: rows.map((photo) => this.toResponse(photo)) };
+    return {
+      items: rows.map((photo) => this.toResponse(photo)),
+      availability: this.getAvailability(),
+    };
   }
 
   public async findOwnedActive(
@@ -198,6 +205,30 @@ export class TryOnPhotoService {
         return;
       throw new BadRequestException('生产环境尚未开放真实人像试穿');
     }
+    const configured = this.getAllowedTestImageHashes();
+    if (!configured.length) {
+      throw new BadRequestException('当前环境未开放试穿测试图片');
+    }
+    const digest = createHash('sha256').update(buffer).digest('hex');
+    if (!configured.includes(digest)) {
+      throw new BadRequestException('仅允许已登记的测试图片');
+    }
+  }
+
+  private getAvailability(): TryOnAvailability {
+    // 仅返回准入状态；不向浏览器暴露测试图片摘要或第三方配置。
+    if (this.config.get<string>('TRY_ON_ENABLED') !== 'true') return 'disabled';
+    if (this.config.get<string>('NODE_ENV') === 'production') {
+      return this.config.get<string>('TRY_ON_REAL_PHOTOS_ENABLED') === 'true'
+        ? 'available'
+        : 'disabled';
+    }
+    return this.getAllowedTestImageHashes().length
+      ? 'test_only'
+      : 'test_images_unconfigured';
+  }
+
+  private getAllowedTestImageHashes(): string[] {
     const configured = this.config
       .get<string>('TRY_ON_ALLOWED_TEST_IMAGE_SHA256')
       ?.split(',')
@@ -207,12 +238,9 @@ export class TryOnPhotoService {
       !configured?.length ||
       configured.some((value) => !/^[a-f0-9]{64}$/u.test(value))
     ) {
-      throw new BadRequestException('当前环境未开放试穿测试图片');
+      return [];
     }
-    const digest = createHash('sha256').update(buffer).digest('hex');
-    if (!configured.includes(digest)) {
-      throw new BadRequestException('仅允许已登记的测试图片');
-    }
+    return configured;
   }
 
   private assertEnabled(): void {

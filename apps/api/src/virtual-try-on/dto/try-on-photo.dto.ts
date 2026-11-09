@@ -27,6 +27,19 @@ export class TryOnPhotoDto {
   public createdAt!: string;
 }
 
+export type TryOnAvailability =
+  'disabled' | 'test_images_unconfigured' | 'test_only' | 'available';
+
+export class TryOnPhotoPageDto {
+  @ApiProperty({ type: [TryOnPhotoDto] })
+  public items!: TryOnPhotoDto[];
+
+  @ApiProperty({
+    enum: ['disabled', 'test_images_unconfigured', 'test_only', 'available'],
+  })
+  public availability!: TryOnAvailability;
+}
+
 export class TryOnTaskResultDto {
   @ApiProperty({ format: 'uuid' })
   public resultId!: string;

@@ -33,6 +33,8 @@ const {
   tasks,
   resultImageUrls,
   savedPhotos,
+  canUpload,
+  availabilityMessage,
   listStatus,
   photoStatus,
   photoError,
@@ -46,6 +48,7 @@ const {
   canSubmit,
   loadTasks,
   loadSavedPhotos,
+  refreshTryOns,
   uploadPhoto,
   submitTask,
   confirmConsent,
@@ -80,8 +83,8 @@ function returnToChat() {
         size="icon"
         aria-label="刷新试穿历史"
         title="刷新试穿历史"
-        :disabled="listStatus === 'loading'"
-        @click="loadTasks"
+        :disabled="listStatus === 'loading' || photoStatus === 'loading'"
+        @click="refreshTryOns"
       >
         <RefreshCw />
       </Button>
@@ -113,6 +116,11 @@ function returnToChat() {
       </Alert>
 
       <template v-else>
+        <Alert v-if="availabilityMessage" role="status">
+          <AlertTriangle aria-hidden="true" />
+          <AlertTitle>{{ canUpload ? '测试模式' : '试穿暂不可用' }}</AlertTitle>
+          <AlertDescription>{{ availabilityMessage }}</AlertDescription>
+        </Alert>
         <div class="grid gap-5 lg:grid-cols-2">
           <div class="space-y-3">
             <h3 class="font-medium">选择颜色和照片</h3>
@@ -153,6 +161,7 @@ function returnToChat() {
               :photos="savedPhotos"
               :selected-photo-id="selectedPhotoId"
               :disabled="submitting || Boolean(activeTask)"
+              :upload-disabled="!canUpload"
               :deleting-photo-id="deletingPhotoId"
               @update:selected-photo-id="selectedPhotoId = $event"
               @upload="uploadPhoto"
