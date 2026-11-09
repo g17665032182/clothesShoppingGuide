@@ -8,6 +8,8 @@ import {
   watch,
   type Ref,
 } from 'vue';
+import { toast } from 'vue-sonner';
+import { useErrorToast } from '@/composables/use-error-toast';
 import {
   categoryLabel,
   formatPreferenceValue,
@@ -287,6 +289,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
   const status = ref<PreferencePageStatus>('idle');
   const error = ref('');
   const submitError = ref('');
+  const validationError = ref('');
   const page = ref(1);
   const total = ref(0);
   const totalPages = ref(0);
@@ -294,6 +297,9 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
   const enabled = ref<boolean | null>(null);
   const settingsStatus = ref<PreferencePageStatus>('idle');
   const settingError = ref('');
+  useErrorToast(() => (active.value ? error.value : ''));
+  useErrorToast(() => (active.value ? submitError.value : ''));
+  useErrorToast(() => (active.value ? settingError.value : ''));
   const settingPending = ref(false);
   const editorOpen = ref(false);
   const editingId = ref<string | null>(null);
@@ -380,6 +386,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     editingId.value = null;
     editor.value = createEmptyPreferenceEditor();
     submitError.value = '';
+    validationError.value = '';
     editorOpen.value = true;
   }
 
@@ -387,6 +394,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     editingId.value = preference.id;
     editor.value = editorFromPreference(preference);
     submitError.value = '';
+    validationError.value = '';
     editorOpen.value = true;
   }
 
@@ -395,6 +403,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     editorOpen.value = false;
     editingId.value = null;
     submitError.value = '';
+    validationError.value = '';
   }
 
   async function savePreference() {
@@ -402,12 +411,13 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     if (!token || busy.value || !activeNow) return;
     const value = editorToValue(editor.value);
     if (!value) {
-      submitError.value =
+      validationError.value =
         validatePreferenceEditor(editor.value) || '请检查必填项和数值范围。';
       return;
     }
 
     submitting.value = true;
+    validationError.value = '';
     submitError.value = '';
     const controller = new AbortController();
     actionController = controller;
@@ -435,6 +445,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
       }
       if (!isCurrent(controller, version)) return;
       editorOpen.value = false;
+      toast.success('偏好已保存');
       editingId.value = null;
       await loadPreferences(1);
     } catch (cause) {
@@ -466,6 +477,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     try {
       await deletePreference(token, preferenceId, controller.signal);
       if (!isCurrent(controller, version)) return;
+      toast.success('偏好已删除');
       if (records.value.length === 1 && page.value > 1) {
         await loadPreferences(page.value - 1);
       } else {
@@ -494,6 +506,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     try {
       await deleteAllPreferences(token, controller.signal);
       if (!isCurrent(controller, version)) return;
+      toast.success('全部偏好已删除');
       deleteAllDialogOpen.value = false;
       page.value = 1;
       await loadPreferences(1);
@@ -533,6 +546,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
       );
       if (!isCurrent(controller, version)) return;
       enabled.value = settings.enabled;
+      toast.success(settings.enabled ? '已开启参考偏好' : '已关闭参考偏好');
     } catch (cause) {
       if (!isCurrent(controller, version)) return;
       settingError.value =
@@ -659,6 +673,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     startEdit,
     status,
     submitError,
+    validationError,
     submitting,
     cancelEdit,
     toggleEnabled,

@@ -47,8 +47,10 @@ const {
   loadEarlierMessages,
   loadMoreProducts,
   purchase,
+  purchaseDialogOpen,
   buyProduct,
   confirmReplacement,
+  openPurchaseOrder,
   replacementDialogOpen,
   replacementProductId,
   updatePurchase,
@@ -95,7 +97,27 @@ const {
           <ChatHeader
             :title="activeConversation?.title ?? '新对话'"
             @new="startNewConversation"
-          />
+          >
+            <template #actions>
+              <PurchasePanel
+                :key="activeConversationId ?? 'new'"
+                v-model="purchaseDialogOpen"
+                :draft="purchase.draft"
+                :order="purchase.order"
+                :status="
+                  purchase.status === 'success' && isSending
+                    ? 'streaming'
+                    : purchase.status
+                "
+                :error-message="purchase.errorMessage"
+                @update="updatePurchase($event)"
+                @discard="discardPurchase"
+                @confirm="confirmPurchaseOrder"
+                @retry="retryPurchase"
+                @open-order="openPurchaseOrder"
+              />
+            </template>
+          </ChatHeader>
           <div class="min-h-0 flex-1 overflow-hidden">
             <div
               v-if="status === 'loading'"
@@ -128,29 +150,10 @@ const {
               @retry-history="loadEarlierMessages"
             />
           </div>
-          <div class="shrink-0 px-4 pb-2 sm:px-6">
-            <PurchasePanel
-              :draft="purchase.draft"
-              :order="purchase.order"
-              :status="
-                purchase.status === 'success' && isSending
-                  ? 'streaming'
-                  : purchase.status
-              "
-              :error-message="purchase.errorMessage"
-              @update="updatePurchase($event)"
-              @discard="discardPurchase"
-              @confirm="confirmPurchaseOrder"
-              @retry="retryPurchase"
-              @open-order="loadOrder"
-            />
-          </div>
           <div
             v-if="errorMessage"
-            class="mx-auto w-full max-w-3xl shrink-0 px-4 py-2 text-sm text-destructive sm:px-6"
-            role="alert"
+            class="mx-auto flex w-full max-w-3xl shrink-0 flex-wrap gap-2 px-4 py-2 sm:px-6"
           >
-            {{ errorMessage }}
             <button
               v-if="status === 'unknown'"
               class="ml-2 underline underline-offset-4"
@@ -212,10 +215,8 @@ const {
           </div>
           <div
             v-if="errorMessage"
-            class="mx-auto w-full max-w-3xl shrink-0 px-4 py-2 text-sm text-destructive sm:px-6"
-            role="alert"
+            class="mx-auto flex w-full max-w-3xl shrink-0 flex-wrap gap-2 px-4 py-2 sm:px-6"
           >
-            {{ errorMessage }}
             <button
               v-if="status === 'unknown'"
               class="ml-2 underline underline-offset-4"

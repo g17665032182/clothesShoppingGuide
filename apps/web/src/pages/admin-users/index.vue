@@ -12,10 +12,10 @@ import {
 } from '@/components/ui/card';
 
 const {
-  error,
   loading,
   loadUsers,
   search,
+  status,
   setRole,
   toggleStatus,
   updatingUserId,
@@ -48,7 +48,7 @@ const {
       </CardHeader>
       <UserTable
         :current-user-id="auth.state.user?.id"
-        :error="error"
+        :failed="status === 'error'"
         :loading="loading"
         :search="search"
         :updating-user-id="updatingUserId"

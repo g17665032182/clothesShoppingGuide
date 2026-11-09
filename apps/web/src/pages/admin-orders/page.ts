@@ -6,6 +6,8 @@ import {
   ref,
   watch,
 } from 'vue';
+import { toast } from 'vue-sonner';
+import { useErrorToast } from '@/composables/use-error-toast';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 import {
   getAdminOrder,
@@ -55,6 +57,9 @@ export function useAdminOrdersPage() {
   const shipDialogOpen = ref(false);
   const shipStatus = ref<ActionStatus>('idle');
   const shipError = ref('');
+  useErrorToast(() => listError.value);
+  useErrorToast(() => detailError.value);
+  useErrorToast(() => shipError.value);
 
   let listController: AbortController | null = null;
   let detailController: AbortController | null = null;
@@ -315,6 +320,7 @@ export function useAdminOrdersPage() {
       if (disposed || controller.signal.aborted) return false;
       selectedOrder.value = result;
       shipStatus.value = 'success';
+      toast.success('订单已发货');
       shipDialogOpen.value = false;
       detailOpen.value = true;
       detailStatus.value = 'success';

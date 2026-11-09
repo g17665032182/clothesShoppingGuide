@@ -94,7 +94,9 @@ function safeUrl(value: string | null): string | null {
         <Skeleton class="h-24 w-full" />
       </div>
       <Alert v-else-if="error" variant="destructive">
-        <AlertDescription role="alert">{{ error }}</AlertDescription>
+        <AlertDescription role="status"
+          >商品详情加载失败，请重试。</AlertDescription
+        >
         <Button size="sm" variant="outline" @click="emit('retry')">重试</Button>
       </Alert>
       <div v-else-if="product" class="flex min-w-0 flex-col gap-5">

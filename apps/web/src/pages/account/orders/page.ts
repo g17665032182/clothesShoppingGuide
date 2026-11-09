@@ -6,6 +6,8 @@ import {
   ref,
   watch,
 } from 'vue';
+import { toast } from 'vue-sonner';
+import { useErrorToast } from '@/composables/use-error-toast';
 import {
   getOrder,
   listOrders,
@@ -43,6 +45,9 @@ export function useOrdersPage() {
   const detailOpen = ref(false);
   const actionStatus = ref<ActionStatus>('idle');
   const actionError = ref('');
+  useErrorToast(() => listError.value);
+  useErrorToast(() => detailError.value);
+  useErrorToast(() => actionError.value);
   const actionDialogOpen = ref(false);
   const actionType = ref<'cancel' | 'receipt'>('cancel');
   let listController: AbortController | null = null;
@@ -244,6 +249,13 @@ export function useOrdersPage() {
         return;
       selectedOrder.value = result;
       actionStatus.value = 'idle';
+      toast.success(
+        action === 'pay'
+          ? '模拟支付成功'
+          : action === 'cancel'
+            ? '订单已取消'
+            : '已确认收货',
+      );
       await loadOrders();
     } catch (error) {
       if (

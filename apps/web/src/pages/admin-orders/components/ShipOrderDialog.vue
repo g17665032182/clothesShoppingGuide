@@ -127,11 +127,6 @@ function submit(): void {
           ></Alert
         >
         <div v-if="error" class="flex flex-col items-start gap-2">
-          <Alert variant="destructive"
-            ><AlertDescription role="alert">{{
-              error
-            }}</AlertDescription></Alert
-          >
           <Button
             type="button"
             variant="outline"

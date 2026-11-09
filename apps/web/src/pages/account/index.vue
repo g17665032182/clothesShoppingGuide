@@ -12,8 +12,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 
-const { displayName, error, password, pending, saveProfile, status, user } =
-  useAccountPage();
+const { displayName, password, pending, saveProfile, user } = useAccountPage();
 </script>
 
 <template>
@@ -32,9 +31,7 @@ const { displayName, error, password, pending, saveProfile, status, user } =
     >
       <ProfileForm
         :display-name="displayName"
-        :error="error"
         :password="password"
-        :status="status"
         :user="user"
         @submit="saveProfile"
         @update:display-name="displayName = $event"

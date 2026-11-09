@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { User } from '@/api/types/users';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Card,
@@ -20,9 +19,7 @@ import { Badge } from '@/components/ui/badge';
 
 defineProps<{
   displayName: string;
-  error: string;
   password: string;
-  status: 'idle' | 'loading' | 'success' | 'error';
   user: User;
 }>();
 
@@ -89,12 +86,6 @@ function updatePassword(value: string | number) {
             >
           </Field>
         </FieldGroup>
-        <Alert v-if="status === 'success'" class="mt-5">
-          <AlertDescription role="status">账户资料已更新。</AlertDescription>
-        </Alert>
-        <Alert v-if="error" class="mt-5" variant="destructive">
-          <AlertDescription role="alert">{{ error }}</AlertDescription>
-        </Alert>
       </CardContent>
     </form>
   </Card>

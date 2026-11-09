@@ -7,6 +7,7 @@ import {
   watch,
 } from 'vue';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
+import { useErrorToast } from '@/composables/use-error-toast';
 import {
   getAdminProduct,
   listAdminProducts,
@@ -38,6 +39,8 @@ export function useAdminProductsPage() {
   const detailStatus = ref<RequestStatus>('idle');
   const error = ref('');
   const detailError = ref('');
+  useErrorToast(() => error.value);
+  useErrorToast(() => detailError.value);
   const filters = reactive<{
     keyword: string;
     category: AdminProductCategory | 'all';

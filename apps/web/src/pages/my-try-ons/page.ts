@@ -1,5 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { toast } from 'vue-sonner';
+import { useErrorToast } from '@/composables/use-error-toast';
 import { ApiError } from '@/api';
 import {
   createTryOnTask,
@@ -29,6 +31,9 @@ export function useMyTryOnsPage() {
   const photoStatus = ref<AsyncStatus>('idle');
   const photoError = ref('');
   const actionError = ref('');
+  useErrorToast(() => listError.value);
+  useErrorToast(() => photoError.value);
+  useErrorToast(() => actionError.value);
   const selectedPhotoId = ref<string | null>(null);
   const selectedColor = ref('');
   const consentOpen = ref(false);
@@ -39,6 +44,12 @@ export function useMyTryOnsPage() {
   let photoController: AbortController | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let disposed = false;
+  const actionController = new AbortController();
+
+  function captureIdentity() {
+    const userId = auth.state.user?.id;
+    return () => !disposed && userId === auth.state.user?.id;
+  }
 
   const product = computed(() => {
     const externalId = String(route.query.productExternalId ?? '').trim();
@@ -189,13 +200,22 @@ export function useMyTryOnsPage() {
   async function uploadPhoto(file: File, save: boolean) {
     const token = auth.state.token;
     if (!token || submitting.value) return;
+    const isCurrent = captureIdentity();
     actionError.value = '';
     submitting.value = true;
     try {
-      const result = await uploadTryOnPhoto(token, file, save);
+      const result = await uploadTryOnPhoto(
+        token,
+        file,
+        save,
+        actionController.signal,
+      );
+      if (!isCurrent()) return;
       selectedPhotoId.value = result.id;
+      toast.success('照片已上传');
       if (save) await loadSavedPhotos();
     } catch (error) {
+      if (!isCurrent()) return;
       actionError.value =
         error instanceof Error ? error.message : '照片上传失败';
     } finally {
@@ -215,26 +235,35 @@ export function useMyTryOnsPage() {
       !token ||
       !currentProduct ||
       !selectedPhotoId.value ||
-      !selectedColor.value
+      !selectedColor.value ||
+      submitting.value
     )
       return;
+    const isCurrent = captureIdentity();
     submitting.value = true;
     actionError.value = '';
     try {
-      const task = await createTryOnTask(token, {
-        productExternalId: currentProduct.externalId,
-        color: selectedColor.value,
-        photoId: selectedPhotoId.value,
-        consentVersion: CONSENT_VERSION,
-      });
+      const task = await createTryOnTask(
+        token,
+        {
+          productExternalId: currentProduct.externalId,
+          color: selectedColor.value,
+          photoId: selectedPhotoId.value,
+          consentVersion: CONSENT_VERSION,
+        },
+        actionController.signal,
+      );
+      if (!isCurrent()) return;
       tasks.value = [
         task,
         ...tasks.value.filter((item) => item.id !== task.id),
       ];
       listStatus.value = 'success';
       consentOpen.value = false;
+      toast.success('试穿任务已提交');
       startPolling();
     } catch (error) {
+      if (!isCurrent()) return;
       actionError.value =
         error instanceof ApiError && error.status === 409
           ? error.message
@@ -248,11 +277,17 @@ export function useMyTryOnsPage() {
 
   async function downloadTask(task: TryOnTask) {
     const token = auth.state.token;
-    if (!token || task.status !== 'succeeded') return;
+    if (!token || task.status !== 'succeeded' || actionTaskId.value) return;
+    const isCurrent = captureIdentity();
     actionTaskId.value = task.id;
     actionError.value = '';
     try {
-      const result = await getTryOnResultDownload(token, task.id);
+      const result = await getTryOnResultDownload(
+        token,
+        task.id,
+        actionController.signal,
+      );
+      if (!isCurrent()) return;
       const url = result.url ?? result.downloadUrl;
       if (!url) throw new Error('服务器未返回下载地址');
       const link = document.createElement('a');
@@ -260,7 +295,9 @@ export function useMyTryOnsPage() {
       link.download = `${task.product.name}-试穿.png`;
       link.rel = 'noopener';
       link.click();
+      toast.success('已发起试穿结果下载');
     } catch (error) {
+      if (!isCurrent()) return;
       actionError.value =
         error instanceof Error ? error.message : '结果下载失败';
     } finally {
@@ -272,19 +309,24 @@ export function useMyTryOnsPage() {
     const token = auth.state.token;
     if (
       !token ||
+      actionTaskId.value ||
       task.status !== 'succeeded' ||
       !window.confirm('删除这条试穿结果？')
     )
       return;
+    const isCurrent = captureIdentity();
     actionTaskId.value = task.id;
     actionError.value = '';
     try {
-      await deleteTryOnTask(token, task.id);
+      await deleteTryOnTask(token, task.id, actionController.signal);
+      if (!isCurrent()) return;
       tasks.value = tasks.value.filter((item) => item.id !== task.id);
       delete resultImageUrls.value[task.id];
       delete resultImageExpiresAt.value[task.id];
+      toast.success('试穿结果已删除');
       listStatus.value = tasks.value.length ? 'success' : 'empty';
     } catch (error) {
+      if (!isCurrent()) return;
       actionError.value =
         error instanceof Error ? error.message : '结果删除失败';
     } finally {
@@ -294,13 +336,23 @@ export function useMyTryOnsPage() {
 
   async function deletePhoto(id: string) {
     const token = auth.state.token;
-    if (!token || !window.confirm('删除这张保存的照片？')) return;
+    if (
+      !token ||
+      deletingPhotoId.value ||
+      !window.confirm('删除这张保存的照片？')
+    )
+      return;
+    const isCurrent = captureIdentity();
+    photoError.value = '';
     deletingPhotoId.value = id;
     try {
-      await deleteTryOnPhoto(token, id);
+      await deleteTryOnPhoto(token, id, actionController.signal);
+      if (!isCurrent()) return;
       savedPhotos.value = savedPhotos.value.filter((photo) => photo.id !== id);
       if (selectedPhotoId.value === id) selectedPhotoId.value = null;
+      toast.success('照片已删除');
     } catch (error) {
+      if (!isCurrent()) return;
       photoError.value =
         error instanceof Error ? error.message : '照片删除失败';
     } finally {
@@ -311,10 +363,14 @@ export function useMyTryOnsPage() {
   async function markRead(task: TryOnTask) {
     const token = auth.state.token;
     if (!token || !task.notification.unread) return;
+    const isCurrent = captureIdentity();
+    actionError.value = '';
     try {
-      await markTryOnNotificationRead(token, task.id);
+      await markTryOnNotificationRead(token, task.id, actionController.signal);
+      if (!isCurrent()) return;
       task.notification.unread = false;
     } catch (error) {
+      if (!isCurrent()) return;
       actionError.value =
         error instanceof Error ? error.message : '提醒状态更新失败';
     }
@@ -335,6 +391,7 @@ export function useMyTryOnsPage() {
 
   onBeforeUnmount(() => {
     disposed = true;
+    actionController.abort();
     listController?.abort();
     photoController?.abort();
     stopPolling();

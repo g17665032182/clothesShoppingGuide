@@ -8,7 +8,6 @@ import {
   UsersRound,
 } from '@lucide/vue';
 import type { User, UserRole } from '@/api/types/users';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,7 +40,7 @@ import {
 
 defineProps<{
   currentUserId?: string;
-  error: string;
+  failed: boolean;
   loading: boolean;
   search: string;
   updatingUserId: string | null;
@@ -95,10 +94,6 @@ function updateRole(user: User, value: unknown) {
       </Button>
     </div>
 
-    <Alert v-if="error" variant="destructive">
-      <AlertDescription role="alert">{{ error }}</AlertDescription>
-    </Alert>
-
     <div class="overflow-x-auto rounded-lg border">
       <Table class="min-w-[760px]">
         <TableCaption class="sr-only">用户管理列表</TableCaption>
@@ -127,7 +122,9 @@ function updateRole(user: User, value: unknown) {
               <Empty class="border-0 py-8">
                 <EmptyHeader>
                   <EmptyMedia variant="icon"><UsersRound /></EmptyMedia>
-                  <EmptyTitle>没有找到匹配的用户</EmptyTitle>
+                  <EmptyTitle>{{
+                    failed ? '用户列表加载失败' : '没有找到匹配的用户'
+                  }}</EmptyTitle>
                   <EmptyDescription
                     >尝试调整搜索条件，或刷新列表。</EmptyDescription
                   >

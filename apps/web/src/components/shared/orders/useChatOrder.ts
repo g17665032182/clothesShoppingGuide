@@ -1,4 +1,6 @@
 import { onBeforeUnmount, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
+import { useErrorToast } from '@/composables/use-error-toast';
 import { ApiError } from '@/api';
 import {
   cancelOrder,
@@ -23,6 +25,7 @@ export function useChatOrder() {
   const detailStatus = ref<DetailStatus>('idle');
   const actionStatus = ref<ActionStatus>('idle');
   const error = ref('');
+  useErrorToast(() => error.value);
   let identityVersion = 0;
   let disposed = false;
   let requestVersion = 0;
@@ -131,6 +134,13 @@ export function useChatOrder() {
       order.value = updated;
       detailStatus.value = 'success';
       actionStatus.value = 'idle';
+      toast.success(
+        action === 'pay'
+          ? '模拟支付成功'
+          : action === 'cancel'
+            ? '订单已取消'
+            : '已确认收货',
+      );
     } catch (cause) {
       if (controller.signal.aborted || !isCurrent(identity, userId)) return;
       actionStatus.value =

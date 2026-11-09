@@ -15,16 +15,16 @@ const emit = defineEmits<{
 
 <template>
   <header
-    class="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-3 sm:px-6"
+    class="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6"
   >
-    <div class="flex items-center gap-3">
+    <div class="flex min-w-0 flex-1 basis-40 items-center gap-3">
       <Avatar size="lg">
         <AvatarFallback>
           <Sparkles aria-hidden="true" data-icon="inline-start" />
         </AvatarFallback>
       </Avatar>
       <div class="min-w-0">
-        <CardTitle>{{ title }}</CardTitle>
+        <CardTitle class="wrap-anywhere">{{ title }}</CardTitle>
         <CardDescription class="mt-1 flex items-center gap-1.5">
           <span
             class="size-1.5 rounded-full bg-primary"
@@ -34,15 +34,18 @@ const emit = defineEmits<{
         </CardDescription>
       </div>
     </div>
-    <Button
-      aria-label="开始新对话"
-      size="sm"
-      type="button"
-      variant="outline"
-      @click="emit('new')"
-    >
-      <Plus aria-hidden="true" data-icon="inline-start" />
-      新对话
-    </Button>
+    <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      <slot name="actions" />
+      <Button
+        aria-label="开始新对话"
+        size="sm"
+        type="button"
+        variant="outline"
+        @click="emit('new')"
+      >
+        <Plus aria-hidden="true" data-icon="inline-start" />
+        新对话
+      </Button>
+    </div>
   </header>
 </template>

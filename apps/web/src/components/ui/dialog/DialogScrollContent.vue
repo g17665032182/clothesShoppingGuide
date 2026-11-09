@@ -5,6 +5,7 @@ import type { HTMLAttributes } from 'vue';
 import { XIcon } from '@lucide/vue';
 import { reactiveOmit } from '@vueuse/core';
 import { cn } from 'cn';
+import { preventToastDismiss } from '@/components/ui/sonner/prevent-toast-dismiss';
 import {
   DialogClose,
   DialogContent,
@@ -40,6 +41,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
           )
         "
         v-bind="{ ...$attrs, ...forwarded }"
+        @interact-outside="preventToastDismiss"
         @pointer-down-outside="
           (event) => {
             const originalEvent = event.detail.originalEvent;

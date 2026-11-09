@@ -232,14 +232,13 @@ function openTryOn(item: (typeof resultSets.value)[number]['items'][number]) {
       :disabled="disabled || set.result.loadingMore"
       @click="emit('more', set.index)"
     >
-      {{ set.result.loadingMore ? '正在加载' : '查看更多商品' }}
+      {{
+        set.result.loadingMore
+          ? '正在加载'
+          : set.result.loadMoreError
+            ? '重试加载更多商品'
+            : '查看更多商品'
+      }}
     </button>
-    <p
-      v-if="set.result.loadMoreError"
-      class="text-sm text-destructive"
-      role="alert"
-    >
-      {{ set.result.loadMoreError }}
-    </p>
   </section>
 </template>

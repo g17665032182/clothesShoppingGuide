@@ -26,7 +26,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Dialog,
   DialogContent,
@@ -65,7 +64,6 @@ const {
   editingTitle,
   enabled,
   memoryDocument,
-  error,
   loadPreferences,
   preferenceCategories,
   page,
@@ -77,14 +75,13 @@ const {
   startCreate,
   startEdit,
   status,
-  submitError,
+  validationError,
   submitting,
   toggleEnabled,
   total,
   totalPages,
   settingPending,
   settingsStatus,
-  settingError,
   loadSettings,
 } = useMemoriesPage();
 
@@ -132,12 +129,6 @@ function handleEditorOpenChange(open: boolean) {
       </div>
     </header>
 
-    <Alert v-if="settingError" variant="destructive">
-      <AlertTriangle />
-      <AlertTitle>设置未更新</AlertTitle>
-      <AlertDescription>{{ settingError }}</AlertDescription>
-    </Alert>
-
     <!-- 菜单切换只停用文档实例，保留未保存的草稿。 -->
     <KeepAlive>
       <MemoryDocument
@@ -156,12 +147,6 @@ function handleEditorOpenChange(open: boolean) {
       v-show="activeView === 'preferences'"
       class="flex min-w-0 flex-col gap-4"
     >
-      <Alert v-if="submitError && !editorOpen" variant="destructive">
-        <AlertTriangle aria-hidden="true" />
-        <AlertTitle>操作未完成</AlertTitle>
-        <AlertDescription>{{ submitError }}</AlertDescription>
-      </Alert>
-
       <div class="flex flex-wrap items-center justify-between gap-3">
         <FieldGroup class="w-32 shrink-0 sm:w-40">
           <Field orientation="horizontal">
@@ -235,7 +220,7 @@ function handleEditorOpenChange(open: boolean) {
         <EmptyHeader>
           <EmptyMedia variant="icon"><AlertTriangle /></EmptyMedia>
           <EmptyTitle>偏好加载失败</EmptyTitle>
-          <EmptyDescription>{{ error }}</EmptyDescription>
+          <EmptyDescription>请重新加载偏好。</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button variant="outline" @click="loadPreferences(1)">
@@ -324,7 +309,7 @@ function handleEditorOpenChange(open: boolean) {
       <PreferenceEditor
         v-model="editor"
         :pending="submitting"
-        :error="submitError"
+        :error="validationError"
         @submit="savePreference"
         @cancel="cancelEdit"
       />

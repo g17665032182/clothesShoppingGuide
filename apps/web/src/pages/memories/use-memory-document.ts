@@ -9,6 +9,8 @@ import {
   type Ref,
   type UnwrapNestedRefs,
 } from 'vue';
+import { toast } from 'vue-sonner';
+import { useErrorToast } from '@/composables/use-error-toast';
 
 import { ApiError } from '@/api';
 import {
@@ -42,6 +44,8 @@ export function useMemoryDocument(active: Readonly<Ref<boolean>>) {
   const settingsStatus = ref<DocumentStatus>('idle');
   const settingPending = ref(false);
   const settingError = ref('');
+  useErrorToast(() => (active.value ? error.value : ''));
+  useErrorToast(() => (active.value ? settingError.value : ''));
   const dirty = computed(
     () => document.value !== null && draft.value !== document.value.content,
   );
@@ -146,6 +150,7 @@ export function useMemoryDocument(active: Readonly<Ref<boolean>>) {
       if (!isCurrent(controller, version)) return;
       document.value = result;
       saved.value = draft.value === content;
+      toast.success('记忆文档已保存');
       status.value = result.content ? 'success' : 'empty';
     } catch (cause) {
       if (!isCurrent(controller, version)) return;
@@ -197,6 +202,7 @@ export function useMemoryDocument(active: Readonly<Ref<boolean>>) {
       await clearMemoryDocument(token, controller.signal);
       if (!isCurrent(controller, version)) return;
       clearOpen.value = false;
+      toast.success('记忆文档已清空');
       conflict.value = false;
       latest.value = null;
       saved.value = false;
@@ -266,6 +272,7 @@ export function useMemoryDocument(active: Readonly<Ref<boolean>>) {
       );
       if (!isCurrent(controller, version)) return;
       enabled.value = settings.enabled;
+      toast.success(settings.enabled ? '自动记忆已开启' : '自动记忆已关闭');
     } catch (cause) {
       if (!isCurrent(controller, version)) return;
       settingError.value =

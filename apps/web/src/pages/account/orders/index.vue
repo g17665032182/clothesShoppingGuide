@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { RefreshCw, X } from '@lucide/vue';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -30,13 +29,11 @@ const {
   query,
   pageData,
   listStatus,
-  listError,
   detailStatus,
   detailError,
   selectedOrder,
   detailOpen,
   actionStatus,
-  actionError,
   actionDialogOpen,
   actionType,
   loadOrders,
@@ -112,14 +109,13 @@ const {
         ><X data-icon="inline-start" />重置</Button
       >
     </FieldGroup>
-    <Alert v-if="listError" variant="destructive"
-      ><AlertDescription role="alert">{{ listError }}</AlertDescription></Alert
+    <p
+      v-if="listStatus === 'error'"
+      role="status"
+      class="text-sm text-muted-foreground"
     >
-    <Alert v-if="actionError" variant="destructive"
-      ><AlertDescription role="alert">{{
-        actionError
-      }}</AlertDescription></Alert
-    >
+      订单列表加载失败，请刷新重试。
+    </p>
     <OrderList
       :orders="pageData.items"
       :status="listStatus"

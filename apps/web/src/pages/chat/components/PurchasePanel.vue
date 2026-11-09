@@ -2,12 +2,11 @@
 import { computed, ref, watch } from 'vue';
 import {
   Check,
-  ChevronDown,
-  ChevronUp,
   CreditCard,
   PackageCheck,
   RefreshCw,
   Save,
+  ShoppingBag,
   Trash2,
 } from '@lucide/vue';
 import type {
@@ -16,9 +15,20 @@ import type {
   PurchaseRecipient,
 } from '@/api/types/chat-purchase';
 import type { OrderDetail } from '@/api/types/orders';
+import OrderStatusBadge from '@/components/shared/orders/OrderStatusBadge.vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -33,6 +43,7 @@ import { Spinner } from '@/components/ui/spinner';
 
 const props = withDefaults(
   defineProps<{
+    modelValue: boolean;
     draft: PurchaseDraft | null;
     order: OrderDetail | null;
     status:
@@ -49,6 +60,7 @@ const props = withDefaults(
   { errorMessage: '' },
 );
 const emit = defineEmits<{
+  (event: 'update:modelValue', value: boolean): void;
   (
     event: 'update',
     payload: {
@@ -68,7 +80,6 @@ const phone = ref('');
 const address = ref('');
 const quantity = ref(1);
 const selectedSkuId = ref<string | null>(null);
-const collapsed = ref(false);
 let previousFields: {
   draftId: string;
   name: string;
@@ -191,6 +202,12 @@ const statusLabel = computed(() => {
   }
 });
 
+const hasPurchase = computed(
+  () =>
+    Boolean(props.draft || props.order) ||
+    ['submitting', 'error', 'unknown'].includes(props.status),
+);
+
 function issueText(issue: PurchaseIssue): string {
   if (issue.code === 'missing_field') {
     const fields: Record<
@@ -245,184 +262,198 @@ function updateQuantity(value: string): void {
 </script>
 
 <template>
-  <section
-    class="max-h-[min(42dvh,24rem)] overflow-y-auto rounded-md border border-border bg-background p-3"
-  >
-    <div class="flex items-center justify-between gap-2">
-      <div class="flex min-w-0 items-center gap-2">
-        <h2 class="text-sm font-medium">本次购买</h2>
-        <Badge v-if="draft" variant="secondary">{{ statusLabel }}</Badge>
-      </div>
-      <Button
-        size="icon"
-        variant="ghost"
-        :aria-label="collapsed ? '展开购买信息' : '收起购买信息'"
-        :title="collapsed ? '展开购买信息' : '收起购买信息'"
-        @click="collapsed = !collapsed"
-      >
-        <ChevronDown v-if="collapsed" />
-        <ChevronUp v-else />
+  <Dialog :open="modelValue" @update:open="emit('update:modelValue', $event)">
+    <DialogTrigger v-if="hasPurchase" as-child>
+      <Button size="sm" variant="outline" type="button">
+        <ShoppingBag data-icon="inline-start" />
+        本次购买
+        <Badge v-if="draft" variant="secondary" class="hidden sm:inline-flex">
+          {{ statusLabel }}
+        </Badge>
       </Button>
-    </div>
-    <div v-if="!collapsed" class="mt-3 flex flex-col gap-3">
-      <p v-if="draft" class="break-all text-xs text-muted-foreground">
-        {{ draft.productExternalId }}
-      </p>
-      <Alert v-if="order">
-        <AlertDescription
-          class="flex flex-wrap items-center justify-between gap-2"
+    </DialogTrigger>
+    <DialogContent
+      class="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl"
+    >
+      <DialogHeader class="pr-8">
+        <DialogTitle class="flex flex-wrap items-center gap-2">
+          本次购买
+          <Badge v-if="draft" variant="secondary">{{ statusLabel }}</Badge>
+        </DialogTitle>
+        <DialogDescription class="break-all">
+          {{
+            draft?.confirmation?.name ?? draft?.productExternalId ?? '购买信息'
+          }}
+        </DialogDescription>
+      </DialogHeader>
+      <div class="flex min-h-0 flex-col gap-4 overflow-y-auto">
+        <p
+          v-if="status === 'error' || status === 'unknown'"
+          role="status"
+          class="text-sm text-muted-foreground"
         >
-          <span
-            >已生成订单 <strong class="break-all">{{ order.orderNo }}</strong
-            >，当前状态：{{
-              order.status === 'pending_payment' ? '待支付' : order.status
-            }}。</span
-          >
-          <Button
-            size="sm"
-            variant="outline"
-            @click="emit('openOrder', order.id)"
-          >
-            <CreditCard data-icon="inline-start" />查看 / 处理
-          </Button>
-        </AlertDescription>
-      </Alert>
-      <Alert v-if="errorMessage" variant="destructive">
-        <AlertDescription role="alert">{{ errorMessage }}</AlertDescription>
-      </Alert>
-      <div
-        v-if="status === 'loading' && !draft"
-        class="flex items-center gap-2 text-sm text-muted-foreground"
-        role="status"
-      >
-        <Spinner />正在读取购买草稿
-      </div>
-      <div
-        v-else-if="status === 'empty' && !draft"
-        class="text-sm text-muted-foreground"
-      >
-        当前会话没有进行中的购买。
-      </div>
-      <template v-else-if="draft && !isTerminal">
-        <FieldGroup class="grid gap-2 sm:grid-cols-2">
-          <Field>
-            <FieldLabel for="purchase-name">收件人</FieldLabel>
-            <Input id="purchase-name" v-model="name" :disabled="!isEditable" />
-          </Field>
-          <Field>
-            <FieldLabel for="purchase-phone">手机号</FieldLabel>
-            <Input
-              id="purchase-phone"
-              v-model="phone"
-              inputmode="tel"
-              :disabled="!isEditable"
-            />
-          </Field>
-          <Field class="sm:col-span-2">
-            <FieldLabel for="purchase-address">收货地址</FieldLabel>
-            <Input
-              id="purchase-address"
-              v-model="address"
-              :disabled="!isEditable"
-            />
-          </Field>
-          <Field v-if="skuOptions.length" class="sm:col-span-2">
-            <FieldLabel for="purchase-sku">规格</FieldLabel>
-            <Select
-              id="purchase-sku"
-              :model-value="selectedSkuId ?? undefined"
-              :disabled="!isEditable"
-              @update:model-value="
-                (value) => {
-                  selectedSkuId = String(value);
-                }
-              "
-            >
-              <SelectTrigger
-                ><SelectValue placeholder="选择颜色和尺码"
-              /></SelectTrigger>
-              <SelectContent
-                ><SelectGroup>
-                  <SelectItem
-                    v-for="sku in skuOptions"
-                    :key="sku.skuId"
-                    :value="sku.skuId"
-                    :disabled="!sku.inStock"
-                  >
-                    {{ sku.color }} / {{ sku.size }} · ¥{{ sku.unitPrice
-                    }}{{ sku.inStock ? '' : '（无货）' }}
-                  </SelectItem>
-                </SelectGroup></SelectContent
-              >
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel for="purchase-quantity">数量</FieldLabel>
-            <Input
-              id="purchase-quantity"
-              :model-value="quantity"
-              type="number"
-              min="1"
-              max="99"
-              :disabled="!isEditable"
-              @update:model-value="updateQuantity(String($event))"
-            />
-          </Field>
-        </FieldGroup>
-        <p v-if="isDirty" class="text-xs text-muted-foreground">
-          有未保存的购买信息变更；保存后才能确认下单。
+          {{
+            status === 'unknown'
+              ? '购买结果尚未确认，请重新读取核实。'
+              : '购买操作未完成，可重新读取后继续。'
+          }}
         </p>
-        <div
-          v-if="draft.confirmation"
-          class="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 text-sm"
-        >
-          <div class="flex items-center gap-2 font-medium">
-            <PackageCheck aria-hidden="true" />确认卡
-          </div>
-          <p class="break-all">
-            {{ draft.confirmation.name }} · {{ draft.confirmation.color }} /
-            {{ draft.confirmation.size }}
-          </p>
-          <p>
-            数量 {{ draft.confirmation.quantity }} · ¥{{
-              draft.confirmation.unitPrice
-            }}
-          </p>
-          <p class="font-medium">
-            应付 ¥{{ draft.confirmation.payableAmount }}
-            {{ draft.confirmation.currency }}
-          </p>
-          <p class="break-all text-muted-foreground">
-            {{ draft.confirmation.recipient.name }} ·
-            {{ draft.confirmation.recipient.phone }} ·
-            {{ draft.confirmation.recipient.address }}
-          </p>
-        </div>
-        <ul
-          v-if="draft.issues.length"
-          class="flex flex-col gap-1 text-sm text-muted-foreground"
-        >
-          <li
-            v-for="issue in draft.issues"
-            :key="`${issue.code}-${issue.code === 'missing_field' ? issue.field : ''}`"
+        <Alert v-if="order">
+          <AlertDescription
+            class="flex flex-wrap items-center justify-between gap-2"
           >
-            {{ issueText(issue) }}
-          </li>
-        </ul>
-      </template>
-      <p v-else-if="draft" class="text-sm text-muted-foreground">
-        此购买草稿已{{ statusLabel }}，不能继续编辑。
-      </p>
-      <div class="flex flex-wrap justify-between gap-2">
+            <span
+              >已生成订单 <strong class="break-all">{{ order.orderNo }}</strong
+              >，当前状态：<OrderStatusBadge :status="order.status" />。</span
+            >
+            <Button
+              size="sm"
+              variant="outline"
+              @click="emit('openOrder', order.id)"
+            >
+              <CreditCard data-icon="inline-start" />查看 / 处理
+            </Button>
+          </AlertDescription>
+        </Alert>
+        <div
+          v-if="status === 'loading' || status === 'submitting'"
+          class="flex items-center gap-2 text-sm text-muted-foreground"
+          role="status"
+        >
+          <Spinner />{{
+            status === 'loading' ? '正在读取购买草稿' : '正在提交购买信息'
+          }}
+        </div>
+        <Empty v-else-if="status === 'empty' && !draft">
+          <EmptyHeader>
+            <EmptyTitle>当前会话没有进行中的购买</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
+        <template v-if="draft && !isTerminal">
+          <FieldGroup class="grid gap-2 sm:grid-cols-2">
+            <Field>
+              <FieldLabel for="purchase-name">收件人</FieldLabel>
+              <Input
+                id="purchase-name"
+                v-model="name"
+                :disabled="!isEditable"
+              />
+            </Field>
+            <Field>
+              <FieldLabel for="purchase-phone">手机号</FieldLabel>
+              <Input
+                id="purchase-phone"
+                v-model="phone"
+                inputmode="tel"
+                :disabled="!isEditable"
+              />
+            </Field>
+            <Field class="sm:col-span-2">
+              <FieldLabel for="purchase-address">收货地址</FieldLabel>
+              <Input
+                id="purchase-address"
+                v-model="address"
+                :disabled="!isEditable"
+              />
+            </Field>
+            <Field v-if="skuOptions.length" class="sm:col-span-2">
+              <FieldLabel for="purchase-sku">规格</FieldLabel>
+              <Select
+                :model-value="selectedSkuId ?? undefined"
+                :disabled="!isEditable"
+                @update:model-value="
+                  (value) => {
+                    selectedSkuId = String(value);
+                  }
+                "
+              >
+                <SelectTrigger id="purchase-sku" class="w-full"
+                  ><SelectValue placeholder="选择颜色和尺码"
+                /></SelectTrigger>
+                <SelectContent
+                  ><SelectGroup>
+                    <SelectItem
+                      v-for="sku in skuOptions"
+                      :key="sku.skuId"
+                      :value="sku.skuId"
+                      :disabled="!sku.inStock"
+                    >
+                      {{ sku.color }} / {{ sku.size }} · ¥{{ sku.unitPrice
+                      }}{{ sku.inStock ? '' : '（无货）' }}
+                    </SelectItem>
+                  </SelectGroup></SelectContent
+                >
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel for="purchase-quantity">数量</FieldLabel>
+              <Input
+                id="purchase-quantity"
+                :model-value="quantity"
+                type="number"
+                min="1"
+                max="99"
+                :disabled="!isEditable"
+                @update:model-value="updateQuantity(String($event))"
+              />
+            </Field>
+          </FieldGroup>
+          <p v-if="isDirty" class="text-xs text-muted-foreground">
+            有未保存的购买信息变更；保存后才能确认下单。
+          </p>
+          <div v-if="draft.confirmation" class="flex flex-col gap-2 text-sm">
+            <div class="flex items-center gap-2 font-medium">
+              <PackageCheck aria-hidden="true" />确认卡
+            </div>
+            <p class="break-all">
+              {{ draft.confirmation.name }} · {{ draft.confirmation.color }} /
+              {{ draft.confirmation.size }}
+            </p>
+            <p>
+              数量 {{ draft.confirmation.quantity }} · ¥{{
+                draft.confirmation.unitPrice
+              }}
+            </p>
+            <p class="font-medium">
+              应付 ¥{{ draft.confirmation.payableAmount }}
+              {{ draft.confirmation.currency }}
+            </p>
+            <p class="break-all text-muted-foreground">
+              {{ draft.confirmation.recipient.name }} ·
+              {{ draft.confirmation.recipient.phone }} ·
+              {{ draft.confirmation.recipient.address }}
+            </p>
+          </div>
+          <ul
+            v-if="draft.issues.length"
+            class="flex flex-col gap-1 text-sm text-muted-foreground"
+          >
+            <li
+              v-for="issue in draft.issues"
+              :key="`${issue.code}-${issue.code === 'missing_field' ? issue.field : ''}`"
+            >
+              {{ issueText(issue) }}
+            </li>
+          </ul>
+        </template>
+        <p v-else-if="draft && !order" class="text-sm text-muted-foreground">
+          此购买草稿已{{ statusLabel }}，不能继续编辑。
+        </p>
+      </div>
+      <DialogFooter class="flex-wrap">
         <Button
           v-if="draft && !isTerminal"
           variant="ghost"
+          class="sm:mr-auto"
           :disabled="!isEditable"
           @click="emit('discard')"
         >
           <Trash2 data-icon="inline-start" />放弃本次购买
         </Button>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" @click="emit('update:modelValue', false)">
+            关闭
+          </Button>
           <Button
             v-if="status === 'error' || status === 'unknown'"
             variant="outline"
@@ -446,7 +477,7 @@ function updateQuantity(value: string): void {
             <Check data-icon="inline-start" />确认下单
           </Button>
         </div>
-      </div>
-    </div>
-  </section>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

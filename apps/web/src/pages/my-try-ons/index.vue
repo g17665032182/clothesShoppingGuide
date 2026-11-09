@@ -34,10 +34,8 @@ const {
   resultImageUrls,
   savedPhotos,
   listStatus,
-  listError,
   photoStatus,
   photoError,
-  actionError,
   selectedPhotoId,
   selectedColor,
   consentOpen,
@@ -88,12 +86,6 @@ function returnToChat() {
         <RefreshCw />
       </Button>
     </header>
-
-    <Alert v-if="actionError" variant="destructive">
-      <AlertTriangle aria-hidden="true" />
-      <AlertTitle>操作未完成</AlertTitle>
-      <AlertDescription>{{ actionError }}</AlertDescription>
-    </Alert>
 
     <section v-if="product" class="space-y-4 border-y py-5">
       <div class="flex flex-wrap items-start gap-4">
@@ -174,7 +166,9 @@ function returnToChat() {
               <Spinner />正在加载保存的照片
             </p>
             <Alert v-if="photoError" variant="destructive">
-              <AlertDescription role="alert">{{ photoError }}</AlertDescription>
+              <AlertDescription role="status"
+                >照片列表需要重新读取。</AlertDescription
+              >
               <Button variant="outline" size="sm" @click="loadSavedPhotos"
                 >重试</Button
               >
@@ -240,7 +234,7 @@ function returnToChat() {
       <EmptyHeader>
         <EmptyMedia variant="icon"><AlertTriangle /></EmptyMedia>
         <EmptyTitle>试穿历史加载失败</EmptyTitle>
-        <EmptyDescription>{{ listError }}</EmptyDescription>
+        <EmptyDescription>请刷新试穿历史重试。</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         <Button variant="outline" @click="loadTasks"

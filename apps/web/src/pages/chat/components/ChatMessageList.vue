@@ -76,8 +76,12 @@ function formatSessionTime(createdAt: string): string {
           v-if="hasEarlierMessages || historyError"
           class="mx-auto flex w-full max-w-3xl flex-col items-center gap-2 pt-4"
         >
-          <p v-if="historyError" class="text-sm text-destructive" role="alert">
-            {{ historyError }}
+          <p
+            v-if="historyError"
+            role="status"
+            class="text-sm text-muted-foreground"
+          >
+            更早消息加载失败
           </p>
           <Button
             :disabled="isLoadingEarlierMessages"

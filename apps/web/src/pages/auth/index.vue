@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { AlertCircle, RefreshCw } from '@lucide/vue';
+import { RefreshCw } from '@lucide/vue';
 import { cn } from 'cn';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -29,7 +28,6 @@ const {
   captchaPending,
   displayName,
   email,
-  error,
   isRegister,
   password,
   pending,
@@ -181,11 +179,6 @@ const {
               </div>
             </Field>
           </FieldGroup>
-
-          <Alert v-if="error" variant="destructive">
-            <AlertCircle aria-hidden="true" />
-            <AlertDescription>{{ error }}</AlertDescription>
-          </Alert>
 
           <Button class="w-full" :disabled="pending" size="lg" type="submit">
             <Spinner v-if="pending" data-icon="inline-start" />

@@ -51,7 +51,7 @@ const emit = defineEmits<{
       role="alert"
     >
       <AlertTriangle class="size-6 text-destructive" />
-      <p class="text-sm text-destructive">{{ state.error }}</p>
+      <p class="text-sm text-muted-foreground">记忆文档加载失败</p>
       <Button variant="outline" @click="emit('load')">
         <RefreshCw data-icon="inline-start" />重试
       </Button>
@@ -115,12 +115,12 @@ const emit = defineEmits<{
           </Button>
         </div>
       </div>
-      <Alert v-if="state.error" variant="destructive">
+      <Alert v-if="state.conflict" variant="destructive">
         <AlertTriangle />
-        <AlertTitle>{{
-          state.conflict ? '版本冲突' : '操作未完成'
-        }}</AlertTitle>
-        <AlertDescription>{{ state.error }}</AlertDescription>
+        <AlertTitle>版本冲突</AlertTitle>
+        <AlertDescription
+          >当前草稿已保留，请比对服务器最新版本后继续编辑。</AlertDescription
+        >
       </Alert>
       <div v-if="state.conflict" class="flex flex-col gap-3 border-l-2 pl-4">
         <div v-if="state.latest" class="flex flex-col gap-2">
@@ -179,9 +179,6 @@ const emit = defineEmits<{
           文档及未保存的草稿将被清空，结构化偏好和聊天记录不受影响。
         </AlertDialogDescription>
       </AlertDialogHeader>
-      <p v-if="state.error" class="text-sm text-destructive" role="alert">
-        {{ state.error }}
-      </p>
       <AlertDialogFooter>
         <AlertDialogCancel :disabled="state.busy">取消</AlertDialogCancel>
         <AlertDialogAction

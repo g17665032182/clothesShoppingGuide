@@ -86,7 +86,12 @@ function setField<Key extends keyof PreferenceEditorState>(
 </script>
 
 <template>
-  <form class="flex min-w-0 flex-col gap-6" @submit.prevent="emit('submit')">
+  <form
+    class="flex min-w-0 flex-col gap-6"
+    :aria-invalid="Boolean(error)"
+    :aria-describedby="error ? `${id}-error` : undefined"
+    @submit.prevent="emit('submit')"
+  >
     <FieldGroup>
       <Field>
         <FieldLabel :for="`${id}-category`">类别</FieldLabel>
@@ -324,7 +329,12 @@ function setField<Key extends keyof PreferenceEditorState>(
       </Field>
     </FieldGroup>
 
-    <p v-if="error" role="alert" class="text-sm text-destructive">
+    <p
+      v-if="error"
+      :id="`${id}-error`"
+      role="alert"
+      class="text-sm text-destructive"
+    >
       {{ error }}
     </p>
     <div class="flex justify-end gap-2">

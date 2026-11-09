@@ -1,5 +1,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { toast } from 'vue-sonner';
+import { useErrorToast } from '@/composables/use-error-toast';
 import { ApiError } from '@/api';
 import { getCaptcha } from '@/api/modules/auth';
 import { auth } from '@/lib/auth';
@@ -19,6 +21,7 @@ export function useAuthPage() {
   const captchaPending = ref(false);
   const captchaCountdown = ref(0);
   const error = ref('');
+  useErrorToast(() => error.value);
   const pending = ref(false);
   let captchaTimer: ReturnType<typeof setInterval> | null = null;
   let captchaRequest: AbortController | null = null;
@@ -89,6 +92,7 @@ export function useAuthPage() {
       if (isRegister.value) {
         await auth.register(email.value, password.value, displayName.value);
         await router.push('/account');
+        toast.success('注册成功');
       } else {
         if (!captchaChallengeId.value || !captchaAnswer.value.trim()) {
           throw new Error('请先获取并填写验证码');
@@ -101,6 +105,7 @@ export function useAuthPage() {
           captchaAnswer.value,
         );
         await router.push('/chat');
+        toast.success('登录成功');
       }
     } catch (cause) {
       error.value =

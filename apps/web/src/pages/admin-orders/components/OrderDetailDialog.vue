@@ -4,7 +4,6 @@ import type {
   AdminOrderDetail,
   AdminOrderStatus,
 } from '@/api/types/admin-orders';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -58,9 +57,9 @@ function formatDate(value: string | null): string {
         <Skeleton class="h-8 w-1/2" /><Skeleton class="h-40 w-full" />
       </div>
       <div v-if="error" class="flex flex-col items-start gap-3">
-        <Alert variant="destructive"
-          ><AlertDescription>{{ error }}</AlertDescription></Alert
-        >
+        <p role="status" class="text-sm text-muted-foreground">
+          订单详情尚未加载，请重新读取。
+        </p>
         <Button variant="outline" @click="emit('retry')">重新读取</Button>
       </div>
       <template v-if="order">

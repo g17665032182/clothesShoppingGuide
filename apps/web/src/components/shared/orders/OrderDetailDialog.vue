@@ -111,20 +111,24 @@ function formatDate(value: string | null): string {
       <div v-if="status === 'loading' && !order" class="flex flex-col gap-4">
         <Skeleton class="h-8 w-1/2" /><Skeleton class="h-40 w-full" />
       </div>
-      <div v-if="error" class="flex flex-col items-start gap-3">
-        <Alert variant="destructive"
-          ><AlertDescription role="alert">{{ error }}</AlertDescription></Alert
-        >
+      <div
+        v-if="
+          error ||
+          status === 'unknown' ||
+          actionStatus === 'unknown' ||
+          actionStatus === 'error'
+        "
+        class="flex flex-col items-start gap-3"
+      >
+        <p role="status" class="text-sm text-muted-foreground">
+          {{
+            status === 'unknown' || actionStatus === 'unknown'
+              ? '操作结果尚未确认，请重新读取核实后再操作。'
+              : '订单信息需要重新读取后再操作。'
+          }}
+        </p>
         <Button variant="outline" @click="emit('retry')">重新读取</Button>
       </div>
-      <template v-if="status === 'unknown' && !order">
-        <Alert variant="destructive"
-          ><AlertDescription role="alert"
-            >订单读取结果未知，请重新读取核实后再操作。</AlertDescription
-          ></Alert
-        >
-        <Button variant="outline" @click="emit('retry')">重新读取核实</Button>
-      </template>
       <template v-if="order">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-2">
@@ -159,18 +163,6 @@ function formatDate(value: string | null): string {
             >支付截止时间已到，正在向服务端核实订单状态。</AlertDescription
           ></Alert
         >
-        <Alert
-          v-if="
-            status === 'unknown' ||
-            actionStatus === 'unknown' ||
-            actionStatus === 'error'
-          "
-          variant="destructive"
-        >
-          <AlertDescription role="alert">{{
-            error || '操作结果尚未确认，请重新读取订单后再试。'
-          }}</AlertDescription>
-        </Alert>
         <dl class="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
           <div>
             <dt class="text-muted-foreground">应付金额</dt>

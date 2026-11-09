@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { RefreshCw } from '@lucide/vue';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import AdminPagination from '@/components/shared/AdminPagination.vue';
 import OrderFilters from './components/OrderFilters.vue';
@@ -15,7 +14,6 @@ const {
   detailOpen,
   detailStatus,
   goToPage,
-  listError,
   listStatus,
   loadOrders,
   openShipDialog,
@@ -59,9 +57,13 @@ const {
       @update:status="setFilter('status', $event)"
       @reset="resetFilters"
     />
-    <Alert v-if="listError" variant="destructive"
-      ><AlertDescription role="alert">{{ listError }}</AlertDescription></Alert
+    <p
+      v-if="listStatus === 'error'"
+      role="status"
+      class="text-sm text-muted-foreground"
     >
+      订单列表加载失败，请刷新重试。
+    </p>
     <OrderTable
       :orders="pageData.items"
       :loading="listStatus === 'loading'"

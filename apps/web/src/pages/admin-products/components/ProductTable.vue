@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Eye, PackageSearch } from '@lucide/vue';
 import type { AdminProductSummary } from '@/api/types/admin-products';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -47,9 +46,6 @@ function formatMoney(value: string | null) {
 
 <template>
   <div class="flex flex-col gap-4">
-    <Alert v-if="error" variant="destructive">
-      <AlertDescription role="alert">{{ error }}</AlertDescription>
-    </Alert>
     <div class="overflow-x-auto rounded-lg border">
       <Table class="min-w-[980px]">
         <TableCaption class="sr-only">商品管理列表</TableCaption>
@@ -80,8 +76,12 @@ function formatMoney(value: string | null) {
               <Empty class="border-0 py-10">
                 <EmptyHeader>
                   <EmptyMedia variant="icon"><PackageSearch /></EmptyMedia>
-                  <EmptyTitle>没有找到商品</EmptyTitle>
-                  <EmptyDescription>调整筛选条件后重试。</EmptyDescription>
+                  <EmptyTitle>{{
+                    error ? '商品列表加载失败' : '没有找到商品'
+                  }}</EmptyTitle>
+                  <EmptyDescription>{{
+                    error ? '请刷新列表重试。' : '调整筛选条件后重试。'
+                  }}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             </TableCell>

@@ -1209,7 +1209,7 @@ export const useChatStore = defineStore('chat', () => {
       await selectConversation(activeConversationId.value, true);
   }
 
-  async function removeConversation(id: string) {
+  async function removeConversation(id: string): Promise<boolean> {
     const token = auth.state.token;
     const session = findSession(id);
     if (
@@ -1217,14 +1217,14 @@ export const useChatStore = defineStore('chat', () => {
       !canDeleteConversations.value ||
       (session && tasks.has(session.key))
     )
-      return;
+      return false;
     const version = identityVersion;
     deletingConversationId.value = id;
     try {
       // 首轮请求失败且未取得服务端 ID 时，仅移除本地占位，不请求无效资源。
       if (!session || session.conversationId)
         await deleteConversationRequest(token, id);
-      if (version !== identityVersion) return;
+      if (version !== identityVersion) return false;
       if (session) {
         historyRequests.get(session.key)?.abort();
         historyRequests.delete(session.key);
@@ -1239,10 +1239,12 @@ export const useChatStore = defineStore('chat', () => {
         (item) => item.id !== id,
       );
       await loadConversations();
+      return version === identityVersion;
     } catch (error) {
       if (version === identityVersion)
         conversationListError.value =
           error instanceof Error ? error.message : '删除会话失败';
+      return false;
     } finally {
       if (version === identityVersion) deletingConversationId.value = null;
     }

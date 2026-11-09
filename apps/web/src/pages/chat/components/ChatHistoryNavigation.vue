@@ -222,7 +222,7 @@ function handleConversationScroll(event: Event) {
           class="flex flex-col items-start gap-2 px-2 py-2 text-xs text-destructive"
           role="alert"
         >
-          <span>{{ conversationListError }}</span>
+          <span>会话列表加载失败</span>
           <Button
             class="h-7 px-2"
             size="sm"
@@ -233,17 +233,18 @@ function handleConversationScroll(event: Event) {
             重试
           </Button>
         </div>
-        <p
+        <Button
           v-if="
             !isCollapsed &&
             conversationListError &&
             conversationListStatus !== 'error'
           "
-          class="px-2 py-2 text-xs text-destructive"
-          role="alert"
+          size="sm"
+          variant="outline"
+          @click="emit('retry')"
         >
-          {{ conversationListError }}
-        </p>
+          重试加载会话
+        </Button>
         <p
           v-if="!isCollapsed && isLoadingMoreConversations"
           class="px-2 py-2 text-xs text-muted-foreground"
