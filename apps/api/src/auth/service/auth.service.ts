@@ -56,12 +56,17 @@ export class AuthService {
   }
 
   public async login(dto: LoginInput): Promise<AuthSession> {
-    const captchaValid = await this.captchaService.verifyLoginAnswer(
-      dto.captchaChallengeId,
-      dto.captchaAnswer,
-    );
-    if (!captchaValid) {
-      throw new BadRequestException('验证码错误或已失效，请刷新后重试');
+    if (this.captchaService.isEnabled()) {
+      if (!dto.captchaChallengeId || !dto.captchaAnswer) {
+        throw new BadRequestException('请先获取并填写验证码');
+      }
+      const captchaValid = await this.captchaService.verifyLoginAnswer(
+        dto.captchaChallengeId,
+        dto.captchaAnswer,
+      );
+      if (!captchaValid) {
+        throw new BadRequestException('验证码错误或已失效，请刷新后重试');
+      }
     }
 
     const user = await this.usersService.findByEmail(dto.email);

@@ -23,12 +23,15 @@ import { useAuthPage } from './page';
 
 const {
   captchaAnswer,
+  captchaConfigStatus,
   captchaCountdown,
+  captchaEnabled,
   captchaImage,
   captchaPending,
   displayName,
   email,
   isRegister,
+  loadAuthConfig,
   password,
   pending,
   refreshCaptcha,
@@ -132,7 +135,7 @@ const {
               </FieldDescription>
             </Field>
 
-            <Field v-if="!isRegister">
+            <Field v-if="!isRegister && captchaEnabled">
               <FieldLabel for="auth-captcha">验证码</FieldLabel>
               <div class="flex items-center gap-3">
                 <img
@@ -178,9 +181,29 @@ const {
                 </span>
               </div>
             </Field>
+            <Field v-if="!isRegister && captchaConfigStatus === 'error'">
+              <FieldDescription class="flex items-center justify-between gap-3">
+                登录配置暂时不可用。
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  @click="loadAuthConfig"
+                >
+                  重试
+                </Button>
+              </FieldDescription>
+            </Field>
           </FieldGroup>
 
-          <Button class="w-full" :disabled="pending" size="lg" type="submit">
+          <Button
+            class="w-full"
+            :disabled="
+              pending || (!isRegister && captchaConfigStatus !== 'success')
+            "
+            size="lg"
+            type="submit"
+          >
             <Spinner v-if="pending" data-icon="inline-start" />
             {{ pending ? '正在提交' : isRegister ? '创建账户' : '登录' }}
           </Button>

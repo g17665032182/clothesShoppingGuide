@@ -3,7 +3,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import { useErrorToast } from '@/composables/use-error-toast';
 import { ApiError } from '@/api';
-import { getCaptcha } from '@/api/modules/auth';
+import { getAuthConfig, getCaptcha } from '@/api/modules/auth';
 import { auth } from '@/lib/auth';
 
 const CAPTCHA_REFRESH_COOLDOWN_SECONDS = 60;
@@ -17,6 +17,10 @@ export function useAuthPage() {
   const displayName = ref('');
   const captchaAnswer = ref('');
   const captchaChallengeId = ref('');
+  const captchaEnabled = ref(false);
+  const captchaConfigStatus = ref<'idle' | 'loading' | 'success' | 'error'>(
+    'idle',
+  );
   const captchaImage = ref('');
   const captchaPending = ref(false);
   const captchaCountdown = ref(0);
@@ -25,7 +29,31 @@ export function useAuthPage() {
   const pending = ref(false);
   let captchaTimer: ReturnType<typeof setInterval> | null = null;
   let captchaRequest: AbortController | null = null;
+  let configRequest: AbortController | null = null;
   let captchaRequestSequence = 0;
+  let configRequestSequence = 0;
+
+  async function loadAuthConfig() {
+    configRequest?.abort();
+    const request = new AbortController();
+    configRequest = request;
+    const requestSequence = ++configRequestSequence;
+    captchaConfigStatus.value = 'loading';
+    try {
+      const response = await getAuthConfig(request.signal);
+      if (requestSequence !== configRequestSequence) return;
+      captchaEnabled.value = response.captchaEnabled;
+      captchaConfigStatus.value = 'success';
+      error.value = '';
+    } catch (cause) {
+      if (request.signal.aborted || requestSequence !== configRequestSequence) {
+        return;
+      }
+      captchaConfigStatus.value = 'error';
+      error.value =
+        cause instanceof Error ? cause.message : '登录配置加载失败，请重试。';
+    }
+  }
 
   function clearCaptchaTimer() {
     if (captchaTimer) {
@@ -94,15 +122,21 @@ export function useAuthPage() {
         await router.push('/account');
         toast.success('注册成功');
       } else {
-        if (!captchaChallengeId.value || !captchaAnswer.value.trim()) {
+        if (captchaConfigStatus.value !== 'success') {
+          throw new Error('登录配置尚未加载完成，请重试。');
+        }
+        if (
+          captchaEnabled.value &&
+          (!captchaChallengeId.value || !captchaAnswer.value.trim())
+        ) {
           throw new Error('请先获取并填写验证码');
         }
         loginAttempted = true;
         await auth.signIn(
           email.value,
           password.value,
-          captchaChallengeId.value,
-          captchaAnswer.value,
+          captchaEnabled.value ? captchaChallengeId.value : undefined,
+          captchaEnabled.value ? captchaAnswer.value : undefined,
         );
         await router.push('/chat');
         toast.success('登录成功');
@@ -114,7 +148,7 @@ export function useAuthPage() {
           : cause instanceof Error
             ? cause.message
             : '操作失败，请稍后重试。';
-      if (loginAttempted) {
+      if (loginAttempted && captchaEnabled.value) {
         // 挑战提交后已被消费，清空旧图并解除冷却，允许用户立即手动获取新图。
         clearCaptchaTimer();
         captchaCountdown.value = 0;
@@ -131,6 +165,9 @@ export function useAuthPage() {
     isRegister,
     (register) => {
       if (register) {
+        configRequest?.abort();
+        configRequestSequence += 1;
+        captchaConfigStatus.value = 'idle';
         captchaRequest?.abort();
         captchaRequestSequence += 1;
         captchaPending.value = false;
@@ -139,6 +176,8 @@ export function useAuthPage() {
         captchaImage.value = '';
         captchaAnswer.value = '';
         captchaCountdown.value = 0;
+      } else {
+        void loadAuthConfig();
       }
     },
     { immediate: true },
@@ -147,18 +186,23 @@ export function useAuthPage() {
   onBeforeUnmount(() => {
     captchaRequest?.abort();
     captchaRequestSequence += 1;
+    configRequest?.abort();
+    configRequestSequence += 1;
     clearCaptchaTimer();
   });
 
   return {
     captchaAnswer,
+    captchaConfigStatus,
     captchaCountdown,
+    captchaEnabled,
     captchaImage,
     captchaPending,
     displayName,
     email,
     error,
     isRegister,
+    loadAuthConfig,
     password,
     pending,
     refreshCaptcha,

@@ -1,11 +1,19 @@
 import { apiRequest } from '@/api';
 import type {
+  AuthConfigResponse,
   AuthResponse,
   CaptchaResponse,
   LoginPayload,
   RegisterPayload,
 } from '@/api/types/auth';
 import type { User } from '@/api/types/users';
+
+/** 获取公开认证配置，不会创建验证码挑战。 */
+export function getAuthConfig(
+  signal?: AbortSignal,
+): Promise<AuthConfigResponse> {
+  return apiRequest<AuthConfigResponse>('/auth/config', { signal });
+}
 
 /** 用户登录，成功后服务端会通过 HttpOnly Cookie 写入 Refresh Token。 */
 export function signIn(payload: LoginPayload): Promise<AuthResponse> {

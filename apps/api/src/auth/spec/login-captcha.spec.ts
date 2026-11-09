@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 
 import { CaptchaService } from '../captcha/service/captcha.service.js';
 import { loginSchema } from '../dto/login.dto.js';
@@ -39,23 +39,13 @@ test('注册和登录 schema 校验字段范围并拒绝未知字段', () => {
   );
 });
 
-test('登录 schema 要求带上完整验证码凭据', () => {
+test('登录 schema 允许验证码字段省略，必填策略由服务端环境控制', () => {
   const result = loginSchema.safeParse({
     email: 'user@example.com',
     password: 'ChangeMe123!',
   });
 
-  assert.equal(result.success, false);
-  if (!result.success) {
-    assert.ok(
-      result.error.issues.some(
-        (issue) => issue.path[0] === 'captchaChallengeId',
-      ),
-    );
-    assert.ok(
-      result.error.issues.some((issue) => issue.path[0] === 'captchaAnswer'),
-    );
-  }
+  assert.equal(result.success, true);
 });
 
 test('验证码无效时不会查询账户或继续认证', async () => {
@@ -67,6 +57,7 @@ test('验证码无效时不会查询账户或继续认证', async () => {
     },
   } as never;
   const captchaService = {
+    isEnabled: () => true,
     verifyLoginAnswer: async () => false,
   } as unknown as CaptchaService;
   const service = new AuthService(
@@ -90,4 +81,62 @@ test('验证码无效时不会查询账户或继续认证', async () => {
       error instanceof BadRequestException && error.getStatus() === 400,
   );
   assert.equal(accountLookupCount, 0);
+});
+
+test('启用验证码的环境缺少验证码时不会查询账户', async () => {
+  let accountLookupCount = 0;
+  const service = new AuthService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {
+      findByEmail: async () => {
+        accountLookupCount += 1;
+        return null;
+      },
+    } as never,
+    { isEnabled: () => true } as never,
+    {} as never,
+    {} as never,
+  );
+
+  await assert.rejects(
+    service.login({ email: 'user@example.com', password: 'ChangeMe123!' }),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.getStatus() === 400,
+  );
+  assert.equal(accountLookupCount, 0);
+});
+
+test('开发环境跳过验证码校验并继续执行邮箱密码认证', async () => {
+  let accountLookupCount = 0;
+  let captchaVerificationCount = 0;
+  const service = new AuthService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {
+      findByEmail: async () => {
+        accountLookupCount += 1;
+        return null;
+      },
+    } as never,
+    {
+      isEnabled: () => false,
+      verifyLoginAnswer: async () => {
+        captchaVerificationCount += 1;
+        return false;
+      },
+    } as never,
+    {} as never,
+    {} as never,
+  );
+
+  await assert.rejects(
+    service.login({ email: 'user@example.com', password: 'ChangeMe123!' }),
+    (error: unknown) =>
+      error instanceof UnauthorizedException && error.getStatus() === 401,
+  );
+  assert.equal(accountLookupCount, 1);
+  assert.equal(captchaVerificationCount, 0);
 });

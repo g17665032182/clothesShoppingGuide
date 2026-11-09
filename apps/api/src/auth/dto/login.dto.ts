@@ -1,11 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { z } from 'zod';
 
 export const loginSchema = z.strictObject({
   email: z.email({ pattern: z.regexes.html5Email }).max(255),
   password: z.string().min(8).max(128),
-  captchaChallengeId: z.string().min(1).max(64),
-  captchaAnswer: z.string().min(1).max(5),
+  captchaChallengeId: z.string().min(1).max(64).optional(),
+  captchaAnswer: z.string().min(1).max(5).optional(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -28,17 +28,17 @@ export class LoginDto {
   })
   public password!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: '图片验证码挑战 ID',
     minLength: 1,
     maxLength: 64,
   })
-  public captchaChallengeId!: string;
+  public captchaChallengeId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: '图片验证码答案',
     minLength: 1,
     maxLength: 5,
   })
-  public captchaAnswer!: string;
+  public captchaAnswer?: string;
 }

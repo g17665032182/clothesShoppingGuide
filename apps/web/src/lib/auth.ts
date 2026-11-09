@@ -31,14 +31,15 @@ export const auth = {
   async signIn(
     email: string,
     password: string,
-    captchaChallengeId: string,
-    captchaAnswer: string,
+    captchaChallengeId?: string,
+    captchaAnswer?: string,
   ) {
     const response = await signIn({
       email,
       password,
-      captchaChallengeId,
-      captchaAnswer,
+      ...(captchaChallengeId && captchaAnswer
+        ? { captchaChallengeId, captchaAnswer }
+        : {}),
     });
     this.setSession(response);
   },

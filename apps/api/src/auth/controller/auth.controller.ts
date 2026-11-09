@@ -25,6 +25,7 @@ import { LoginDto, loginSchema } from '../dto/login.dto.js';
 import { RegisterDto, registerSchema } from '../dto/register.dto.js';
 import { CaptchaService } from '../captcha/service/captcha.service.js';
 import { CaptchaResponseDto } from '../captcha/dto/captcha-response.dto.js';
+import { AuthConfigDto } from '../dto/auth-config.dto.js';
 import { User } from '../../users/entity/user.entity.js';
 
 @Controller('auth')
@@ -36,6 +37,15 @@ export class AuthController {
   ) {}
 
   private readonly refreshCookieName = 'clothes-guide.refresh-token';
+
+  @Public()
+  @Get('config')
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: '获取公开认证配置' })
+  @ApiOkResponse({ type: AuthConfigDto })
+  public getConfig(): AuthConfigDto {
+    return { captchaEnabled: this.captchaService.isEnabled() };
+  }
 
   @Public()
   @Get('captcha')

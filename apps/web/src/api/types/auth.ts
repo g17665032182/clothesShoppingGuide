@@ -4,8 +4,13 @@ import type { User } from './users';
 export interface LoginPayload {
   email: string;
   password: string;
-  captchaChallengeId: string;
-  captchaAnswer: string;
+  captchaChallengeId?: string;
+  captchaAnswer?: string;
+}
+
+/** 当前部署公开的认证功能配置。 */
+export interface AuthConfigResponse {
+  captchaEnabled: boolean;
 }
 
 /** 登录图片验证码响应。 */

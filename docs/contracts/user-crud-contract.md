@@ -10,7 +10,7 @@
 - 涉及模块：`apps/api/src/users`、`apps/api/src/auth`、数据库迁移和 Seeder。
 - 当前框架、ORM、数据库及版本：NestJS 12.2、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3。
 - 已阅读的相似模块和文档：NestJS JWT Guard 官方示例、MikroORM Entity/Repository 官方文档、项目 `nestjs-mikroorm-crud` 技能契约。
-- 最后更新：2026-10-31
+- 最后更新：2026-11-10
 
 ## 范围
 
@@ -35,20 +35,21 @@
 
 ## API 契约
 
-| 操作         | 方法与路由                | 请求 DTO/参数                                          | 响应形状                                                               | 认证/授权  | 状态码与错误行为                       |
-| ------------ | ------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------- | ---------- | -------------------------------------- |
-| 注册         | `POST /api/auth/register` | `RegisterDto`                                          | `{ accessToken, user }`                                                | 公开       | `201`；邮箱重复返回 `409`              |
-| 图片验证码   | `GET /api/auth/captcha`   | 无                                                     | `{ challengeId, imageData, type: 'image' }`，imageData 为 SVG data URI | 公开       | `200`；生成失败返回通用服务错误        |
-| 登录         | `POST /api/auth/login`    | `LoginDto`（含 `captchaChallengeId`、`captchaAnswer`） | `{ accessToken, user }`                                                | 公开       | `200`；凭据或验证码无效返回认证错误    |
-| 刷新 Token   | `POST /api/auth/refresh`  | HttpOnly Cookie                                        | `{ accessToken, user }`                                                | 公开       | `200`；Cookie 无效或过期返回 `401`     |
-| 退出登录     | `POST /api/auth/logout`   | HttpOnly Cookie                                        | 无                                                                     | 公开       | `204`；撤销当前 Refresh Token          |
-| 当前用户     | `GET /api/auth/me`        | 无                                                     | `UserResponse`                                                         | Bearer JWT | `200`；缺失/无效/禁用 Token 返回 `401` |
-| 当前资料     | `GET /api/users/me`       | 无                                                     | `UserResponse`                                                         | Bearer JWT | `200`；未认证返回 `401`                |
-| 更新当前资料 | `PATCH /api/users/me`     | `UpdateProfileDto`                                     | `UserResponse`                                                         | Bearer JWT | `200`；非法输入返回 `400`              |
-| 用户列表     | `GET /api/users`          | 无                                                     | `UserResponse[]`                                                       | 管理员     | `200`；非管理员返回 `403`              |
-| 用户详情     | `GET /api/users/:id`      | UUID 路径参数                                          | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                |
-| 管理员更新   | `PATCH /api/users/:id`    | `AdminUpdateUserDto`                                   | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                |
-| 管理员禁用   | `DELETE /api/users/:id`   | UUID 路径参数                                          | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                |
+| 操作         | 方法与路由                | 请求 DTO/参数                      | 响应形状                                                               | 认证/授权  | 状态码与错误行为                           |
+| ------------ | ------------------------- | ---------------------------------- | ---------------------------------------------------------------------- | ---------- | ------------------------------------------ |
+| 注册         | `POST /api/auth/register` | `RegisterDto`                      | `{ accessToken, user }`                                                | 公开       | `201`；邮箱重复返回 `409`                  |
+| 公开认证配置 | `GET /api/auth/config`    | 无                                 | `{ captchaEnabled: boolean }`                                          | 公开       | `200`                                      |
+| 图片验证码   | `GET /api/auth/captcha`   | 无                                 | `{ challengeId, imageData, type: 'image' }`，imageData 为 SVG data URI | 公开       | `200`；未启用返回 `404`                    |
+| 登录         | `POST /api/auth/login`    | `LoginDto`（按环境可选验证码字段） | `{ accessToken, user }`                                                | 公开       | `200`；测试/生产环境凭据或验证码无效时拒绝 |
+| 刷新 Token   | `POST /api/auth/refresh`  | HttpOnly Cookie                    | `{ accessToken, user }`                                                | 公开       | `200`；Cookie 无效或过期返回 `401`         |
+| 退出登录     | `POST /api/auth/logout`   | HttpOnly Cookie                    | 无                                                                     | 公开       | `204`；撤销当前 Refresh Token              |
+| 当前用户     | `GET /api/auth/me`        | 无                                 | `UserResponse`                                                         | Bearer JWT | `200`；缺失/无效/禁用 Token 返回 `401`     |
+| 当前资料     | `GET /api/users/me`       | 无                                 | `UserResponse`                                                         | Bearer JWT | `200`；未认证返回 `401`                    |
+| 更新当前资料 | `PATCH /api/users/me`     | `UpdateProfileDto`                 | `UserResponse`                                                         | Bearer JWT | `200`；非法输入返回 `400`                  |
+| 用户列表     | `GET /api/users`          | 无                                 | `UserResponse[]`                                                       | 管理员     | `200`；非管理员返回 `403`                  |
+| 用户详情     | `GET /api/users/:id`      | UUID 路径参数                      | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                    |
+| 管理员更新   | `PATCH /api/users/:id`    | `AdminUpdateUserDto`               | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                    |
+| 管理员禁用   | `DELETE /api/users/:id`   | UUID 路径参数                      | `UserResponse`                                                         | 管理员     | `200`；不存在返回 `404`                    |
 
 ## 查询、权限与数据行为
 
@@ -62,7 +63,7 @@
 - 并发更新或事务要求：单次用户写操作由 MikroORM flush 在事务中提交。
 - 唯一约束冲突、资源不存在、无权限和非法输入的响应约定：分别为 `409`、`404`、`403`、`400`；认证失败为 `401`。
 - 迁移、历史数据和兼容性要求：新增 `users` 表；Seeder 创建幂等的管理员账号。
-- 登录验证码仅应用于登录，不影响注册和已有 Refresh Token 流程；任何验证码失败都不得创建会话。
+- 登录验证码仅应用于登录，不影响注册和已有 Refresh Token 流程；仅 `NODE_ENV=test` 或 `production` 启用，开发及其他环境关闭。认证配置接口向前端公开当前开关状态；启用时验证码字段必填且服务端强制验证，任何验证码失败都不得创建会话。
 - 登录页首次进入不请求、不展示验证码图片；用户点击获取或刷新成功后进入 60 秒冷却倒计时，期间禁止重复获取。登录请求失败后清空已消费的验证码并立即解除冷却，不自动换图，允许用户立即再次点击获取；本地缺少验证码的校验失败不解除冷却。该页面倒计时不替代服务端限流。
 - 图片验证码答案不得由客户端决定或通过接口明文返回；挑战有效期为 5 分钟，第一次提交即一次性消费，挑战存储在认证模块私有内存中。
 - 验证码验证能力使用 Provider/适配器扩展入口，图片 Provider 采用 `svg-captcha`，未来可接入第三方服务；本阶段不增加服务端频率限制，部署按单 API 实例处理。
@@ -85,6 +86,7 @@
 - [x] 挑战存储采用认证模块私有内存，当前部署按单 API 实例处理。
 - [x] 本阶段不增加验证码与登录接口服务端频率限制。
 - [x] 图片响应为 SVG data URI，登录字段为 `captchaChallengeId` 和 `captchaAnswer`，错误按技术文档处理。
+- [x] 验证码仅在测试、生产环境启用，开发环境允许不带验证码登录。
 - [x] 通过 Provider/适配器替换图片实现，第三方供应商留待后续需求。
 - 既有契约中不涉及验证码的注册、Token 刷新、退出和用户管理行为保持不变。
 
