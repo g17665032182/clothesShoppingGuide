@@ -44,7 +44,8 @@ export class ProductCatalogImportService {
         },
         {
           onConflictFields: ['externalId'],
-          onConflictExcludeFields: ['id', 'createdAt'],
+          // 试穿开关由管理员维护，导入默认值不得覆盖已有设置。
+          onConflictExcludeFields: ['id', 'createdAt', 'tryOnEnabled'],
         },
       );
       existing ? updated++ : created++;

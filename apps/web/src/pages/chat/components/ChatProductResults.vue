@@ -210,7 +210,9 @@ function openTryOn(item: (typeof resultSets.value)[number]['items'][number]) {
             购买
           </button>
           <button
-            v-if="tryOnCategories.has(item.category)"
+            v-if="
+              item.tryOnEnabled === true && tryOnCategories.has(item.category)
+            "
             type="button"
             class="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="disabled"

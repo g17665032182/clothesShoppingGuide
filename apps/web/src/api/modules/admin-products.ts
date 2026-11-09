@@ -32,8 +32,28 @@ export async function getAdminProduct(
     `/admin/product-catalog/products/${productId}`,
     { token, signal },
   );
-  if (!isAdminProductDetail(response))
+  if (!isAdminProductDetail(response) || response.id !== productId)
     throw new ApiError('商品详情响应格式无效，请刷新后重试。', 502);
+  return response;
+}
+
+export async function updateAdminProductTryOn(
+  token: string,
+  productId: string,
+  tryOnEnabled: boolean,
+  signal?: AbortSignal,
+): Promise<AdminProductDetail> {
+  const response = await apiRequest<AdminProductDetail>(
+    `/admin/product-catalog/products/${productId}/try-on`,
+    {
+      method: 'PATCH',
+      token,
+      signal,
+      data: { tryOnEnabled },
+    },
+  );
+  if (!isAdminProductDetail(response) || response.id !== productId)
+    throw new ApiError('商品配置响应格式无效，请重新读取状态。', 502);
   return response;
 }
 
@@ -54,6 +74,7 @@ function isProductSummary(value: unknown): boolean {
     ) &&
     (value.productUrl === null || typeof value.productUrl === 'string') &&
     typeof value.isActive === 'boolean' &&
+    typeof value.tryOnEnabled === 'boolean' &&
     typeof value.skuCount === 'number' &&
     (value.lowestPrice === null || typeof value.lowestPrice === 'string') &&
     typeof value.totalStock === 'number' &&

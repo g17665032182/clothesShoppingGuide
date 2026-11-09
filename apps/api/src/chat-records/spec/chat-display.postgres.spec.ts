@@ -38,7 +38,9 @@ test(
     const ownerId = randomUUID();
     const conversationId = randomUUID();
     const em = orm.em.fork();
-    const display = new ChatDisplayService(em.getRepository(ChatTraceEvent));
+    const display = new ChatDisplayService(em.getRepository(ChatTraceEvent), {
+      getTryOnProducts: async () => new Map(),
+    } as never);
     const firstMessageId = randomUUID();
     const secondMessageId = randomUUID();
     const rollbackMessageId = randomUUID();

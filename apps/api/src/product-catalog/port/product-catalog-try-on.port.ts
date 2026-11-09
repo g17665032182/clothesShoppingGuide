@@ -6,6 +6,9 @@ export type TryOnProductProjection = {
   productExternalId: string;
   productName: string;
   category: 'tops' | 'bottoms' | 'dresses' | 'outerwear' | 'shoes';
+  /** 管理员保存的开关与当前目录资格分离，避免把失效商品误判为可试穿。 */
+  tryOnEnabled: boolean;
+  tryOnEligible: boolean;
   mainImageUrl: string | null;
   colors: Array<{
     color: string;
@@ -14,6 +17,9 @@ export type TryOnProductProjection = {
 };
 
 export interface ProductCatalogTryOnPort {
+  getTryOnProducts(
+    productExternalIds: string[],
+  ): Promise<Map<string, TryOnProductProjection>>;
   getTryOnProduct(
     productExternalId: string,
   ): Promise<TryOnProductProjection | null>;

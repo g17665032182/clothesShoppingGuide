@@ -1,6 +1,12 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
 import type { EntityRepository } from '@mikro-orm/postgresql';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { LockMode } from '@mikro-orm/core';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { Product } from '../entity/product.entity.js';
 import { publicProductUrl } from '../public-url.js';
@@ -11,6 +17,8 @@ import type {
   AdminProductSkuDto,
 } from '../dto/admin-product-response.dto.js';
 import type { AdminProductQuery } from '../dto/admin-product-query.dto.js';
+import type { AdminProductTryOnUpdate } from '../dto/admin-product-try-on.dto.js';
+import { ProductCatalogTryOnService } from './product-catalog-try-on.service.js';
 
 type ProductSummaryRow = {
   id: string;
@@ -20,6 +28,7 @@ type ProductSummaryRow = {
   category: string;
   product_url: string | null;
   is_active: boolean;
+  try_on_enabled: boolean;
   sku_count: string;
   lowest_price: string | null;
   total_stock: string;
@@ -53,6 +62,8 @@ export class AdminProductCatalogService {
   public constructor(
     @InjectRepository(Product)
     private readonly products: EntityRepository<Product>,
+    @Inject(ProductCatalogTryOnService)
+    private readonly tryOnProducts: ProductCatalogTryOnService,
   ) {}
 
   public async list(query: AdminProductQuery): Promise<AdminProductPageDto> {
@@ -67,7 +78,7 @@ export class AdminProductCatalogService {
       ),
       connection.execute<ProductSummaryRow[]>(
         `select p.id::text as id, p.external_id, p.name, p.brand, p.category,
-                p.product_url, p.is_active, p.created_at, p.updated_at,
+                p.product_url, p.is_active, p.try_on_enabled, p.created_at, p.updated_at,
                 count(s.id)::text as sku_count,
                 min(s.price)::text as lowest_price,
                 coalesce(sum(s.stock), 0)::text as total_stock,
@@ -101,7 +112,7 @@ export class AdminProductCatalogService {
     const connection = manager.getConnection();
     const rows = await connection.execute<ProductDetailRow[]>(
       `select p.id::text as id, p.external_id, p.name, p.brand, p.category,
-              p.product_url, p.is_active, p.description, p.styles, p.occasions,
+              p.product_url, p.is_active, p.try_on_enabled, p.description, p.styles, p.occasions,
               p.fits, p.created_at, p.updated_at,
               count(s.id)::text as sku_count,
               min(s.price)::text as lowest_price,
@@ -142,6 +153,40 @@ export class AdminProductCatalogService {
       fits: product.fits ?? [],
       skus: skuRows.map((sku) => this.toSku(sku)),
     };
+  }
+
+  public async updateTryOn(
+    id: string,
+    input: AdminProductTryOnUpdate,
+  ): Promise<AdminProductDetailDto> {
+    const manager = this.products.getEntityManager().fork();
+    await manager.transactional(async (transaction) => {
+      // 同商品管理员写入串行；资格检查和设置写入共用当前事务。
+      const product = await transaction.findOne(
+        Product,
+        { id },
+        { lockMode: LockMode.PESSIMISTIC_WRITE },
+      );
+      if (!product) throw new NotFoundException('商品不存在');
+      if (input.tryOnEnabled) {
+        const projection = await this.tryOnProducts.getTryOnProduct(
+          product.externalId,
+          transaction,
+        );
+        if (!projection?.tryOnEligible) {
+          throw new ConflictException({
+            code: 'PRODUCT_NOT_TRYON_SUPPORTED',
+            message: '当前商品不符合试穿开启条件',
+          });
+        }
+      }
+      if (product.tryOnEnabled !== input.tryOnEnabled) {
+        product.tryOnEnabled = input.tryOnEnabled;
+        product.updatedAt = new Date();
+        await transaction.flush();
+      }
+    });
+    return this.detail(id);
   }
 
   private buildWhere(query: AdminProductQuery): {
@@ -201,6 +246,7 @@ export class AdminProductCatalogService {
         ? (publicProductUrl(row.product_url)?.toString() ?? null)
         : null,
       isActive: row.is_active,
+      tryOnEnabled: row.try_on_enabled,
       skuCount: Number(row.sku_count),
       lowestPrice: row.lowest_price,
       totalStock: Number(row.total_stock),

@@ -6,6 +6,7 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import type { EntityRepository } from '@mikro-orm/postgresql';
 import {
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -13,7 +14,11 @@ import {
 
 import type { LlmUsage } from '../../llm/graph/llm.state.js';
 import type { LlmStreamEvent } from '../../llm/stream/llm-stream.types.js';
-import { productSearchQuerySchema } from '../../product-catalog/index.js';
+import {
+  PRODUCT_CATALOG_TRY_ON_PORT,
+  productSearchQuerySchema,
+  type ProductCatalogTryOnPort,
+} from '../../product-catalog/index.js';
 import {
   ChatTraceEvent,
   ChatTraceEventType,
@@ -51,6 +56,8 @@ export class ChatDisplayService {
   public constructor(
     @InjectRepository(ChatTraceEvent)
     private readonly events: EntityRepository<ChatTraceEvent>,
+    @Inject(PRODUCT_CATALOG_TRY_ON_PORT)
+    private readonly catalog: ProductCatalogTryOnPort,
   ) {}
 
   public create(contextWindowTokens: number): ChatDisplayData {
@@ -301,6 +308,37 @@ export class ChatDisplayService {
         purchase: restored.purchase,
       });
     }
+    await this.refreshTryOnAvailability(result);
     return result;
+  }
+
+  private async refreshTryOnAvailability(
+    displays: Map<string, ChatDisplayData>,
+  ): Promise<void> {
+    const items = [...displays.values()].flatMap((display) =>
+      display.productResults.flatMap((results) => results.items),
+    );
+    const externalIds = [...new Set(items.map((item) => item.externalId))];
+    if (externalIds.length === 0) return;
+
+    const enabled = new Set<string>();
+    try {
+      for (let offset = 0; offset < externalIds.length; offset += 200) {
+        const products = await this.catalog.getTryOnProducts(
+          externalIds.slice(offset, offset + 200),
+        );
+        for (const [externalId, product] of products) {
+          if (product.tryOnEnabled && product.tryOnEligible) {
+            enabled.add(externalId);
+          }
+        }
+      }
+    } catch {
+      // 资格读取异常时仅关闭入口，历史正文和商品快照继续可读，且不记录原始载荷。
+      enabled.clear();
+      this.logger.warn('商品试穿资格暂不可用，历史试穿入口已关闭');
+    }
+    // 只更新恢复出的响应对象，不修改持久化的 publicDisplay 或历史价格和图片。
+    for (const item of items) item.tryOnEnabled = enabled.has(item.externalId);
   }
 }

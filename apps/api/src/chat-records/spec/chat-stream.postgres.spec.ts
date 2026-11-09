@@ -156,7 +156,9 @@ test(
         llmConfig,
       );
       const traces = em.getRepository(ChatTraceEvent);
-      const display = new ChatDisplayService(traces);
+      const display = new ChatDisplayService(traces, {
+        getTryOnProducts: async () => new Map(),
+      } as never);
       let failMemoryEnqueue = false;
       const service = new ChatRecordsService(
         em.getRepository(ChatConversation),

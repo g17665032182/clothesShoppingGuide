@@ -22,6 +22,9 @@ export class AdminProductSummaryDto {
   @ApiProperty()
   public isActive!: boolean;
 
+  @ApiProperty({ description: '管理员保存的商品试穿开关', default: false })
+  public tryOnEnabled!: boolean;
+
   @ApiProperty()
   public skuCount!: number;
 

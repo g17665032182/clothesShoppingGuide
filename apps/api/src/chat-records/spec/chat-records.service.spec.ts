@@ -153,7 +153,12 @@ function createService(
     context: '',
     reference: null,
   };
-  const displayService = new ChatDisplayService({} as never);
+  const displayService = new ChatDisplayService(
+    {} as never,
+    {
+      getTryOnProducts: async () => new Map(),
+    } as never,
+  );
   displayService.bind = async (transaction, input) => {
     assert.equal(transaction, manager);
     if (options.failBind) throw new Error('display binding failed');

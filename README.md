@@ -60,6 +60,16 @@ pnpm --filter @clothes-shopping-guide/shared build
 页面与接口均受管理员权限保护；完整约定见
 [管理员运营契约](./docs/contracts/admin-management-crud-contract.md)。
 
+### 本地试穿测试
+
+开发环境使用服务端 SHA-256 白名单限制测试照片。已准备一张
+[公开试穿测试图片](./docs/virtual-try-on/fixtures/public-model.webp)，来源、许可证、
+规范化摘要及使用步骤见[测试图片说明](./docs/virtual-try-on/fixtures/README.md)。
+从服装商品卡进入“我的试穿”后，可选择该原始 WebP 文件验证上传。
+完整生成还需配置证书有效的七牛 HTTPS 下载域名；当前本地测试域名证书不匹配，
+上传成功不代表生成链路已经可用。
+渠道凭据只在后端本地配置；真实用户照片限制继续生效。
+
 ## 后端 API
 
 后端位于 `apps/api`，使用 NestJS 12、MikroORM 7 和 PostgreSQL。复制 `apps/api/.env.example` 为 `.env` 后即可配置连接信息。

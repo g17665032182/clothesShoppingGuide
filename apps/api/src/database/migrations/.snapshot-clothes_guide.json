@@ -2687,6 +2687,23 @@
           "enumItems": [],
           "mappedType": "json"
         },
+        "try_on_enabled": {
+          "name": "try_on_enabled",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "false",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "boolean"
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamptz(6)",

@@ -67,7 +67,15 @@ const page = reactive(useAdminProductsPage());
       :loading="page.detailLoading"
       :error="page.detailError"
       :product="page.selectedProduct"
+      :try-on-enabled="page.tryOnDraft"
+      :try-on-switch-disabled="page.tryOnSwitchDisabled"
+      :try-on-disabled-reason="page.tryOnDisabledReason"
+      :try-on-saving="page.tryOnSaving"
+      :can-save-try-on="page.canSaveTryOn"
+      :try-on-save-result-unknown="page.tryOnSaveResultUnknown"
       @update:open="!$event && page.closeDetail()"
+      @update:try-on-enabled="page.setTryOnDraft"
+      @save-try-on="page.saveTryOn"
       @retry="page.retryDetail"
     />
   </section>

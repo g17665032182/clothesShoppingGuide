@@ -1,17 +1,23 @@
 import {
+  Body,
   Controller,
   Get,
   Inject,
   Param,
+  Patch,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
 import { Roles } from '../../authorization/decorator/roles.decorator.js';
@@ -30,6 +36,11 @@ import {
   AdminProductPageDto,
 } from '../dto/admin-product-response.dto.js';
 import { AdminProductCatalogService } from '../service/admin-product-catalog.service.js';
+import {
+  AdminProductTryOnUpdateDto,
+  adminProductTryOnUpdateSchema,
+  type AdminProductTryOnUpdate,
+} from '../dto/admin-product-try-on.dto.js';
 
 @Controller('admin/product-catalog/products')
 @UseGuards(RolesGuard)
@@ -59,5 +70,21 @@ export class AdminProductCatalogController {
     @Param({ schema: adminProductIdSchema }) input: AdminProductIdDto,
   ) {
     return this.products.detail(input.id);
+  }
+
+  @Patch(':id/try-on')
+  @ApiBody({ type: AdminProductTryOnUpdateDto })
+  @ApiOkResponse({ type: AdminProductDetailDto })
+  @ApiBadRequestResponse({ description: '商品 ID 或试穿设置输入无效' })
+  @ApiUnauthorizedResponse({ description: '未登录或账号不可用' })
+  @ApiForbiddenResponse({ description: '仅管理员可修改' })
+  @ApiNotFoundResponse({ description: '商品不存在' })
+  @ApiConflictResponse({ description: '当前商品不符合试穿开启条件' })
+  public updateTryOn(
+    @Param({ schema: adminProductIdSchema }) input: AdminProductIdDto,
+    @Body({ schema: adminProductTryOnUpdateSchema })
+    body: AdminProductTryOnUpdate,
+  ) {
+    return this.products.updateTryOn(input.id, body);
   }
 }

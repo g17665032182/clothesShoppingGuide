@@ -56,6 +56,9 @@ export class Product {
   @Property({ type: 'boolean', fieldName: 'is_active', default: true })
   public isActive = true;
 
+  @Property({ type: 'boolean', fieldName: 'try_on_enabled', default: false })
+  public tryOnEnabled = false;
+
   @Property({
     type: 'timestamptz',
     fieldName: 'created_at',

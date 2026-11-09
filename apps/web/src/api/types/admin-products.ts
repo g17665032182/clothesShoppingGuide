@@ -18,6 +18,7 @@ export type AdminProductSummary = {
   category: AdminProductCategory;
   productUrl: string | null;
   isActive: boolean;
+  tryOnEnabled: boolean;
   skuCount: number;
   lowestPrice: string | null;
   totalStock: number;

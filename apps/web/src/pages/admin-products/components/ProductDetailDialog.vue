@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ExternalLink, ImageOff, PackageSearch } from '@lucide/vue';
+import {
+  ExternalLink,
+  ImageOff,
+  PackageSearch,
+  RefreshCw,
+  Save,
+} from '@lucide/vue';
 import type { AdminProductDetail } from '@/api/types/admin-products';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -12,8 +18,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -29,6 +43,12 @@ const props = defineProps<{
   loading: boolean;
   error: string;
   product: AdminProductDetail | null;
+  tryOnEnabled: boolean;
+  tryOnSwitchDisabled: boolean;
+  tryOnDisabledReason: string;
+  tryOnSaving: boolean;
+  canSaveTryOn: boolean;
+  tryOnSaveResultUnknown: boolean;
 }>();
 const failedImages = ref(new Set<string>());
 const categoryLabel = computed(() => {
@@ -56,6 +76,8 @@ function markImageFailed(skuId: string): void {
 const emit = defineEmits<{
   (event: 'update:open', value: boolean): void;
   (event: 'retry'): void;
+  (event: 'update:tryOnEnabled', value: boolean): void;
+  (event: 'save-try-on'): void;
 }>();
 
 function formatMoney(value: string) {
@@ -128,6 +150,64 @@ function safeUrl(value: string | null): string | null {
             <ExternalLink />
           </a>
         </div>
+        <form
+          class="flex min-w-0 flex-col gap-3"
+          :aria-busy="tryOnSaving"
+          @submit.prevent="emit('save-try-on')"
+        >
+          <FieldGroup>
+            <Field
+              orientation="horizontal"
+              :data-disabled="tryOnSwitchDisabled || undefined"
+            >
+              <FieldContent>
+                <FieldLabel for="product-try-on-enabled">支持试穿</FieldLabel>
+                <FieldDescription id="product-try-on-description">
+                  {{
+                    tryOnDisabledReason ||
+                    (tryOnEnabled !== product.tryOnEnabled
+                      ? '有未保存的更改'
+                      : product.tryOnEnabled
+                        ? '已开启'
+                        : '未开启')
+                  }}
+                </FieldDescription>
+              </FieldContent>
+              <Switch
+                id="product-try-on-enabled"
+                :model-value="tryOnEnabled"
+                :disabled="tryOnSwitchDisabled"
+                aria-describedby="product-try-on-description"
+                @update:model-value="emit('update:tryOnEnabled', $event)"
+              />
+            </Field>
+          </FieldGroup>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <span
+              v-if="tryOnSaveResultUnknown"
+              class="text-sm text-muted-foreground"
+              role="status"
+            >
+              保存结果待核实
+            </span>
+            <Button
+              v-if="tryOnSaveResultUnknown"
+              type="button"
+              size="sm"
+              variant="outline"
+              :disabled="tryOnSaving"
+              @click="emit('retry')"
+            >
+              <RefreshCw data-icon="inline-start" />
+              重新读取状态
+            </Button>
+            <Button type="submit" size="sm" :disabled="!canSaveTryOn">
+              <Spinner v-if="tryOnSaving" data-icon="inline-start" />
+              <Save v-else data-icon="inline-start" />
+              {{ tryOnSaving ? '正在保存' : '保存试穿设置' }}
+            </Button>
+          </div>
+        </form>
         <div
           v-if="
             product.styles.length ||

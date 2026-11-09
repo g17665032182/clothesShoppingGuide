@@ -5,6 +5,7 @@ import type { EntityManager } from '@mikro-orm/core';
 import type { EntityRepository } from '@mikro-orm/postgresql';
 import {
   Injectable,
+  Inject,
   BadRequestException,
   NotFoundException,
   ServiceUnavailableException,
@@ -19,6 +20,7 @@ import {
   type ProductSkuResponse,
 } from '../dto/product-sku-response.dto.js';
 import type { ProductSkuQuery } from '../dto/product-sku-query.dto.js';
+import { ProductCatalogTryOnService } from './product-catalog-try-on.service.js';
 
 export const productSearchSchema = z.strictObject({
   category: z
@@ -71,6 +73,7 @@ export type ProductResult = {
   sizes: string[];
   colors: string[];
   inStock: boolean;
+  tryOnEnabled: boolean;
   matchReasons: ProductMatchReason[];
 };
 
@@ -130,6 +133,8 @@ export class ProductCatalogService {
     @InjectRepository(Product)
     private readonly products: EntityRepository<Product>,
     private readonly config: ConfigService,
+    @Inject(ProductCatalogTryOnService)
+    private readonly tryOnProducts: ProductCatalogTryOnService,
   ) {}
 
   public async listSkus(
@@ -358,6 +363,9 @@ export class ProductCatalogService {
     const hasMore = rows.length > input.limit;
     const pageRows = rows.slice(0, input.limit);
     const grouped = new Map<string, ProductResult>();
+    const tryOnProducts = await this.tryOnProducts.getTryOnProducts(
+      pageRows.map((row) => row.external_id),
+    );
     for (const row of pageRows) {
       const item = grouped.get(row.external_id);
       if (item) {
@@ -379,6 +387,9 @@ export class ProductCatalogService {
           sizes: [row.size],
           colors: [row.color],
           inStock: row.available_stock > 0,
+          tryOnEnabled:
+            tryOnProducts.get(row.external_id)?.tryOnEnabled === true &&
+            tryOnProducts.get(row.external_id)?.tryOnEligible === true,
           matchReasons: row.match_reasons.filter(isProductMatchReason),
         });
       }

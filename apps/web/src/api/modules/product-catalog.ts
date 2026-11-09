@@ -55,6 +55,7 @@ function isProductCard(value: unknown): value is ChatProductCard {
     Array.isArray(item.sizes) &&
     Array.isArray(item.colors) &&
     typeof item.inStock === 'boolean' &&
+    typeof item.tryOnEnabled === 'boolean' &&
     Array.isArray(item.matchReasons)
   );
 }

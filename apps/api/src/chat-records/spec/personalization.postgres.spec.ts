@@ -173,7 +173,9 @@ test(
         },
       },
       preferenceLifecycle,
-      new ChatDisplayService(em.getRepository(ChatTraceEvent)),
+      new ChatDisplayService(em.getRepository(ChatTraceEvent), {
+        getTryOnProducts: async () => new Map(),
+      } as never),
       preferenceReader,
       {} as never,
       {

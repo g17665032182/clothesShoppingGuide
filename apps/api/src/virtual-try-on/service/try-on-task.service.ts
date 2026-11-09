@@ -21,7 +21,7 @@ import { TryOnTask, TryOnTaskStatus } from '../entity/try-on-task.entity.js';
 import {
   PRODUCT_CATALOG_TRY_ON_PORT,
   type ProductCatalogTryOnPort,
-} from '../port/product-catalog-try-on.port.js';
+} from '../../product-catalog/index.js';
 import {
   TRY_ON_OBJECT_STORE,
   type TryOnObjectStore,
@@ -88,7 +88,11 @@ export class TryOnTaskService {
         input.productExternalId,
       );
       if (!product) throw new NotFoundException('商品不存在');
-      if (!ALLOWED_CATEGORIES.has(product.category)) {
+      if (
+        !product.tryOnEnabled ||
+        !product.tryOnEligible ||
+        !ALLOWED_CATEGORIES.has(product.category)
+      ) {
         throw new ConflictException({
           code: 'PRODUCT_NOT_TRYON_SUPPORTED',
           message: '当前商品不支持试穿',
@@ -104,6 +108,14 @@ export class TryOnTaskService {
           message: '当前颜色不可用',
         });
       }
+      const garmentImageUrl = color.imageUrl || product.mainImageUrl;
+      if (!garmentImageUrl) {
+        throw new ConflictException({
+          code: 'PRODUCT_NOT_TRYON_SUPPORTED',
+          message: '当前商品颜色没有可用的试穿图片',
+        });
+      }
+      // 商品设置与图片检查先于照片绑定，旧卡片不能绕过当前目录的准入条件。
       const photo = await transaction.findOne(
         TryOnPhoto,
         {
@@ -131,7 +143,7 @@ export class TryOnTaskService {
         productName: product.productName,
         productCategory: product.category,
         color: color.color,
-        garmentImageUrl: color.imageUrl || product.mainImageUrl,
+        garmentImageUrl,
         sourcePhotoId: photo.id,
         consentVersion,
         consentedAt: new Date(),

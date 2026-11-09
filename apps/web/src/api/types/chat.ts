@@ -31,6 +31,7 @@ export type ChatProductCard = {
   sizes: string[];
   colors: string[];
   inStock: boolean;
+  tryOnEnabled: boolean;
   matchReasons: string[];
 };
 

@@ -6,7 +6,9 @@ import {
   Module,
   StandardSchemaValidationPipe,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { MikroORM } from '@mikro-orm/postgresql';
@@ -16,9 +18,14 @@ import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard.js';
 import { RolesGuard } from '../../authorization/guard/roles.guard.js';
 import { UserRole } from '../../users/entity/user.entity.js';
 import { Product } from '../entity/product.entity.js';
+import { ProductSku } from '../entity/product-sku.entity.js';
 import { AdminProductCatalogController } from '../controller/admin-product-catalog.controller.js';
 import { AdminProductCatalogService } from '../service/admin-product-catalog.service.js';
 import { adminProductQuerySchema } from '../dto/admin-product-query.dto.js';
+import { ProductCatalogTryOnService } from '../service/product-catalog-try-on.service.js';
+import { ProductCatalogImportService } from '../service/product-catalog-import.service.js';
+import { productCatalogImportSchema } from '../import/product-catalog-import.schema.js';
+import { ProductCatalogService } from '../service/product-catalog.service.js';
 
 test(
   '专用 PostgreSQL：管理员商品筛选、精确库存、分页、详情与角色隔离',
@@ -33,8 +40,8 @@ test(
     const orm = await MikroORM.init({
       ...config,
       dbName,
-      entities: [Product],
-      entitiesTs: [Product],
+      entities: [Product, ProductSku],
+      entitiesTs: [Product, ProductSku],
       debug: false,
     });
     const connection = orm.em.getConnection();
@@ -106,6 +113,7 @@ test(
 
       const service = new AdminProductCatalogService(
         orm.em.fork().getRepository(Product),
+        new ProductCatalogTryOnService(orm.em.fork().getRepository(Product)),
       );
       const list = (query: Record<string, unknown>) =>
         service.list(adminProductQuerySchema.parse(query));
@@ -161,6 +169,134 @@ test(
       assert.equal((await service.detail(productIds[1]!)).isActive, false);
       await assert.rejects(service.detail(randomUUID()), NotFoundException);
 
+      const activeProductId = productIds[0]!;
+      assert.equal(detail.tryOnEnabled, false, '存量和新商品默认关闭');
+      await assert.rejects(
+        service.updateTryOn(activeProductId, { tryOnEnabled: true }),
+        ConflictException,
+      );
+      await connection.execute(
+        'update product_skus set image_url=? where id=?',
+        ['https://images.example.org/coat.webp', skuIds[0]],
+      );
+      const enabled = await service.updateTryOn(activeProductId, {
+        tryOnEnabled: true,
+      });
+      assert.equal(enabled.tryOnEnabled, true);
+      assert.equal(
+        (await service.updateTryOn(activeProductId, { tryOnEnabled: true }))
+          .tryOnEnabled,
+        true,
+      );
+      assert.equal(enabled.totalAvailableStock, 7);
+
+      const input = productCatalogImportSchema.parse({
+        version: 1,
+        products: [
+          {
+            externalId: `${prefix}-0`,
+            name: '重复导入保留试穿开关',
+            category: 'outerwear',
+            skus: [
+              {
+                externalSkuId: `${prefix}-sku-0`,
+                color: '黑色',
+                size: 'M',
+                price: 10.1,
+                stock: 5,
+                imageUrl: 'https://images.example.org/coat.webp',
+              },
+            ],
+          },
+        ],
+      });
+      await orm.em
+        .fork()
+        .transactional((transaction) =>
+          new ProductCatalogImportService().upsertInTransaction(
+            transaction,
+            input.products,
+          ),
+        );
+      assert.equal(
+        (await service.detail(activeProductId)).tryOnEnabled,
+        true,
+        '重复导入不得重置管理员配置',
+      );
+      const catalog = new ProductCatalogService(
+        orm.em.fork().getRepository(Product),
+        new ConfigService({
+          PRODUCT_QUERY_CURSOR_SECRET:
+            'isolated-try-on-cursor-secret-32-characters',
+        }),
+        new ProductCatalogTryOnService(orm.em.fork().getRepository(Product)),
+      );
+      const search = await catalog.search({ category: 'outerwear', limit: 3 });
+      assert.equal(
+        search.items.find((item) => item.externalId === `${prefix}-0`)
+          ?.tryOnEnabled,
+        true,
+      );
+
+      for (const category of ['shoes', 'tops']) {
+        await connection.execute('update products set category=? where id=?', [
+          category,
+          activeProductId,
+        ]);
+        if (category === 'shoes')
+          await assert.rejects(
+            service.updateTryOn(activeProductId, { tryOnEnabled: true }),
+            ConflictException,
+          );
+      }
+      await connection.execute(
+        'update products set is_active=false where id=?',
+        [activeProductId],
+      );
+      await assert.rejects(
+        service.updateTryOn(activeProductId, { tryOnEnabled: true }),
+        ConflictException,
+      );
+      assert.equal(
+        (await service.updateTryOn(activeProductId, { tryOnEnabled: false }))
+          .tryOnEnabled,
+        false,
+      );
+      await connection.execute(
+        "update products set is_active=true, category='outerwear' where id=?",
+        [activeProductId],
+      );
+      await connection.execute('update product_skus set color=? where id=?', [
+        ' ',
+        skuIds[0],
+      ]);
+      await assert.rejects(
+        service.updateTryOn(activeProductId, { tryOnEnabled: true }),
+        ConflictException,
+      );
+      await connection.execute(
+        'update product_skus set color=?, stock=0 where id=?',
+        ['黑色', skuIds[0]],
+      );
+      assert.equal(
+        (await service.updateTryOn(activeProductId, { tryOnEnabled: true }))
+          .tryOnEnabled,
+        true,
+        '库存不是开启条件',
+      );
+      await connection.execute('update product_skus set stock=5 where id=?', [
+        skuIds[0],
+      ]);
+      await Promise.all([
+        service.updateTryOn(activeProductId, { tryOnEnabled: false }),
+        service.updateTryOn(activeProductId, { tryOnEnabled: true }),
+      ]);
+      assert.equal(
+        (await service.detail(activeProductId)).totalStock,
+        9,
+        '并发配置不得影响库存',
+      );
+
       Reflect.defineMetadata('design:paramtypes', [Reflector], RolesGuard);
       @Module({
         controllers: [AdminProductCatalogController],
@@ -201,10 +337,24 @@ test(
       assert.equal(response.status, 200);
       const body = (await response.json()) as {
         skus: Array<{ reservedStock: number }>;
+        tryOnEnabled: boolean;
       };
       assert.equal(
         body.skus.some((sku) => sku.reservedStock === 2),
         true,
+      );
+      const patch = await fetch(`${base}/${activeProductId}/try-on`, {
+        method: 'PATCH',
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ tryOnEnabled: false }),
+      });
+      assert.equal(patch.status, 200);
+      assert.equal(
+        ((await patch.json()) as { tryOnEnabled: boolean }).tryOnEnabled,
+        false,
       );
     } finally {
       if (app) await app.close();

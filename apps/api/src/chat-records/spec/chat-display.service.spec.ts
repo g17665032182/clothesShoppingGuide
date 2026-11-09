@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { LockMode } from '@mikro-orm/core';
@@ -13,6 +14,8 @@ import {
   restoreProductResults,
 } from '../display/chat-display.projection.js';
 import { ChatDisplayService } from '../display/chat-display.service.js';
+import type { ChatProductCard } from '../display/chat-display.types.js';
+import type { TryOnProductProjection } from '../../product-catalog/index.js';
 import {
   ChatTraceEvent,
   ChatTraceEventType,
@@ -31,6 +34,9 @@ function createState() {
   const rows: ChatTraceEvent[] = [];
   const queries: unknown[] = [];
   const locks: unknown[] = [];
+  const products = new Map<string, TryOnProductProjection>();
+  const catalogRequests: string[][] = [];
+  let catalogFailureAfter = Infinity;
   let flushCount = 0;
   const repository = {
     async find(where: unknown, options: unknown) {
@@ -61,11 +67,67 @@ function createState() {
     rows,
     queries,
     locks,
+    products,
+    catalogRequests,
+    failCatalog(afterSuccessfulRequests = 0) {
+      catalogFailureAfter = catalogRequests.length + afterSuccessfulRequests;
+    },
     transaction,
-    display: new ChatDisplayService(repository as never),
+    display: new ChatDisplayService(
+      repository as never,
+      {
+        async getTryOnProducts(externalIds: string[]) {
+          catalogRequests.push(externalIds);
+          if (catalogRequests.length > catalogFailureAfter) {
+            throw new Error('private catalog failure');
+          }
+          return new Map(
+            externalIds.flatMap((externalId) => {
+              const product = products.get(externalId);
+              return product ? [[externalId, product] as const] : [];
+            }),
+          );
+        },
+      } as never,
+    ),
     get flushCount() {
       return flushCount;
     },
+  };
+}
+
+function productCard(externalId = 'coat-1'): ChatProductCard {
+  return {
+    externalId,
+    name: '历史大衣',
+    brand: null,
+    category: 'outerwear',
+    description: null,
+    imageUrl: 'https://images.example.com/old-coat.webp',
+    productUrl: 'https://shop.example.com/old-coat',
+    price: '899.00',
+    currency: 'CNY',
+    sizes: ['M'],
+    colors: ['黑色'],
+    inStock: true,
+    tryOnEnabled: true,
+    matchReasons: ['size_match'],
+  };
+}
+
+function tryOnProduct(
+  externalId: string,
+  enabled = true,
+  eligible = true,
+): TryOnProductProjection {
+  return {
+    productExternalId: externalId,
+    productName: '当前商品名称',
+    category: 'outerwear',
+    tryOnEnabled: enabled,
+    tryOnEligible: eligible,
+    mainImageUrl: 'https://images.example.com/current-coat.webp',
+    colors: [{ color: '黑色', imageUrl: null }],
   };
 }
 
@@ -171,6 +233,7 @@ test('商品搜索结果只投影白名单字段并绑定到公开聊天快照',
   assert.equal(JSON.stringify(data).includes('internalSkuId'), false);
   const restored = restoreDisplay(displayEnvelope(data, assistantMessageId));
   assert.equal(restored?.productResults[0]?.items[0]?.price, '899.00');
+  assert.equal(restored?.productResults[0]?.items[0]?.tryOnEnabled, false);
   assert.deepEqual(restored?.productResults[0]?.query, {
     size: 'M',
     limit: 3,
@@ -198,6 +261,30 @@ test('商品工具结果非法时不生成公开商品投影', () => {
   };
   assert.deepEqual(restoreDisplay(oldSnapshot)?.productResults, []);
   assert.equal(restoreDisplay(oldSnapshot)?.purchase, null);
+});
+
+test('旧商品快照缺少试穿开关时默认关闭，非法类型仍拒绝整个投影', () => {
+  const { tryOnEnabled: _tryOnEnabled, ...oldCard } = productCard();
+  const result = {
+    items: [oldCard],
+    nextCursor: null,
+    noResultReason: null,
+  };
+  assert.equal(
+    restoreProductResults(JSON.stringify(result))?.items[0]?.tryOnEnabled,
+    false,
+  );
+  for (const invalid of ['true', null, 1]) {
+    assert.equal(
+      restoreProductResults(
+        JSON.stringify({
+          ...result,
+          items: [{ ...oldCard, tryOnEnabled: invalid }],
+        }),
+      ),
+      null,
+    );
+  }
 });
 
 test('购买引用恢复为可空投影且容量预留包含最大合法引用', () => {
@@ -514,5 +601,103 @@ test('历史无效版本、无效结构和重复绑定均降级为空展示，�
   assert.equal(
     (await state.display.read(conversationId, [assistantMessageId])).size,
     0,
+  );
+});
+
+test('历史按当前资格更新试穿开关，旧字段也可恢复且不写回商品快照', async () => {
+  const state = createState();
+  const cards = ['enabled', 'disabled', 'ineligible', 'missing'].map(
+    productCard,
+  );
+  const { tryOnEnabled: _tryOnEnabled, ...legacyCard } = cards[0]!;
+  const original = {
+    ...displayEnvelope(state.display.create(1_000), assistantMessageId),
+    productResults: [
+      {
+        items: [legacyCard, ...cards.slice(1)],
+        nextCursor: null,
+        noResultReason: null,
+      },
+    ],
+  };
+  state.rows.push(trace({ publicDisplay: original }));
+  state.products.set('enabled', tryOnProduct('enabled'));
+  state.products.set('disabled', tryOnProduct('disabled', false));
+  state.products.set('ineligible', tryOnProduct('ineligible', true, false));
+  const before = structuredClone(state.rows[0]!.payload);
+
+  const result = await state.display.read(conversationId, [assistantMessageId]);
+  const items = result.get(assistantMessageId)!.productResults[0]!.items;
+  assert.deepEqual(
+    items.map((item) => item.tryOnEnabled),
+    [true, false, false, false],
+  );
+  assert.equal(items[0]?.name, '历史大衣');
+  assert.equal(items[0]?.price, '899.00');
+  assert.equal(items[0]?.imageUrl, 'https://images.example.com/old-coat.webp');
+  assert.deepEqual(state.rows[0]!.payload, before);
+  assert.equal(state.flushCount, 0);
+
+  state.products.set('enabled', tryOnProduct('enabled', false));
+  const refreshed = await state.display.read(conversationId, [
+    assistantMessageId,
+  ]);
+  assert.equal(
+    refreshed.get(assistantMessageId)?.productResults[0]?.items[0]
+      ?.tryOnEnabled,
+    false,
+  );
+});
+
+test('历史资格读取去重并以最多 200 件分批，目录异常时所有入口关闭', async () => {
+  const state = createState();
+  const ids: string[] = [];
+  const cards = Array.from({ length: 205 }, (_, index) =>
+    productCard(`product-${index}`),
+  );
+  cards.push(productCard('product-0'));
+  for (let offset = 0; offset < cards.length; offset += 20) {
+    const id = randomUUID();
+    ids.push(id);
+    state.rows.push(
+      trace({
+        publicDisplay: {
+          ...displayEnvelope(state.display.create(1_000), id),
+          productResults: [
+            {
+              items: cards.slice(offset, offset + 20),
+              nextCursor: null,
+              noResultReason: null,
+            },
+          ],
+        },
+      }),
+    );
+  }
+  for (const card of cards)
+    state.products.set(card.externalId, tryOnProduct(card.externalId));
+  const result = await state.display.read(conversationId, ids);
+  assert.deepEqual(
+    state.catalogRequests.map((request) => request.length),
+    [200, 5],
+  );
+  assert.equal(new Set(state.catalogRequests.flat()).size, 205);
+  assert.ok(
+    [...result.values()].every((display) =>
+      display.productResults[0]!.items.every((item) => item.tryOnEnabled),
+    ),
+  );
+
+  state.failCatalog(1);
+  const failed = await state.display.read(conversationId, ids);
+  assert.equal(failed.size, ids.length);
+  assert.ok(
+    [...failed.values()].every((display) =>
+      display.productResults[0]!.items.every((item) => !item.tryOnEnabled),
+    ),
+  );
+  assert.equal(
+    JSON.stringify([...failed.values()]).includes('private catalog failure'),
+    false,
   );
 });

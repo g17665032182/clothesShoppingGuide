@@ -14,6 +14,7 @@ import { ProductSku } from '../../product-catalog/entity/product-sku.entity.js';
 import { ProductCatalogPurchaseService } from '../../product-catalog/service/product-catalog-purchase.service.js';
 import { ProductCatalogOrderService } from '../../product-catalog/service/product-catalog-order.service.js';
 import { ProductCatalogService } from '../../product-catalog/index.js';
+import { ProductCatalogTryOnService } from '../../product-catalog/service/product-catalog-try-on.service.js';
 import { Order, OrdersService } from '../../orders/index.js';
 import { OrderIdempotency } from '../../orders/entity/order-idempotency.entity.js';
 import { OrdersController } from '../../orders/controller/orders.controller.js';
@@ -524,6 +525,9 @@ test(
           );
           let enqueued = 0;
           const traces = em.getRepository(ChatTraceEvent);
+          const tryOnProducts = new ProductCatalogTryOnService(
+            em.getRepository(Product),
+          );
           const chat = new ChatRecordsService(
             em.getRepository(ChatConversation),
             em.getRepository(ChatMessage),
@@ -539,9 +543,13 @@ test(
               },
             } as never,
             { markConversationDeleted: async () => undefined },
-            new ChatDisplayService(traces),
+            new ChatDisplayService(traces, tryOnProducts),
             { readContext: async () => '' },
-            new ProductCatalogService(em.getRepository(Product), llmConfig),
+            new ProductCatalogService(
+              em.getRepository(Product),
+              llmConfig,
+              tryOnProducts,
+            ),
             drafts,
             access,
           );

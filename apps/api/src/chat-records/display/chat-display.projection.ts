@@ -56,6 +56,8 @@ const productCardSchema = z.strictObject({
   sizes: z.array(z.string().max(32)).max(100),
   colors: z.array(z.string().max(32)).max(100),
   inStock: z.boolean(),
+  // 历史商品快照缺少开关时先关闭入口，读取阶段再用当前目录资格校正。
+  tryOnEnabled: z.boolean().default(false),
   matchReasons: z
     .array(
       z.enum([
