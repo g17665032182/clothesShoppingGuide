@@ -345,7 +345,7 @@ const TEST_PRODUCTS = [
     fits: ['常规'],
     productUrl: 'https://www.muji.com/',
     imageUrl:
-      'https://images.unsplash.com/photo-1625910513413-5fc45c4f7c8a?auto=format&fit=crop&w=640&q=80',
+      'https://images.unsplash.com/photo-1770058436726-55d41e67caf6?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-polo-white-m',
@@ -374,7 +374,7 @@ const TEST_PRODUCTS = [
     fits: ['A字', '高腰'],
     productUrl: 'https://www.uniqlo.com/',
     imageUrl:
-      'https://images.unsplash.com/photo-1583496661160-fb5886a13d27?auto=format&fit=crop&w=640&q=80',
+      'https://images.unsplash.com/photo-1614676471928-2ed0ad1061a4?auto=format&fit=crop&w=640&q=80',
     skus: [
       {
         externalSkuId: 'test-skirt-khaki-s',

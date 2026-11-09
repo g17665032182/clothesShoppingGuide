@@ -177,7 +177,11 @@ export function useMyTryOnsPage() {
           const rawUrl = response.url ?? response.downloadUrl;
           if (!rawUrl) return;
           const url = new URL(rawUrl);
-          if (url.protocol !== 'https:') return;
+          const localDevelopmentUrl =
+            import.meta.env.DEV &&
+            url.protocol === 'http:' &&
+            ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+          if (url.protocol !== 'https:' && !localDevelopmentUrl) return;
           resultImageUrls.value[task.id] = url.href;
           resultImageExpiresAt.value[task.id] =
             Date.now() + Math.max(30, response.expiresInSeconds ?? 240) * 1000;
@@ -325,8 +329,27 @@ export function useMyTryOnsPage() {
       if (!isCurrent()) return;
       const url = result.url ?? result.downloadUrl;
       if (!url) throw new Error('服务器未返回下载地址');
+      const downloadUrl = new URL(url);
+      const localDevelopmentUrl =
+        import.meta.env.DEV &&
+        downloadUrl.protocol === 'http:' &&
+        ['localhost', '127.0.0.1', '[::1]'].includes(downloadUrl.hostname);
+      if (localDevelopmentUrl) {
+        const response = await fetch(downloadUrl, {
+          signal: actionController.signal,
+        });
+        if (!response.ok) throw new Error('试穿结果下载失败');
+        const objectUrl = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = `${task.product.name}-试穿.png`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        toast.success('已发起试穿结果下载');
+        return;
+      }
       const link = document.createElement('a');
-      link.href = url;
+      link.href = downloadUrl.href;
       link.download = `${task.product.name}-试穿.png`;
       link.rel = 'noopener';
       link.click();

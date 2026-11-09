@@ -18,6 +18,7 @@
     "migration:up": "pnpm build && mikro-orm migration:up --config ./dist/mikro-orm.config.js",
     "migration:down": "pnpm build && mikro-orm migration:down --config ./dist/mikro-orm.config.js",
     "migration:fresh": "pnpm build && mikro-orm migration:fresh --config ./dist/mikro-orm.config.js --drop-db --seed",
+    "catalog:hydrate-local-try-on-images": "tsx src/scripts/hydrate-local-test-try-on-images.ts",
     "seeder:create": "pnpm build && node ./scripts/seeder-create.mjs",
     "catalog:import": "tsx src/scripts/import-product-catalog.ts",
     "catalog:seed:test": "pnpm build && mikro-orm seeder:run --class=ProductCatalogTestSeeder --config ./dist/mikro-orm.config.js",

@@ -130,6 +130,14 @@ TRY_ON_RETENTION_PREFIX=try-on
 
 `TRY_ON_REAL_PHOTOS_ENABLED=false` 是生产安全闸门。启用前必须完成供应商留存、地区、训练用途和删除 SLA 审查；开发环境只能用合成或公开测试图。真实 API Key 只通过 API 进程环境变量读取，不进入前端 Vite 环境、Git、Swagger 示例或日志。
 
+### 开发环境对象存储
+
+- `TRY_ON_STORAGE_DRIVER` 默认 `qiniu`；仅 `NODE_ENV=development` 时可设为 `local`。生产环境选择本地存储会阻止 API 启动。
+- 本地文件写入 API 私有目录 `./.local-private/try-on`，不通过静态文件服务器暴露；文件权限限制为仅当前用户可读写。照片、结果及商品试穿图沿用原有独立对象键和删除流程。
+- 本地试穿结果仍使用有时效的授权 URL。AES-GCM 令牌由服务端密钥加密对象键并校验篡改，下载路由拒绝未知对象键、篡改令牌和过期链接，并返回 `private, no-store`。
+- `TRY_ON_LOCAL_PUBLIC_URL` 默认 `http://localhost:3000`，只接受 loopback 地址，供开发前端加载本地签名结果。
+- 从七牛私有 Bucket 切换至本地模式后，旧商品图对象不会自动迁移。`pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images` 只恢复 `test-guide-*` 测试商品，来源限定为目录内 Unsplash 图片；人像资产不迁移，须在开发环境重新上传合成/公开测试照片。测试/生产仍使用七牛，不执行本地对象迁移。
+
 ## 接口与依赖注入
 
 ### 商品目录端口

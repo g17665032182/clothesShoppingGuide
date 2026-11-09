@@ -6,6 +6,7 @@ coverage/
 .pnpm-store/
 *.tsbuildinfo
 *.log
+apps/api/.local-private/
 
 # 保留环境变量示例，忽略实际凭据。
 .env
