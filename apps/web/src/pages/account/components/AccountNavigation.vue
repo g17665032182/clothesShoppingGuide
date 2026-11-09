@@ -4,6 +4,7 @@ import {
   SlidersHorizontal,
   UserRound,
   ShoppingBag,
+  Shirt,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
@@ -100,6 +101,26 @@ const isPreferencesView = computed(
         >
           <SlidersHorizontal aria-hidden="true" class="size-4" />
           我的偏好
+        </a>
+      </RouterLink>
+      <RouterLink
+        v-slot="{ isActive, href, navigate }"
+        :to="{ name: 'my-try-ons' }"
+        custom
+      >
+        <a
+          :aria-current="isActive ? 'page' : undefined"
+          :class="
+            cn(
+              'flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm transition-colors hover:bg-muted',
+              isActive && 'bg-muted font-medium text-foreground',
+            )
+          "
+          :href="href"
+          @click="navigate"
+        >
+          <Shirt aria-hidden="true" class="size-4" />
+          我的试穿
         </a>
       </RouterLink>
     </nav>

@@ -51,6 +51,11 @@ export const router = createRouter({
           name: 'account-memories',
           component: () => import('@/pages/memories/index.vue'),
         },
+        {
+          path: 'try-ons',
+          name: 'my-try-ons',
+          component: () => import('@/pages/my-try-ons/index.vue'),
+        },
       ],
     },
     {

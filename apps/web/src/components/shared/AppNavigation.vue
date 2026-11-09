@@ -66,6 +66,12 @@ function signOut() {
               </RouterLink>
             </DropdownMenuItem>
             <DropdownMenuItem as-child>
+              <RouterLink :to="{ name: 'my-try-ons' }">
+                <Shirt aria-hidden="true" />
+                我的试穿
+              </RouterLink>
+            </DropdownMenuItem>
+            <DropdownMenuItem as-child>
               <RouterLink
                 :to="{ name: 'account-memories', query: { view: 'document' } }"
               >

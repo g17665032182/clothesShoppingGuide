@@ -17,6 +17,11 @@ export {
   type ProductCatalogPurchasePort,
   type ProductCatalogPurchaseProjection,
 } from './port/product-catalog-purchase.port.js';
+export {
+  PRODUCT_CATALOG_TRY_ON_PORT,
+  type ProductCatalogTryOnPort,
+  type TryOnProductProjection,
+} from './port/product-catalog-try-on.port.js';
 export type { ProductSkuResponse } from './dto/product-sku-response.dto.js';
 export { normalizeProductPublicUrl } from './public-url.js';
 export {

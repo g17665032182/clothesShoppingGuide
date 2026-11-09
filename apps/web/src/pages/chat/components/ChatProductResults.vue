@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { ArrowUpRight, Check, ImageOff, ShoppingBag } from '@lucide/vue';
+import { useRouter } from 'vue-router';
+import { ArrowUpRight, Check, ImageOff, Shirt, ShoppingBag } from '@lucide/vue';
 import type { ChatProductResults } from '@/api/types/chat';
+import { auth } from '@/lib/auth';
 
 const props = defineProps<{
   resultSets: ChatProductResults[];
@@ -11,6 +13,7 @@ const emit = defineEmits<{
   (event: 'more', resultIndex: number): void;
   (event: 'buy', externalId: string): void;
 }>();
+const router = useRouter();
 const failedImages = ref(new Set<string>());
 
 const categoryLabels: Record<string, string> = {
@@ -32,6 +35,7 @@ const reasonLabels: Record<string, string> = {
   fit_match: '版型匹配',
   preference_match: '偏好匹配',
 };
+const tryOnCategories = new Set(['tops', 'bottoms', 'dresses', 'outerwear']);
 
 const emptyReasonLabels: Record<string, string> = {
   NO_MATCHING_SIZE: '没有找到符合该尺码的商品',
@@ -77,6 +81,25 @@ function publicUrl(value: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function openTryOn(item: (typeof resultSets.value)[number]['items'][number]) {
+  const query = {
+    productExternalId: item.externalId,
+    productName: item.name,
+    category: item.category,
+    imageUrl: item.imageSrc ?? undefined,
+    colors: item.colors.join(','),
+  };
+  const destination = router.resolve({ name: 'my-try-ons', query });
+  if (!auth.isAuthenticated.value) {
+    void router.push({
+      path: '/login',
+      query: { redirect: destination.fullPath },
+    });
+    return;
+  }
+  void router.push(destination);
 }
 </script>
 
@@ -185,6 +208,16 @@ function publicUrl(value: string | null): string | null {
           >
             <ShoppingBag aria-hidden="true" />
             购买
+          </button>
+          <button
+            v-if="tryOnCategories.has(item.category)"
+            type="button"
+            class="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="disabled"
+            @click="openTryOn(item)"
+          >
+            <Shirt aria-hidden="true" />
+            试穿
           </button>
         </div>
       </article>

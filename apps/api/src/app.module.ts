@@ -14,6 +14,7 @@ import { UsersModule } from './users/users.module.js';
 import { UserMemoryModule } from './user-memory/index.js';
 import { UserPreferencesModule } from './user-preferences/index.js';
 import { OrderCatalogCoordinationModule } from './order-catalog-coordination/order-catalog-coordination.module.js';
+import { VirtualTryOnModule } from './virtual-try-on/virtual-try-on.module.js';
 
 @Module({
   imports: [
@@ -28,6 +29,17 @@ import { OrderCatalogCoordinationModule } from './order-catalog-coordination/ord
             'PRODUCT_QUERY_CURSOR_SECRET 必须配置为至少 32 字符的随机密钥',
           );
         }
+        const allowedHashes = String(
+          config.TRY_ON_ALLOWED_TEST_IMAGE_SHA256 ?? '',
+        )
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+        if (allowedHashes.some((value) => !/^[0-9a-f]{64}$/iu.test(value))) {
+          throw new Error(
+            'TRY_ON_ALLOWED_TEST_IMAGE_SHA256 必须是逗号分隔的 SHA-256 十六进制摘要',
+          );
+        }
         return config;
       },
     }),
@@ -40,6 +52,7 @@ import { OrderCatalogCoordinationModule } from './order-catalog-coordination/ord
     AuthModule,
     LlmModule,
     ChatRecordsModule,
+    VirtualTryOnModule,
     HealthModule,
   ],
   providers: [
