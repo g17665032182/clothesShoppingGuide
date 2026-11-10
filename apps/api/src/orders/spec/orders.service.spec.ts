@@ -61,6 +61,7 @@ function createService(
     order?: Order | null;
     orders?: Order[];
     items?: OrderItem[];
+    candidateIds?: string[];
   } = {},
 ) {
   const calls: unknown[] = [];
@@ -86,6 +87,19 @@ function createService(
     },
     async find(entity: unknown, where: unknown) {
       calls.push({ method: 'find', entity, where });
+      if (entity === Order) {
+        const condition = where as {
+          id?: { $in?: string[] };
+          userId?: string;
+          status?: OrderStatus;
+        };
+        return orders.filter(
+          (order) =>
+            (!condition.id?.$in || condition.id.$in.includes(order.id)) &&
+            (!condition.userId || order.userId === condition.userId) &&
+            (!condition.status || order.status === condition.status),
+        );
+      }
       if (entity === OrderItem) {
         const condition = where as {
           orderId?: string | { $in?: string[] };
@@ -97,6 +111,14 @@ function createService(
         return items.filter((item) => orderIds.includes(item.orderId));
       }
       return [];
+    },
+    getConnection() {
+      return {
+        async execute(sql: string, params: unknown[]) {
+          calls.push({ method: 'execute', sql, params });
+          return (options.candidateIds ?? []).map((id) => ({ id }));
+        },
+      };
     },
     async findAndCount(entity: unknown, where: unknown, query: unknown) {
       calls.push({ method: 'findAndCount', entity, where, query });
@@ -181,6 +203,30 @@ test('本人列表只按当前用户筛选，摘要不返回收件信息', async
     ),
     true,
   );
+});
+
+test('可取消候选使用数据库时钟、绑定本人并稳定限制五笔', async () => {
+  const candidateOrder = makeOrder();
+  const { calls, service } = createService({
+    orders: [candidateOrder],
+    candidateIds: [candidateOrder.id],
+  });
+
+  const candidates = await service.listCancelableForUser(ownerId);
+  const query = calls.find(
+    (call) => (call as { method?: string }).method === 'execute',
+  ) as { sql: string; params: unknown[] } | undefined;
+
+  assert.match(query?.sql ?? '', /user_id = \? and status = \?/u);
+  assert.match(query?.sql ?? '', /expires_at > clock_timestamp\(\)/u);
+  assert.match(query?.sql ?? '', /order by created_at desc, id desc/u);
+  assert.match(query?.sql ?? '', /limit 5/u);
+  assert.deepEqual(query?.params, [ownerId, OrderStatus.PENDING_PAYMENT]);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.id, orderId);
+  assert.equal(candidates[0]?.status, OrderStatus.PENDING_PAYMENT);
+  assert.equal('recipient' in (candidates[0] ?? {}), false);
+  assert.equal('userId' in (candidates[0] ?? {}), false);
 });
 
 test('管理员订单详情仅增加用户标识，仍使用字段白名单', async () => {

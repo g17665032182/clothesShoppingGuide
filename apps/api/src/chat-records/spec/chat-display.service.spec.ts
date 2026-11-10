@@ -261,7 +261,152 @@ test('商品工具结果非法时不生成公开商品投影', () => {
     context: null,
   };
   assert.deepEqual(restoreDisplay(oldSnapshot)?.productResults, []);
+  assert.deepEqual(
+    restoreDisplay(oldSnapshot)?.orderCancellationCandidates,
+    [],
+  );
   assert.equal(restoreDisplay(oldSnapshot)?.purchase, null);
+});
+
+test('仅待付款订单工具查询的严格成功结果生成候选卡片并可恢复', () => {
+  const { display } = createState();
+  const data = display.create(10_000);
+  const order = {
+    orderId: '55555555-5555-4555-8555-555555555555',
+    orderNo: 'ORDER-1001',
+    status: 'pending_payment',
+    payableAmount: '199.00',
+    createdAt: '2026-11-10T09:00:00.000Z',
+    expiresAt: '2026-11-10T10:00:00.000Z',
+    cancelable: true,
+    items: [
+      {
+        productName: '羊毛大衣',
+        color: '深灰',
+        size: 'M',
+        quantity: 1,
+      },
+    ],
+  };
+  display.apply(data, {
+    type: 'tool-call',
+    id: 'orders-call',
+    toolName: 'list_my_orders',
+    input: { status: 'pending_payment', userId: 'must-not-be-trusted' },
+  });
+  const event = display.apply(data, {
+    type: 'tool-result',
+    id: 'orders-call',
+    toolName: 'list_my_orders',
+    status: 'success',
+    output: JSON.stringify({ ok: true, orders: [order] }),
+  });
+  assert.equal(event?.type, 'order-cancellation-candidates');
+  assert.deepEqual(
+    event?.type === 'order-cancellation-candidates'
+      ? event.orderCancellationCandidates
+      : [],
+    [order],
+  );
+  assert.deepEqual(data.orderCancellationCandidates, [order]);
+  const restored = restoreDisplay(displayEnvelope(data, assistantMessageId));
+  assert.deepEqual(restored?.orderCancellationCandidates, [order]);
+  assert.ok(reservedDisplayBytes(data) <= MAX_DISPLAY_BYTES);
+});
+
+test('普通订单查询、失败结果和含未知字段的结果均不生成取消候选', () => {
+  const malformedOrder = {
+    orderId: '55555555-5555-4555-8555-555555555555',
+    orderNo: 'ORDER-1001',
+    status: 'pending_payment',
+    payableAmount: '199.00',
+    createdAt: '2026-11-10T09:00:00.000Z',
+    expiresAt: '2026-11-10T10:00:00.000Z',
+    cancelable: true,
+    recipientPhone: '13812345678',
+    items: [],
+  };
+  const scenarios = [
+    {
+      input: { status: 'pending_shipment' },
+      status: 'success' as const,
+      output: JSON.stringify({ ok: true, orders: [] }),
+    },
+    {
+      input: { status: 'pending_payment' },
+      status: 'error' as const,
+      output: JSON.stringify({ ok: false, orders: [] }),
+    },
+    {
+      input: { status: 'pending_payment' },
+      status: 'success' as const,
+      output: JSON.stringify({ ok: true, orders: [malformedOrder] }),
+    },
+  ];
+  for (const scenario of scenarios) {
+    const { display } = createState();
+    const data = display.create(10_000);
+    display.apply(data, {
+      type: 'tool-call',
+      id: 'orders-call',
+      toolName: 'list_my_orders',
+      input: scenario.input,
+    });
+    const event = display.apply(data, {
+      type: 'tool-result',
+      id: 'orders-call',
+      toolName: 'list_my_orders',
+      status: scenario.status,
+      output: scenario.output,
+    });
+    assert.notEqual(event?.type, 'order-cancellation-candidates');
+    assert.deepEqual(data.orderCancellationCandidates, []);
+  }
+});
+
+test('完整校验最多 50 条工具明细，公开订单卡片只保留前 5 条', () => {
+  const { display } = createState();
+  const data = display.create(10_000);
+  const items = Array.from({ length: 6 }, (_, index) => ({
+    productName: `商品${index + 1}`,
+    color: '黑色',
+    size: 'M',
+    quantity: 1,
+  }));
+  display.apply(data, {
+    type: 'tool-call',
+    id: 'orders-call',
+    toolName: 'list_my_orders',
+    input: { status: 'pending_payment' },
+  });
+  const event = display.apply(data, {
+    type: 'tool-result',
+    id: 'orders-call',
+    toolName: 'list_my_orders',
+    status: 'success',
+    output: JSON.stringify({
+      ok: true,
+      orders: [
+        {
+          orderId: '55555555-5555-4555-8555-555555555555',
+          orderNo: 'ORDER-1001',
+          status: 'pending_payment',
+          payableAmount: '199.00',
+          createdAt: '2026-11-10T09:00:00.000Z',
+          expiresAt: '2026-11-10T10:00:00.000Z',
+          cancelable: true,
+          items,
+        },
+      ],
+    }),
+  });
+  assert.equal(event?.type, 'order-cancellation-candidates');
+  assert.deepEqual(
+    data.orderCancellationCandidates[0]?.items,
+    items.slice(0, 5),
+  );
+  assert.equal(data.orderCancellationCandidates[0]?.items.length, 5);
+  assert.ok(reservedDisplayBytes(data) <= MAX_DISPLAY_BYTES);
 });
 
 test('旧商品快照缺少试穿开关时默认关闭，非法类型仍拒绝整个投影', () => {

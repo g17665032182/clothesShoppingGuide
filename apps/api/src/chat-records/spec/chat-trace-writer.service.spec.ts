@@ -402,9 +402,11 @@ test('订单和地址工具的 trace 仅保存专属安全白名单', async () =
         ok: true,
         orders: [
           {
+            id: '55555555-5555-4555-8555-555555555555',
             orderNo: 'ORDER-1',
             status: 'pending_shipment',
             payableAmount: '99.00',
+            expiresAt: '2026-11-10T10:00:00.000Z',
             recipientName: '张三',
             recipientPhone: '13812345678',
             recipientAddress: '机密收货地址',
@@ -482,6 +484,19 @@ test('订单和地址工具的 trace 仅保存专属安全白名单', async () =
     assert.equal(serialized.includes(privateValue), false, privateValue);
   }
   assert.match(serialized, /"orderNo":"ORDER-1"/u);
+  const safeOrders = JSON.parse(
+    rows.find(
+      (row) =>
+        typeof row.content === 'string' && row.content.includes('"orders"'),
+    )?.content ?? '{}',
+  ) as { ok: boolean; orders: Array<Record<string, unknown>> };
+  assert.equal(safeOrders.ok, true);
+  assert.equal(safeOrders.orders.length, 1);
+  assert.equal(
+    safeOrders.orders[0]?.id,
+    '55555555-5555-4555-8555-555555555555',
+  );
+  assert.equal(safeOrders.orders[0]?.expiresAt, '2026-11-10T10:00:00.000Z');
   assert.match(serialized, /默认地址/u);
   assert.match(
     serialized,

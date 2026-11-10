@@ -9,6 +9,7 @@ import type {
   ChatActivity,
   ChatContextUsage,
   ChatDisplayData,
+  OrderCancellationCandidate,
   ChatProductResults,
   ChatSource,
   PurchaseReference,
@@ -28,6 +29,48 @@ const purchaseReferenceSchema = z.strictObject({
   version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   orderId: z.uuid().nullable(),
 });
+const orderCancellationCandidateItemSchema = z.strictObject({
+  productName: z.string().trim().min(1).max(60),
+  color: z.string().max(16),
+  size: z.string().max(16),
+  quantity: z.number().int().positive().max(999),
+});
+const orderCancellationCandidateSchema = z.strictObject({
+  orderId: z.uuid(),
+  orderNo: z.string().trim().min(1).max(100),
+  status: z.literal('pending_payment'),
+  payableAmount: z.string().regex(/^\d{1,10}\.\d{2}$/u),
+  createdAt: z.iso.datetime({ offset: true }),
+  expiresAt: z.iso.datetime({ offset: true }),
+  cancelable: z.literal(true),
+  items: z.array(orderCancellationCandidateItemSchema).max(5),
+});
+const orderCancellationToolCandidateSchema =
+  orderCancellationCandidateSchema.extend({
+    items: z.array(orderCancellationCandidateItemSchema).max(50),
+  });
+const orderCancellationCandidatesSchema = z.strictObject({
+  ok: z.literal(true),
+  orders: z.array(orderCancellationToolCandidateSchema).max(5),
+});
+const ORDER_CANDIDATE_RESERVATION: OrderCancellationCandidate[] = Array.from(
+  { length: 5 },
+  (_, orderIndex) => ({
+    orderId: BINDING_ID_RESERVATION,
+    orderNo: `ORDER-${'X'.repeat(100 - 6 - String(orderIndex).length)}`,
+    status: 'pending_payment',
+    payableAmount: '9999999999.99',
+    createdAt: '9999-12-31T23:59:59.999Z',
+    expiresAt: '9999-12-31T23:59:59.999Z',
+    cancelable: true,
+    items: Array.from({ length: 5 }, () => ({
+      productName: '商'.repeat(60),
+      color: '色'.repeat(16),
+      size: '码'.repeat(16),
+      quantity: 999,
+    })),
+  }),
+);
 
 const activitySchema = z.discriminatedUnion('type', [
   z.object({
@@ -102,6 +145,10 @@ const envelopeSchema = z.object({
   ),
   // 缺字段兼容导购上线前已保存的聊天快照。
   productResults: z.array(productResultsSchema).max(5).default([]),
+  orderCancellationCandidates: z
+    .array(orderCancellationCandidateSchema)
+    .max(5)
+    .default([]),
   purchase: purchaseReferenceSchema.nullable().default(null),
   context: z
     .object({
@@ -265,6 +312,7 @@ export function displayEnvelope(
     activities: data.activities,
     sources: data.sources,
     productResults: data.productResults,
+    orderCancellationCandidates: data.orderCancellationCandidates,
     context: data.context,
     purchase: data.purchase,
   };
@@ -282,6 +330,8 @@ export function reservedDisplayBytes(data: ChatDisplayData): number {
       activities: data.activities,
       sources: data.sources,
       productResults: data.productResults,
+      // 候选卡片字段均有长度上限，因此可预留可验证的最大合法投影空间。
+      orderCancellationCandidates: ORDER_CANDIDATE_RESERVATION,
       // 预留流末绑定最大合法购买引用所需空间。
       purchase: PURCHASE_REFERENCE_RESERVATION,
       // 在发送活动前预留最终用量数字，避免实时成功而最终绑定超限。
@@ -355,6 +405,15 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
       };
     },
   );
+  const orderCancellationCandidates: OrderCancellationCandidate[] =
+    source.orderCancellationCandidates.map((candidate) => ({
+      ...candidate,
+      orderNo: candidate.orderNo.trim(),
+      items: candidate.items.map((item) => ({
+        ...item,
+        productName: item.productName.trim(),
+      })),
+    }));
   const context = source.context
     ? projectContext(source.context.contextWindowTokens, {
         inputTokens: tokenCount(source.context.inputTokens),
@@ -362,9 +421,38 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
       })
     : null;
   return displayEnvelope(
-    { activities, sources, productResults, context, purchase: source.purchase },
+    {
+      activities,
+      sources,
+      productResults,
+      orderCancellationCandidates,
+      context,
+      purchase: source.purchase,
+    },
     source.assistantMessageId,
   );
+}
+
+export function restoreOrderCancellationCandidates(
+  output: string,
+): OrderCancellationCandidate[] | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(output);
+  } catch {
+    return null;
+  }
+  const parsed = orderCancellationCandidatesSchema.safeParse(value);
+  if (!parsed.success) return null;
+  return parsed.data.orders.map((candidate) => ({
+    ...candidate,
+    orderNo: candidate.orderNo.trim(),
+    // 工具完整保留最多 50 条给模型，公开卡片只展示已预留预算的前 5 条。
+    items: candidate.items.slice(0, 5).map((item) => ({
+      ...item,
+      productName: item.productName.trim(),
+    })),
+  }));
 }
 
 export function restoreProductResults(

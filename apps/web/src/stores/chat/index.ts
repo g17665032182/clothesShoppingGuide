@@ -693,6 +693,25 @@ export const useChatStore = defineStore('chat', () => {
     );
   }
 
+  function markOrderCancellationComplete(
+    sessionKey: string,
+    orderId: string,
+  ): void {
+    const session = sessions.value[sessionKey];
+    if (!session) return;
+    updateSession(sessionKey, {
+      messages: session.messages.map((message) => ({
+        ...message,
+        orderCancellationCandidates: message.orderCancellationCandidates.map(
+          (candidate) =>
+            candidate.orderId === orderId
+              ? { ...candidate, cancellationResult: 'cancelled' }
+              : candidate,
+        ),
+      })),
+    });
+  }
+
   function flushConversation(id: string | null, keepalive = false) {
     const token = auth.state.token;
     if (!id || !token) return;
@@ -1341,5 +1360,6 @@ export const useChatStore = defineStore('chat', () => {
     updatePurchaseDraft,
     discardPurchase,
     confirmPurchaseOrder,
+    markOrderCancellationComplete,
   };
 });

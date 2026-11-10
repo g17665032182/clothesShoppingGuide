@@ -35,6 +35,17 @@ type SafeOrder = {
   items: SafeOrderItem[];
 };
 
+type SafeCancellationCandidate = {
+  orderId: string;
+  orderNo: string;
+  status: OrderStatus.PENDING_PAYMENT;
+  cancelable: true;
+  payableAmount: string;
+  createdAt: string;
+  expiresAt: string;
+  items: SafeOrderItem[];
+};
+
 function safeOrder(
   summary: Awaited<ReturnType<OrdersService['listForUser']>>['items'][number],
   items: Awaited<ReturnType<OrdersService['getForUser']>>['items'],
@@ -59,9 +70,33 @@ function safeOrder(
   };
 }
 
+function safeCancellationCandidate(
+  summary: Awaited<ReturnType<OrdersService['listForUser']>>['items'][number],
+  items: Awaited<ReturnType<OrdersService['getForUser']>>['items'],
+): SafeCancellationCandidate {
+  return {
+    orderId: summary.id,
+    orderNo: summary.orderNo,
+    status: OrderStatus.PENDING_PAYMENT,
+    cancelable: true,
+    payableAmount: summary.payableAmount,
+    createdAt: summary.createdAt,
+    expiresAt: summary.expiresAt,
+    items: items.map(({ productName, color, size, quantity }) => ({
+      productName,
+      color,
+      size,
+      quantity,
+    })),
+  };
+}
+
 /** 用户 ID 仅由调用方闭包绑定，模型参数无法指定查询归属。 */
 export function createListUserOrdersTool(
-  orders: Pick<OrdersService, 'listForUser' | 'getForUser'>,
+  orders: Pick<
+    OrdersService,
+    'listForUser' | 'getForUser' | 'listCancelableForUser'
+  >,
   boundUserId: string,
 ): StructuredToolInterface {
   return tool(
@@ -73,6 +108,19 @@ export function createListUserOrdersTool(
           ...(orderNo ? { orderNo } : {}),
           ...(status ? { status } : {}),
         });
+        if (status === OrderStatus.PENDING_PAYMENT) {
+          const candidates = await orders.listCancelableForUser(
+            boundUserId,
+            orderNo,
+          );
+          const safeOrders = await Promise.all(
+            candidates.map(async (summary) => {
+              const detail = await orders.getForUser(boundUserId, summary.id);
+              return safeCancellationCandidate(summary, detail.items);
+            }),
+          );
+          return JSON.stringify({ ok: true, orders: safeOrders });
+        }
         const result = await orders.listForUser(boundUserId, query);
 
         // 列表服务不返回商品明细；只对固定上限的本人订单读取快照并立即白名单投影。
@@ -100,7 +148,7 @@ export function createListUserOrdersTool(
     {
       name: 'list_my_orders',
       description:
-        '查询当前用户最多 5 笔订单的安全摘要，可按订单号或状态筛选；不提供收件信息，也不执行订单操作。',
+        '查询当前用户最多 5 笔订单的安全摘要，可按订单号或状态筛选；待付款筛选仅返回数据库判定未过期的本人订单及受限取消引用。不提供收件信息，也不执行订单操作。',
       schema: listUserOrdersToolSchema,
     },
   );

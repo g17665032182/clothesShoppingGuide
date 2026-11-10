@@ -19,6 +19,7 @@ function createService(
     failBind?: boolean;
     missingTrace?: boolean;
     tools?: boolean;
+    cancellationCandidates?: boolean;
     failedReader?: 'preferences' | 'memory';
   } = {},
 ) {
@@ -99,6 +100,42 @@ function createService(
           toolName: 'local_echo_tool',
           status: 'success',
           output: 'private',
+        };
+      }
+      if (options.cancellationCandidates) {
+        yield {
+          type: 'tool-call',
+          id: 'order-call-1',
+          toolName: 'list_my_orders',
+          input: { status: 'pending_payment' },
+        };
+        yield {
+          type: 'tool-result',
+          id: 'order-call-1',
+          toolName: 'list_my_orders',
+          status: 'success',
+          output: JSON.stringify({
+            ok: true,
+            orders: [
+              {
+                orderId: '123e4567-e89b-42d3-a456-426614174000',
+                orderNo: 'ORD-20261110-001',
+                status: 'pending_payment',
+                payableAmount: '129.00',
+                createdAt: '2026-11-10T08:00:00.000Z',
+                expiresAt: '2026-11-10T08:30:00.000Z',
+                cancelable: true,
+                items: [
+                  {
+                    productName: '针织衫',
+                    color: '灰色',
+                    size: 'M',
+                    quantity: 1,
+                  },
+                ],
+              },
+            ],
+          }),
         };
       }
       yield { type: 'delta', content: '第二段' };
@@ -342,6 +379,40 @@ test('工具展示按稳定 ID 更新，最终模型事件绑定与正文保存�
     8192,
   );
   assert.equal(done?.type === 'done' && done.context?.usedTokens, null);
+});
+
+test('待付款候选 SSE 事件与最终 assistant 消息展示绑定一致', async () => {
+  const { service, bindings } = createService({ cancellationCandidates: true });
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '我想取消订单' }],
+    } as never,
+  );
+  const received = [];
+  for await (const event of events) received.push(event);
+
+  const candidateEvent = received.find(
+    (event) => event.type === 'order-cancellation-candidates',
+  );
+  assert.equal(candidateEvent?.type, 'order-cancellation-candidates');
+  if (candidateEvent?.type !== 'order-cancellation-candidates') {
+    assert.fail('缺少订单候选展示事件');
+  }
+  assert.equal(
+    candidateEvent.orderCancellationCandidates[0]?.orderNo,
+    'ORD-20261110-001',
+  );
+  assert.equal(JSON.stringify(candidateEvent).includes('recipient'), false);
+  assert.equal(bindings.length, 1);
+  const boundData = (
+    bindings[0] as { data: { orderCancellationCandidates: unknown[] } }
+  ).data;
+  assert.deepEqual(
+    boundData.orderCancellationCandidates,
+    candidateEvent.orderCancellationCandidates,
+  );
+  assert.equal(received.at(-1)?.type, 'done');
 });
 
 test('展示绑定失败或最终 trace 缺失时拒绝完成，不发 done', async () => {

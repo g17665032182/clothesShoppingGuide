@@ -64,6 +64,9 @@ test('订单工具只绑定本人、固定最多五条并投影安全摘要', as
     makeSummary(`00000000-0000-4000-8000-${String(index).padStart(12, '0')}`),
   );
   const service = {
+    async listCancelableForUser() {
+      return [];
+    },
     async listForUser(userId: string, query: unknown) {
       calls.push({ method: 'list', userId, value: query });
       return { items: summaries, total: 6, page: 1, pageSize: 5 };
@@ -155,9 +158,78 @@ test('订单工具严格拒绝 userId、未知字段及不合法筛选', async (
   assert.deepEqual(listUserOrdersToolSchema.parse({}), { page: 1 });
 });
 
+test('待付款筛选走未过期候选查询并仅增加卡片引用白名单', async () => {
+  const summary = {
+    ...makeSummary('33333333-3333-4333-8333-333333333333'),
+    status: OrderStatus.PENDING_PAYMENT,
+    expiresAt: '2026-11-10T01:00:00.000Z',
+  };
+  let candidateUserId = '';
+  let listCalled = false;
+  const orderTool = createListUserOrdersTool(
+    {
+      async listCancelableForUser(userId: string) {
+        candidateUserId = userId;
+        return [summary] as never;
+      },
+      async listForUser() {
+        listCalled = true;
+        return { items: [], total: 0, page: 1, pageSize: 5 };
+      },
+      async getForUser(userId: string, id: string) {
+        assert.equal(userId, ownerId);
+        assert.equal(id, summary.id);
+        return makeDetail(id) as never;
+      },
+    } as never,
+    ownerId,
+  );
+
+  const output = JSON.parse(
+    String(
+      await orderTool.invoke({
+        status: OrderStatus.PENDING_PAYMENT,
+        page: 1,
+      }),
+    ),
+  ) as { ok: boolean; orders: Array<Record<string, unknown>> };
+
+  assert.equal(candidateUserId, ownerId);
+  assert.equal(listCalled, false);
+  assert.equal(output.orders.length, 1);
+  assert.equal(output.orders[0]?.orderId, summary.id);
+  assert.equal(output.orders[0]?.expiresAt, summary.expiresAt);
+  assert.deepEqual(Object.keys(output.orders[0] ?? {}).sort(), [
+    'cancelable',
+    'createdAt',
+    'expiresAt',
+    'items',
+    'orderId',
+    'orderNo',
+    'payableAmount',
+    'status',
+  ]);
+  const serialized = JSON.stringify(output);
+  for (const privateValue of [
+    ownerId,
+    '隐私姓名',
+    '13800138000',
+    '仅用于测试的完整地址',
+    'PRIVATE-TRACKING',
+    'private-idempotency-hash',
+    'private-sku-id',
+    'private-external-id',
+  ]) {
+    assert.equal(serialized.includes(privateValue), false, privateValue);
+  }
+});
+
 test('订单工具把 service 异常映射为不含内部信息的通用结果', async () => {
   const orderTool = createListUserOrdersTool(
     {
+      async listCancelableForUser() {
+        return [];
+      },
       async listForUser() {
         throw new Error('private database connection detail');
       },

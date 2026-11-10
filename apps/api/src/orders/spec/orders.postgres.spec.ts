@@ -210,6 +210,36 @@ test(
       const lifecycleOrderId = lifecycleOrder.order.id;
       assert.equal(lifecycleOrder.order.status, OrderStatus.PENDING_PAYMENT);
       assert.equal(lifecycleOrder.order.itemsAmount, '998.00');
+      const ownerCandidates = await service.listCancelableForUser(ownerId);
+      assert.ok(ownerCandidates.some(({ id }) => id === lifecycleOrderId));
+      assert.ok(
+        ownerCandidates.every(
+          ({ status }) => status === OrderStatus.PENDING_PAYMENT,
+        ),
+      );
+      assert.ok(ownerCandidates.length <= 5);
+      assert.equal(
+        (await service.listCancelableForUser(otherOwnerId)).some(
+          ({ id }) => id === lifecycleOrderId,
+        ),
+        false,
+      );
+      const expiryEm = orm.em.fork();
+      const expiryOrder = await expiryEm.findOneOrFail(Order, {
+        id: lifecycleOrderId,
+        userId: ownerId,
+      });
+      expiryOrder.expiresAt = new Date('2000-01-01T00:00:00.000Z');
+      await expiryEm.flush();
+      assert.equal(
+        (await service.listCancelableForUser(ownerId)).some(
+          ({ id }) => id === lifecycleOrderId,
+        ),
+        false,
+        '数据库时钟查询必须排除已过期但尚未由轮询关闭的订单',
+      );
+      expiryOrder.expiresAt = new Date(lifecycleOrder.order.expiresAt);
+      await expiryEm.flush();
       assert.deepEqual(lifecycleOrder.order.items[0], {
         skuId: secondSkuId,
         productExternalId: `orders-test-${productId}`,

@@ -95,6 +95,62 @@ export function useChatOrder() {
     }
   }
 
+  async function requestCancelForCandidate(
+    id: string,
+    contextIsCurrent: () => boolean = () => true,
+  ): Promise<boolean> {
+    const token = auth.state.token;
+    if (!token || !id || actionStatus.value === 'submitting') return false;
+    const identity = identityVersion;
+    const userId = auth.state.user?.id;
+    requestController?.abort();
+    const controller = new AbortController();
+    requestController = controller;
+    const version = ++requestVersion;
+    orderId.value = id;
+    detailOpen.value = false;
+    detailStatus.value = 'loading';
+    actionStatus.value = 'idle';
+    error.value = '';
+    try {
+      const result = await getOrder(token, id, controller.signal);
+      if (
+        controller.signal.aborted ||
+        version !== requestVersion ||
+        !isCurrent(identity, userId) ||
+        !contextIsCurrent()
+      )
+        return false;
+      order.value = result;
+      detailStatus.value = 'success';
+      if (
+        result.status !== 'pending_payment' ||
+        Date.parse(result.expiresAt) <= Date.now()
+      ) {
+        detailStatus.value = 'error';
+        error.value = '此订单已不符合取消条件，请在我的订单中核实最新状态';
+        return false;
+      }
+      actionType.value = 'cancel';
+      actionDialogOpen.value = true;
+      return true;
+    } catch (cause) {
+      if (
+        controller.signal.aborted ||
+        version !== requestVersion ||
+        !isCurrent(identity, userId) ||
+        !contextIsCurrent()
+      )
+        return false;
+      detailStatus.value =
+        cause instanceof ApiError && cause.status === 0 ? 'unknown' : 'error';
+      error.value = cause instanceof Error ? cause.message : '订单读取失败';
+      return false;
+    } finally {
+      if (requestController === controller) requestController = null;
+    }
+  }
+
   function requestAction(action: 'cancel' | 'receipt'): void {
     if (
       !order.value ||
@@ -106,16 +162,21 @@ export function useChatOrder() {
     actionDialogOpen.value = true;
   }
 
-  async function runAction(action: OrderAction): Promise<void> {
+  async function runAction(
+    action: OrderAction,
+    contextIsCurrent: () => boolean = () => true,
+    candidateAction = false,
+  ): Promise<OrderDetail | null> {
     const token = auth.state.token;
     const currentOrder = order.value;
     if (
       !token ||
       !currentOrder ||
       detailStatus.value !== 'success' ||
-      actionStatus.value === 'submitting'
+      actionStatus.value === 'submitting' ||
+      !contextIsCurrent()
     )
-      return;
+      return null;
     const identity = identityVersion;
     const userId = auth.state.user?.id;
     const controller = new AbortController();
@@ -130,7 +191,12 @@ export function useChatOrder() {
           : action === 'cancel'
             ? await cancelOrder(token, currentOrder.id, controller.signal)
             : await confirmReceipt(token, currentOrder.id, controller.signal);
-      if (controller.signal.aborted || !isCurrent(identity, userId)) return;
+      if (
+        controller.signal.aborted ||
+        !isCurrent(identity, userId) ||
+        !contextIsCurrent()
+      )
+        return null;
       order.value = updated;
       detailStatus.value = 'success';
       actionStatus.value = 'idle';
@@ -141,24 +207,74 @@ export function useChatOrder() {
             ? '订单已取消'
             : '已确认收货',
       );
+      return updated;
     } catch (cause) {
-      if (controller.signal.aborted || !isCurrent(identity, userId)) return;
+      if (
+        controller.signal.aborted ||
+        !isCurrent(identity, userId) ||
+        !contextIsCurrent()
+      )
+        return null;
       actionStatus.value =
         cause instanceof ApiError && cause.status === 0 ? 'unknown' : 'error';
       error.value =
         cause instanceof Error ? cause.message : '订单操作失败，正在重新读取';
       if (cause instanceof ApiError && cause.status === 409) {
         actionStatus.value = 'idle';
-        await loadOrder(currentOrder.id);
+        if (!candidateAction) {
+          await loadOrder(currentOrder.id);
+        } else {
+          try {
+            const refreshed = await getOrder(
+              token,
+              currentOrder.id,
+              controller.signal,
+            );
+            if (
+              controller.signal.aborted ||
+              !isCurrent(identity, userId) ||
+              !contextIsCurrent()
+            )
+              return null;
+            order.value = refreshed;
+            detailStatus.value = 'success';
+            error.value =
+              refreshed.status === 'pending_payment' &&
+              Date.parse(refreshed.expiresAt) > Date.now()
+                ? '订单状态已更新，请重新确认后操作'
+                : '此订单已不符合取消条件，请核实最新状态';
+          } catch (refreshError) {
+            if (
+              controller.signal.aborted ||
+              !isCurrent(identity, userId) ||
+              !contextIsCurrent()
+            )
+              return null;
+            detailStatus.value =
+              refreshError instanceof ApiError && refreshError.status === 0
+                ? 'unknown'
+                : 'error';
+            error.value =
+              refreshError instanceof Error
+                ? refreshError.message
+                : '订单状态刷新失败';
+            if (detailStatus.value === 'unknown') detailOpen.value = true;
+          }
+        }
       } else if (cause instanceof ApiError && cause.status === 0) {
         detailStatus.value = 'unknown';
+        if (candidateAction) detailOpen.value = true;
       }
+      return null;
     }
   }
 
-  async function confirmAction(): Promise<void> {
+  async function confirmAction(
+    contextIsCurrent: () => boolean = () => true,
+    candidateAction = false,
+  ): Promise<OrderDetail | null> {
     actionDialogOpen.value = false;
-    await runAction(actionType.value);
+    return runAction(actionType.value, contextIsCurrent, candidateAction);
   }
 
   async function pay(): Promise<void> {
@@ -181,6 +297,7 @@ export function useChatOrder() {
     actionStatus,
     error,
     loadOrder,
+    requestCancelForCandidate,
     requestAction,
     confirmAction,
     pay,

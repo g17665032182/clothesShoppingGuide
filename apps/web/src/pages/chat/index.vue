@@ -54,6 +54,9 @@ const {
   buyProduct,
   confirmReplacement,
   openPurchaseOrder,
+  cancelCandidateOrder,
+  updateOrderActionDialog,
+  confirmOrderAction,
   replacementDialogOpen,
   replacementProductId,
   updatePurchase,
@@ -72,7 +75,6 @@ const {
   error: orderError,
   loadOrder,
   requestAction,
-  confirmAction,
   pay,
 } = useChatPage();
 </script>
@@ -159,6 +161,7 @@ const {
               @more-products="loadMoreProducts"
               @buy-product="buyProduct"
               @open-order="loadOrder"
+              @cancel-candidate-order="cancelCandidateOrder"
               @retry-history="loadEarlierMessages"
             />
           </div>
@@ -273,8 +276,9 @@ const {
     @receipt="requestAction('receipt')"
   />
   <OrderActionDialog
-    v-model="actionDialogOpen"
+    :model-value="actionDialogOpen"
     :action="actionType"
-    @confirm="confirmAction"
+    @update:model-value="updateOrderActionDialog"
+    @confirm="confirmOrderAction"
   />
 </template>

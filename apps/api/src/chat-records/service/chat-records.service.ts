@@ -795,6 +795,7 @@ export class ChatRecordsService {
       activities: [],
       sources: [],
       productResults: [],
+      orderCancellationCandidates: [],
       context: null,
       purchase: null,
     };

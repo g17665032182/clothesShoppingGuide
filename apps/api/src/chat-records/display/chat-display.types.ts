@@ -53,10 +53,27 @@ export type PurchaseReference = {
   orderId: string | null;
 };
 
+export type OrderCancellationCandidate = {
+  orderId: string;
+  orderNo: string;
+  status: 'pending_payment';
+  payableAmount: string;
+  createdAt: string;
+  expiresAt: string;
+  cancelable: true;
+  items: Array<{
+    productName: string;
+    color: string;
+    size: string;
+    quantity: number;
+  }>;
+};
+
 export type ChatDisplayData = {
   activities: ChatActivity[];
   sources: ChatSource[];
   productResults: ChatProductResults[];
+  orderCancellationCandidates: OrderCancellationCandidate[];
   context: ChatContextUsage | null;
   purchase: PurchaseReference | null;
 };
@@ -70,6 +87,11 @@ export type PublicDisplayEnvelope = ChatDisplayData & {
 export type ChatDisplayEvent =
   | { type: 'activity'; activity: ChatActivity }
   | { type: 'sources'; sources: ChatSource[] }
+  | {
+      type: 'order-cancellation-candidates';
+      orderCancellationCandidates: OrderCancellationCandidate[];
+      activity: Extract<ChatActivity, { type: 'tool' }>;
+    }
   | {
       type: 'product-results';
       results: ChatProductResults;

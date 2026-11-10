@@ -34,6 +34,7 @@ import {
   projectSources,
   reservedDisplayBytes,
   restoreDisplay,
+  restoreOrderCancellationCandidates,
   restoreProductResults,
   safeToolName,
 } from './chat-display.projection.js';
@@ -41,6 +42,7 @@ import type {
   ChatActivity,
   ChatDisplayData,
   ChatDisplayEvent,
+  OrderCancellationCandidate,
   PurchaseReference,
 } from './chat-display.types.js';
 
@@ -51,6 +53,10 @@ export class ChatDisplayService {
   private readonly productQueries = new WeakMap<
     ChatDisplayData,
     Map<string, ReturnType<typeof productSearchQuerySchema.parse>>
+  >();
+  private readonly cancellationQueries = new WeakMap<
+    ChatDisplayData,
+    Set<string>
   >();
 
   public constructor(
@@ -71,6 +77,7 @@ export class ChatDisplayService {
       activities: [],
       sources: [],
       productResults: [],
+      orderCancellationCandidates: [],
       context: projectContext(contextWindowTokens, null),
       purchase: null,
     };
@@ -97,6 +104,17 @@ export class ChatDisplayService {
         const queries = this.productQueries.get(data) ?? new Map();
         queries.set(event.id, parsed.data);
         this.productQueries.set(data, queries);
+      }
+    }
+    if (event.type === 'tool-call' && event.toolName === 'list_my_orders') {
+      const input =
+        typeof event.input === 'object' && event.input !== null
+          ? (event.input as Record<string, unknown>)
+          : {};
+      if (input.status === 'pending_payment') {
+        const queries = this.cancellationQueries.get(data) ?? new Set<string>();
+        queries.add(event.id);
+        this.cancellationQueries.set(data, queries);
       }
     }
     if (event.type === 'sources') {
@@ -143,6 +161,46 @@ export class ChatDisplayService {
       data.productResults = productResults;
       data.activities = activities;
       return { type: 'product-results', results, activity };
+    }
+    if (event.type === 'tool-result' && event.toolName === 'list_my_orders') {
+      const cancellationQueries = this.cancellationQueries.get(data);
+      const isCancellationQuery =
+        cancellationQueries?.delete(event.id) ?? false;
+      const candidates =
+        isCancellationQuery && event.status === 'success'
+          ? restoreOrderCancellationCandidates(event.output)
+          : null;
+      const activity: Extract<ChatActivity, { type: 'tool' }> = {
+        type: 'tool',
+        id: event.id,
+        toolName: safeToolName(event.toolName),
+        status: event.status === 'success' ? 'success' : 'error',
+        input: null,
+        output: null,
+      };
+      const activities = [...data.activities];
+      const position = activities.findIndex((item) => item.id === activity.id);
+      if (position === -1) activities.push(activity);
+      else activities[position] = activity;
+      if (!candidates) {
+        this.assertBudget({ ...data, activities });
+        data.activities = activities;
+        return { type: 'activity', activity };
+      }
+      const orderCancellationCandidates: OrderCancellationCandidate[] =
+        candidates;
+      this.assertBudget({
+        ...data,
+        activities,
+        orderCancellationCandidates,
+      });
+      data.activities = activities;
+      data.orderCancellationCandidates = orderCancellationCandidates;
+      return {
+        type: 'order-cancellation-candidates',
+        orderCancellationCandidates,
+        activity,
+      };
     }
 
     let activity: ChatActivity;
@@ -304,6 +362,7 @@ export class ChatDisplayService {
         activities: restored.activities,
         sources: restored.sources,
         productResults: restored.productResults,
+        orderCancellationCandidates: restored.orderCancellationCandidates,
         context: restored.context,
         purchase: restored.purchase,
       });

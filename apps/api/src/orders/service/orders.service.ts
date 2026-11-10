@@ -322,6 +322,45 @@ export class OrdersService
     return this.list(query, { userId }, false);
   }
 
+  public async listCancelableForUser(
+    userId: string,
+    orderNo?: string,
+  ): Promise<OrderSummaryResponseDto[]> {
+    const em = this.manager();
+    // 用数据库实际时钟筛选，避免后台过期轮询的间隔泄漏已过期订单。
+    const rows: Array<{ id: string }> = await em.getConnection().execute(
+      `select id
+         from orders
+         where user_id = ? and status = ? and expires_at > clock_timestamp()
+         ${orderNo ? 'and order_no = ?' : ''}
+         order by created_at desc, id desc
+         limit 5`,
+      [userId, OrderStatus.PENDING_PAYMENT, ...(orderNo ? [orderNo] : [])],
+      'all',
+    );
+    const ids = rows.map(({ id }) => id);
+    if (ids.length === 0) return [];
+
+    const orders = await em.find(
+      Order,
+      {
+        id: { $in: ids },
+        userId,
+        status: OrderStatus.PENDING_PAYMENT,
+      },
+      { orderBy: { createdAt: 'DESC', id: 'DESC' } },
+    );
+    const itemRows = await em.find(OrderItem, {
+      orderId: { $in: orders.map((order) => order.id) },
+    });
+    const counts = new Map<string, number>();
+    for (const item of itemRows)
+      counts.set(item.orderId, (counts.get(item.orderId) ?? 0) + item.quantity);
+    return orders.map((order) =>
+      this.summaryProjection(order, counts.get(order.id) ?? 0, false),
+    );
+  }
+
   public async getForUser(
     userId: string,
     orderId: string,

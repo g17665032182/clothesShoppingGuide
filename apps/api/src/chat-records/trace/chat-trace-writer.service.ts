@@ -326,6 +326,7 @@ function safeAddressToolProjection(
           const entry = order as Record<string, unknown>;
           const result: Record<string, unknown> = {};
           for (const key of [
+            'id',
             'orderNo',
             'status',
             'closeReason',
@@ -336,6 +337,7 @@ function safeAddressToolProjection(
             'paidAt',
             'shippedAt',
             'completedAt',
+            'expiresAt',
           ]) {
             const item = entry[key];
             if (typeof item === 'string' || typeof item === 'number')

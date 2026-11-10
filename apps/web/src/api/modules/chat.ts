@@ -4,6 +4,7 @@ import type {
   ChatActivity,
   ChatContextUsage,
   ChatConversationDetail,
+  OrderCancellationCandidate,
   ChatProductResults,
   ChatRequest,
   ChatStreamEvent,
@@ -49,6 +50,11 @@ export async function getConversation(
         productResults: isProductResults(message.productResults)
           ? message.productResults
           : [],
+        orderCancellationCandidates: isOrderCancellationCandidates(
+          message.orderCancellationCandidates,
+        )
+          ? message.orderCancellationCandidates
+          : [],
         context: isContext(message.context) ? message.context : null,
       })),
     },
@@ -85,6 +91,7 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'activity',
       'sources',
       'product-results',
+      'order-cancellation-candidates',
       'purchase',
       'done',
       'error',
@@ -148,6 +155,16 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       type: 'product-results',
       results: data.results as ChatProductResults,
       activity: data.activity,
+    };
+  }
+  if (
+    eventName === 'order-cancellation-candidates' &&
+    isRecord(data) &&
+    isOrderCancellationCandidates(data.orderCancellationCandidates)
+  ) {
+    return {
+      type: 'order-cancellation-candidates',
+      orderCancellationCandidates: data.orderCancellationCandidates,
     };
   }
   if (eventName === 'delta' && isRecord(data)) {
@@ -482,4 +499,72 @@ function isSources(value: unknown): value is ChatSource[] {
       return false;
     }
   });
+}
+
+function isOrderCancellationCandidates(
+  value: unknown,
+): value is OrderCancellationCandidate[] {
+  if (!Array.isArray(value) || value.length > 5) return false;
+  const orderIds = new Set<string>();
+  return value.every((candidate) => {
+    if (
+      !isRecord(candidate) ||
+      Object.keys(candidate).some(
+        (key) =>
+          ![
+            'orderId',
+            'orderNo',
+            'status',
+            'payableAmount',
+            'createdAt',
+            'expiresAt',
+            'cancelable',
+            'items',
+          ].includes(key),
+      ) ||
+      !hasString(candidate, 'orderId') ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+        candidate.orderId,
+      ) ||
+      orderIds.has(candidate.orderId) ||
+      !hasString(candidate, 'orderNo') ||
+      !candidate.orderNo.trim() ||
+      candidate.orderNo.length > 100 ||
+      candidate.status !== 'pending_payment' ||
+      !hasString(candidate, 'payableAmount') ||
+      !/^\d{1,10}\.\d{2}$/u.test(candidate.payableAmount) ||
+      !hasString(candidate, 'createdAt') ||
+      !isIsoDateTime(candidate.createdAt) ||
+      !hasString(candidate, 'expiresAt') ||
+      !isIsoDateTime(candidate.expiresAt) ||
+      !Object.is(candidate.cancelable, true) ||
+      !Array.isArray(candidate.items) ||
+      candidate.items.length > 5
+    )
+      return false;
+    orderIds.add(candidate.orderId);
+    return candidate.items.every(
+      (item) =>
+        isRecord(item) &&
+        Object.keys(item).every((key) =>
+          ['productName', 'color', 'size', 'quantity'].includes(key),
+        ) &&
+        hasString(item, 'productName') &&
+        item.productName.length <= 60 &&
+        hasString(item, 'color') &&
+        item.color.length <= 16 &&
+        hasString(item, 'size') &&
+        item.size.length <= 16 &&
+        typeof item.quantity === 'number' &&
+        Number.isInteger(item.quantity) &&
+        item.quantity > 0 &&
+        item.quantity <= 999,
+    );
+  });
+}
+
+function isIsoDateTime(value: string): boolean {
+  return (
+    /^\d{4}-\d{2}-\d{2}T/u.test(value) && Number.isFinite(Date.parse(value))
+  );
 }

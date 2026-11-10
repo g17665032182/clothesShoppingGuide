@@ -18,6 +18,26 @@ export type ChatActivity =
 
 export type ChatSource = { id: string; title: string; url: string };
 
+export interface OrderCancellationCandidate {
+  orderId: string;
+  orderNo: string;
+  status: 'pending_payment';
+  payableAmount: string;
+  createdAt: string;
+  expiresAt: string;
+  cancelable: true;
+  items: Array<{
+    productName: string;
+    color: string;
+    size: string;
+    quantity: number;
+  }>;
+}
+
+export type ChatOrderCancellationCandidate = OrderCancellationCandidate & {
+  cancellationResult?: 'cancelled';
+};
+
 export type ChatProductCard = {
   externalId: string;
   name: string;
@@ -84,6 +104,7 @@ export interface ChatMessage {
   activities: ChatActivity[];
   sources: ChatSource[];
   productResults: ChatProductResults[];
+  orderCancellationCandidates: ChatOrderCancellationCandidate[];
   context: ChatContextUsage | null;
   purchase: PurchaseReference | null;
   status: ChatTurnStatus;
@@ -109,6 +130,7 @@ export interface ChatApiMessage {
   activities?: ChatActivity[];
   sources?: ChatSource[];
   productResults?: ChatProductResults[];
+  orderCancellationCandidates?: OrderCancellationCandidate[];
   context?: ChatContextUsage | null;
   purchase?: PurchaseReference | null;
 }
@@ -172,6 +194,10 @@ export type ChatStreamEvent =
       type: 'product-results';
       results: ChatProductResults;
       activity: Extract<ChatActivity, { type: 'tool' }>;
+    }
+  | {
+      type: 'order-cancellation-candidates';
+      orderCancellationCandidates: OrderCancellationCandidate[];
     }
   | { type: 'purchase'; purchase: PurchaseReference | null }
   | {

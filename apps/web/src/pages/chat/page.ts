@@ -19,6 +19,9 @@ export function useChatPage() {
   const draft = ref('');
   const replacementProductId = ref<string | null>(null);
   const replacementDialogOpen = ref(false);
+  const candidateCancellationSessionKey = ref<string | null>(null);
+  const candidateCancellationOrderId = ref<string | null>(null);
+  let candidateConfirmationInFlight = false;
   const purchaseDialogOpen = ref(false);
   const purchaseAddresses = ref<UserAddress[]>([]);
   const purchaseAddressStatus = ref<'idle' | 'loading' | 'success' | 'error'>(
@@ -65,6 +68,11 @@ export function useChatPage() {
       pendingAddressSave = null;
       replacementDialogOpen.value = false;
       replacementProductId.value = null;
+      if (candidateCancellationSessionKey.value !== null) {
+        orderActions.actionDialogOpen.value = false;
+        candidateCancellationSessionKey.value = null;
+        candidateCancellationOrderId.value = null;
+      }
     },
     { flush: 'sync' },
   );
@@ -175,6 +183,74 @@ export function useChatPage() {
     // 订单详情接替购买弹框，避免两层可交互弹框同时争夺焦点。
     purchaseDialogOpen.value = false;
     void orderActions.loadOrder(orderId);
+  }
+
+  async function cancelCandidateOrder(orderId: string): Promise<void> {
+    const sessionKey = chat.activeSessionKey;
+    if (!sessionKey || candidateCancellationOrderId.value) return;
+    candidateCancellationSessionKey.value = sessionKey;
+    candidateCancellationOrderId.value = orderId;
+    const opened = await orderActions.requestCancelForCandidate(
+      orderId,
+      () =>
+        !disposed &&
+        chat.activeSessionKey === sessionKey &&
+        candidateCancellationOrderId.value === orderId,
+    );
+    if (
+      !opened &&
+      candidateCancellationSessionKey.value === sessionKey &&
+      candidateCancellationOrderId.value === orderId
+    ) {
+      candidateCancellationSessionKey.value = null;
+      candidateCancellationOrderId.value = null;
+    }
+  }
+
+  function updateOrderActionDialog(open: boolean): void {
+    orderActions.actionDialogOpen.value = open;
+    if (
+      !open &&
+      !candidateConfirmationInFlight &&
+      candidateCancellationOrderId.value !== null
+    ) {
+      candidateCancellationSessionKey.value = null;
+      candidateCancellationOrderId.value = null;
+    }
+  }
+
+  async function confirmOrderAction(): Promise<void> {
+    const sessionKey = candidateCancellationSessionKey.value;
+    const orderId = candidateCancellationOrderId.value;
+    candidateConfirmationInFlight = orderId !== null;
+    try {
+      const result = await orderActions.confirmAction(
+        () =>
+          sessionKey === null ||
+          (!disposed &&
+            chat.activeSessionKey === sessionKey &&
+            candidateCancellationOrderId.value === orderId),
+        sessionKey !== null && orderId !== null,
+      );
+      if (
+        sessionKey &&
+        orderId &&
+        !disposed &&
+        chat.activeSessionKey === sessionKey &&
+        candidateCancellationOrderId.value === orderId &&
+        result?.id === orderId &&
+        result.status === 'closed' &&
+        result.closeReason === 'user_cancelled'
+      ) {
+        chat.markOrderCancellationComplete(sessionKey, orderId);
+      }
+    } finally {
+      candidateConfirmationInFlight = false;
+      if (candidateCancellationOrderId.value === orderId) {
+        candidateCancellationSessionKey.value = null;
+        candidateCancellationOrderId.value = null;
+      }
+    }
   }
 
   function updatePurchase(
@@ -351,6 +427,9 @@ export function useChatPage() {
     buyProduct,
     confirmReplacement,
     openPurchaseOrder,
+    cancelCandidateOrder,
+    updateOrderActionDialog,
+    confirmOrderAction,
     updatePurchase,
     selectPurchaseAddress,
     saveDraftAddress,

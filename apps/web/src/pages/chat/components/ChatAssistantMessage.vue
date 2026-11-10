@@ -12,6 +12,8 @@ import ChatActivityList from './ChatActivityList.vue';
 import ChatProductResults from './ChatProductResults.vue';
 import ChatSources from './ChatSources.vue';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { CheckCircle2, XCircle } from '@lucide/vue';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -21,6 +23,7 @@ const emit = defineEmits<{
   (event: 'moreProducts', messageId: string, resultIndex: number): void;
   (event: 'buyProduct', externalId: string): void;
   (event: 'openOrder', orderId: string): void;
+  (event: 'cancelCandidateOrder', orderId: string): void;
 }>();
 
 const isRunning = computed(
@@ -41,6 +44,19 @@ const statusLabel = computed(() => {
       return '';
   }
 });
+
+function formatOrderDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+}
 </script>
 
 <template>
@@ -66,6 +82,65 @@ const statusLabel = computed(() => {
         正在生成回复
       </p>
       <ChatSources v-if="message.sources.length" :sources="message.sources" />
+      <section
+        v-if="message.orderCancellationCandidates.length"
+        class="grid min-w-0 gap-3"
+        aria-label="可取消订单"
+      >
+        <Card
+          v-for="candidate in message.orderCancellationCandidates"
+          :key="candidate.orderId"
+          class="rounded-md"
+        >
+          <CardHeader
+            class="flex flex-row flex-wrap items-start justify-between gap-3 pb-3"
+          >
+            <div class="min-w-0">
+              <p class="break-all text-sm font-medium">
+                订单号 {{ candidate.orderNo }}
+              </p>
+              <p class="mt-1 text-xs text-muted-foreground">
+                待付款 · 创建于 {{ formatOrderDate(candidate.createdAt) }}
+              </p>
+            </div>
+            <p class="shrink-0 font-medium">¥{{ candidate.payableAmount }}</p>
+          </CardHeader>
+          <CardContent class="grid gap-3 pt-0">
+            <ul class="grid gap-2 text-sm">
+              <li
+                v-for="(item, itemIndex) in candidate.items"
+                :key="`${candidate.orderId}-${itemIndex}`"
+                class="break-words text-muted-foreground"
+              >
+                {{ item.productName }} · {{ item.color }} · {{ item.size }} ×
+                {{ item.quantity }}
+              </li>
+            </ul>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <p class="min-w-0 flex-1 text-xs text-muted-foreground">
+                仅取消未付款订单，不涉及退款。
+              </p>
+              <span
+                v-if="candidate.cancellationResult === 'cancelled'"
+                class="inline-flex items-center gap-1 text-sm text-muted-foreground"
+                role="status"
+              >
+                <CheckCircle2 aria-hidden="true" class="size-4" />
+                已取消
+              </span>
+              <Button
+                v-else-if="candidate.cancelable"
+                size="sm"
+                variant="outline"
+                @click="emit('cancelCandidateOrder', candidate.orderId)"
+              >
+                <XCircle aria-hidden="true" data-icon="inline-start" />
+                取消订单
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
       <ChatProductResults
         v-if="message.productResults.length"
         :result-sets="message.productResults"
