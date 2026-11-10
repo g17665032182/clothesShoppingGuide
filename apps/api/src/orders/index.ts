@@ -11,6 +11,7 @@ export {
   type ConfirmedOrderResult,
 } from './port/order-confirmed-creation.port.js';
 export { OrderDetailResponseDto } from './dto/order-response.dto.js';
+export { createListUserOrdersTool } from './tool/list-user-orders.tool.js';
 export {
   ORDER_CATALOG_IMPORT_PORT,
   UnavailableOrderLockSetChangedError,

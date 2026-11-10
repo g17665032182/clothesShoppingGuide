@@ -6,6 +6,12 @@ import { auth } from '@/lib/auth';
 import { useChatStore } from '@/stores/chat';
 import type { PatchPurchasePayload } from '@/api/types/chat-purchase';
 import { useChatOrder } from '@/components/shared/orders/useChatOrder';
+import {
+  createUserAddress,
+  listUserAddresses,
+} from '@/api/modules/user-addresses';
+import type { UserAddress } from '@/api/types/user-addresses';
+import { ApiError } from '@/api';
 
 export function useChatPage() {
   const chat = useChatStore();
@@ -14,6 +20,18 @@ export function useChatPage() {
   const replacementProductId = ref<string | null>(null);
   const replacementDialogOpen = ref(false);
   const purchaseDialogOpen = ref(false);
+  const purchaseAddresses = ref<UserAddress[]>([]);
+  const purchaseAddressStatus = ref<'idle' | 'loading' | 'success' | 'error'>(
+    'idle',
+  );
+  const addressSaveStatus = ref<'idle' | 'submitting' | 'unknown' | 'error'>(
+    'idle',
+  );
+  let addressListController: AbortController | null = null;
+  let addressSaveController: AbortController | null = null;
+  let addressListVersion = 0;
+  let pendingAddressSave: { fingerprint: string; requestKey: string } | null =
+    null;
   let disposed = false;
   useErrorToast(() => chat.errorMessage);
   useErrorToast(() => chat.purchase.errorMessage);
@@ -39,10 +57,82 @@ export function useChatPage() {
     () => {
       draft.value = '';
       purchaseDialogOpen.value = false;
+      addressListController?.abort();
+      addressSaveController?.abort();
+      purchaseAddresses.value = [];
+      purchaseAddressStatus.value = 'idle';
+      addressSaveStatus.value = 'idle';
+      pendingAddressSave = null;
       replacementDialogOpen.value = false;
       replacementProductId.value = null;
     },
     { flush: 'sync' },
+  );
+
+  async function loadPurchaseAddresses(): Promise<void> {
+    const token = auth.state.token;
+    const conversationId = chat.activeConversationId;
+    if (!purchaseDialogOpen.value || !conversationId || !token) return;
+    addressListController?.abort();
+    const controller = new AbortController();
+    addressListController = controller;
+    const version = ++addressListVersion;
+    const userId = auth.state.user?.id;
+    purchaseAddressStatus.value = 'loading';
+    try {
+      const result = await listUserAddresses(
+        token,
+        { page: 1, pageSize: 20 },
+        controller.signal,
+      );
+      if (
+        disposed ||
+        controller.signal.aborted ||
+        version !== addressListVersion ||
+        userId !== auth.state.user?.id ||
+        conversationId !== chat.activeConversationId
+      )
+        return;
+      purchaseAddresses.value = result.items;
+      purchaseAddressStatus.value = 'success';
+    } catch {
+      if (
+        !controller.signal.aborted &&
+        version === addressListVersion &&
+        userId === auth.state.user?.id &&
+        conversationId === chat.activeConversationId
+      )
+        purchaseAddressStatus.value = 'error';
+    } finally {
+      if (addressListController === controller) addressListController = null;
+    }
+  }
+
+  watch(
+    () =>
+      [
+        purchaseDialogOpen.value,
+        chat.activeConversationId,
+        auth.state.user?.id,
+      ] as const,
+    ([open, conversationId]) => {
+      addressListController?.abort();
+      addressListVersion += 1;
+      purchaseAddresses.value = [];
+      purchaseAddressStatus.value = 'idle';
+      if (open && conversationId) void loadPurchaseAddresses();
+    },
+    { immediate: true, flush: 'sync' },
+  );
+
+  watch(
+    () => auth.state.user?.id,
+    () => {
+      // 幂等键属于当前账号的待完成操作，账号切换时不可带到新身份下重试。
+      pendingAddressSave = null;
+      addressSaveController?.abort();
+      addressSaveStatus.value = 'idle';
+    },
   );
 
   function sendMessage() {
@@ -94,6 +184,93 @@ export function useChatPage() {
       () => chat.updatePurchaseDraft(payload),
       '购买信息已保存',
     );
+  }
+
+  function selectPurchaseAddress(addressId: string): void {
+    const selected = purchaseAddresses.value.find(
+      (address) => address.id === addressId,
+    );
+    const current = chat.purchase.draft;
+    if (
+      !selected ||
+      !current ||
+      chat.isSending ||
+      !['collecting', 'ready'].includes(current.status)
+    )
+      return;
+    void chat.sendMessage(
+      `用户已明确选择收货地址 ${selected.id}，请调用 select_my_shipping_address 将其用于当前购买草稿 ${current.id}，草稿版本为 ${current.version}。`,
+    );
+  }
+
+  async function saveDraftAddress(): Promise<void> {
+    const token = auth.state.token;
+    const current = chat.purchase.draft;
+    const recipient = current?.recipient;
+    if (
+      !token ||
+      !current ||
+      !recipient?.name ||
+      !recipient.phone ||
+      !recipient.address ||
+      addressSaveStatus.value === 'submitting'
+    )
+      return;
+    const sessionKey = chat.activeSessionKey;
+    const userId = auth.state.user?.id;
+    const payload = {
+      recipientName: recipient.name,
+      phone: recipient.phone,
+      address: recipient.address,
+      label: null,
+      isDefault: false,
+    };
+    const fingerprint = JSON.stringify(payload);
+    const requestKey =
+      pendingAddressSave?.fingerprint === fingerprint
+        ? pendingAddressSave.requestKey
+        : crypto.randomUUID();
+    pendingAddressSave = { fingerprint, requestKey };
+    const controller = new AbortController();
+    addressSaveController?.abort();
+    addressSaveController = controller;
+    addressSaveStatus.value = 'submitting';
+    try {
+      await createUserAddress(
+        token,
+        { ...payload, requestKey },
+        controller.signal,
+      );
+      if (
+        disposed ||
+        controller.signal.aborted ||
+        sessionKey !== chat.activeSessionKey ||
+        userId !== auth.state.user?.id
+      )
+        return;
+      pendingAddressSave = null;
+      addressSaveStatus.value = 'idle';
+      toast.success('收货地址已保存到地址簿');
+    } catch (error) {
+      if (
+        disposed ||
+        controller.signal.aborted ||
+        sessionKey !== chat.activeSessionKey ||
+        userId !== auth.state.user?.id
+      )
+        return;
+      addressSaveStatus.value =
+        error instanceof ApiError && error.status === 0 ? 'unknown' : 'error';
+      toast.error(
+        addressSaveStatus.value === 'unknown'
+          ? '保存结果尚未确认，请使用重试按钮核实'
+          : error instanceof Error
+            ? error.message
+            : '保存收货地址失败',
+      );
+    } finally {
+      if (addressSaveController === controller) addressSaveController = null;
+    }
   }
 
   async function runPurchaseAction(
@@ -150,6 +327,9 @@ export function useChatPage() {
   });
   onBeforeUnmount(() => {
     disposed = true;
+    addressListController?.abort();
+    addressSaveController?.abort();
+    addressListVersion += 1;
     // 页面卸载只解绑展示，后台生成由 Store 继续接收并维护所属会话。
     chat.setChatPageVisible(false);
   });
@@ -160,6 +340,10 @@ export function useChatPage() {
     replacementProductId,
     replacementDialogOpen,
     purchaseDialogOpen,
+    purchaseAddresses,
+    purchaseAddressStatus,
+    addressSaveStatus,
+    retryPurchaseAddresses: loadPurchaseAddresses,
     canSend,
     handleKeydown,
     sendMessage,
@@ -168,6 +352,8 @@ export function useChatPage() {
     confirmReplacement,
     openPurchaseOrder,
     updatePurchase,
+    selectPurchaseAddress,
+    saveDraftAddress,
     discardPurchase: () =>
       runPurchaseAction(chat.discardPurchase, '已放弃本次购买'),
     confirmPurchaseOrder: () =>

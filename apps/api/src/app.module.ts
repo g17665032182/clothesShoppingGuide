@@ -15,6 +15,7 @@ import { UserMemoryModule } from './user-memory/index.js';
 import { UserPreferencesModule } from './user-preferences/index.js';
 import { OrderCatalogCoordinationModule } from './order-catalog-coordination/order-catalog-coordination.module.js';
 import { VirtualTryOnModule } from './virtual-try-on/virtual-try-on.module.js';
+import { UserAddressesModule } from './user-addresses/index.js';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { VirtualTryOnModule } from './virtual-try-on/virtual-try-on.module.js';
     LlmModule,
     ChatRecordsModule,
     VirtualTryOnModule,
+    UserAddressesModule,
     HealthModule,
   ],
   providers: [

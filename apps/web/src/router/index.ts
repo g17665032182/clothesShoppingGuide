@@ -47,6 +47,11 @@ export const router = createRouter({
           component: () => import('@/pages/account/orders/index.vue'),
         },
         {
+          path: 'addresses',
+          name: 'account-addresses',
+          component: () => import('@/pages/account/addresses/index.vue'),
+        },
+        {
           path: 'memories',
           name: 'account-memories',
           component: () => import('@/pages/memories/index.vue'),

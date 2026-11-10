@@ -5,6 +5,7 @@ import {
   UserRound,
   ShoppingBag,
   Shirt,
+  MapPin,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
@@ -61,6 +62,26 @@ const isPreferencesView = computed(
         >
           <ShoppingBag aria-hidden="true" class="size-4" />
           我的订单
+        </a>
+      </RouterLink>
+      <RouterLink
+        v-slot="{ isActive, href, navigate }"
+        :to="{ name: 'account-addresses' }"
+        custom
+      >
+        <a
+          :aria-current="isActive ? 'page' : undefined"
+          :class="
+            cn(
+              'flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm transition-colors hover:bg-muted',
+              isActive && 'bg-muted font-medium text-foreground',
+            )
+          "
+          :href="href"
+          @click="navigate"
+        >
+          <MapPin aria-hidden="true" class="size-4" />
+          收货地址
         </a>
       </RouterLink>
       <RouterLink

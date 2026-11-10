@@ -27,3 +27,11 @@ export type {
   StartPurchasePayload,
 } from './chat-purchase';
 export type { OrderDetail, OrderPage, OrderQuery, OrderStatus } from './orders';
+export type {
+  CreateUserAddressPayload,
+  UpdateUserAddressPayload,
+  UserAddress,
+  UserAddressFormValue,
+  UserAddressPage,
+  UserAddressQuery,
+} from './user-addresses';

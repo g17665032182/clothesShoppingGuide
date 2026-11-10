@@ -15,6 +15,7 @@ import type {
   PurchaseRecipient,
 } from '@/api/types/chat-purchase';
 import type { OrderDetail } from '@/api/types/orders';
+import type { UserAddress } from '@/api/types/user-addresses';
 import OrderStatusBadge from '@/components/shared/orders/OrderStatusBadge.vue';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -56,8 +57,16 @@ const props = withDefaults(
       | 'unknown'
       | 'streaming';
     errorMessage?: string;
+    addresses: UserAddress[];
+    addressStatus: 'idle' | 'loading' | 'success' | 'error';
+    addressSaveStatus: 'idle' | 'submitting' | 'unknown' | 'error';
   }>(),
-  { errorMessage: '' },
+  {
+    errorMessage: '',
+    addresses: () => [],
+    addressStatus: 'idle',
+    addressSaveStatus: 'idle',
+  },
 );
 const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void;
@@ -73,6 +82,9 @@ const emit = defineEmits<{
   (event: 'confirm'): void;
   (event: 'retry'): void;
   (event: 'openOrder', orderId: string): void;
+  (event: 'selectAddress', addressId: string): void;
+  (event: 'saveAddress'): void;
+  (event: 'retryAddresses'): void;
 }>();
 
 const name = ref('');
@@ -398,6 +410,71 @@ function updateQuantity(value: string): void {
               />
             </Field>
           </FieldGroup>
+          <section
+            v-if="addressStatus !== 'idle'"
+            class="flex flex-col gap-3 border-t pt-4"
+            aria-labelledby="purchase-address-book-title"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <h3 id="purchase-address-book-title" class="text-sm font-medium">
+                地址簿
+              </h3>
+              <span
+                v-if="addressStatus === 'loading'"
+                class="flex items-center gap-2 text-xs text-muted-foreground"
+                role="status"
+              >
+                <Spinner />正在加载
+              </span>
+              <Button
+                v-else-if="addressStatus === 'error'"
+                size="sm"
+                variant="outline"
+                @click="emit('retryAddresses')"
+              >
+                <RefreshCw data-icon="inline-start" />重试加载
+              </Button>
+            </div>
+            <p
+              v-if="addressStatus === 'error'"
+              class="text-sm text-muted-foreground"
+            >
+              地址簿暂时无法加载，可稍后重试。
+            </p>
+            <p
+              v-else-if="addressStatus === 'success' && addresses.length === 0"
+              class="text-sm text-muted-foreground"
+            >
+              地址簿为空；可在“账户设置”中添加地址。
+            </p>
+            <ul v-else-if="addresses.length" class="flex flex-col gap-2">
+              <li
+                v-for="savedAddress in addresses"
+                :key="savedAddress.id"
+                class="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+              >
+                <div class="min-w-0 flex-1">
+                  <p class="break-words text-sm font-medium">
+                    {{ savedAddress.label || savedAddress.recipientName }}
+                    <span class="font-normal text-muted-foreground">
+                      · {{ savedAddress.phone }}
+                    </span>
+                  </p>
+                  <p class="break-words text-sm text-muted-foreground">
+                    {{ savedAddress.address }}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  :disabled="!isEditable || status === 'streaming'"
+                  @click="emit('selectAddress', savedAddress.id)"
+                >
+                  使用此地址
+                </Button>
+              </li>
+            </ul>
+          </section>
           <p v-if="isDirty" class="text-xs text-muted-foreground">
             有未保存的购买信息变更；保存后才能确认下单。
           </p>
@@ -435,6 +512,37 @@ function updateQuantity(value: string): void {
               {{ issueText(issue) }}
             </li>
           </ul>
+          <div
+            v-if="
+              draft.recipient.name &&
+              draft.recipient.phone &&
+              draft.recipient.address
+            "
+            class="flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+          >
+            <p class="text-sm text-muted-foreground">
+              将当前已保存草稿中的收件信息加入本人地址簿。
+            </p>
+            <Button
+              variant="outline"
+              :disabled="
+                !isEditable || isDirty || addressSaveStatus === 'submitting'
+              "
+              @click="emit('saveAddress')"
+            >
+              <Spinner
+                v-if="addressSaveStatus === 'submitting'"
+                data-icon="inline-start"
+              />
+              {{
+                addressSaveStatus === 'unknown'
+                  ? '重试保存地址'
+                  : addressSaveStatus === 'submitting'
+                    ? '正在保存'
+                    : '保存到地址簿'
+              }}
+            </Button>
+          </div>
         </template>
         <p v-else-if="draft && !order" class="text-sm text-muted-foreground">
           此购买草稿已{{ statusLabel }}，不能继续编辑。

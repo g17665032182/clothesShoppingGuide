@@ -4,6 +4,7 @@ export {
   type PurchaseRunState,
 } from './service/purchase-draft.service.js';
 export { createPurchaseTools } from './tool/purchase-tools.js';
+export { createSelectShippingAddressTool } from './tool/select-shipping-address.tool.js';
 export type {
   PurchaseReference,
   PurchaseDraftResponse,

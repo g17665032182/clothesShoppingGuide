@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
   Inject,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import {
   DriverException,
@@ -54,10 +55,16 @@ import { createProductSearchTool } from '../../product-catalog/tool/product-sear
 import {
   PurchaseDraftService,
   createPurchaseTools,
+  createSelectShippingAddressTool,
   type PurchaseRunState,
 } from '../../chat-purchase/index.js';
 import { ChatConversationAccess } from '../conversation-access/index.js';
 import { eligibleSummaryTraceIds } from './chat-summary-source.js';
+import { OrdersService, createListUserOrdersTool } from '../../orders/index.js';
+import {
+  UserAddressesService,
+  createListShippingAddressesTool,
+} from '../../user-addresses/index.js';
 
 export type Page<T> = {
   items: T[];
@@ -162,6 +169,8 @@ export class ChatRecordsService {
     private readonly productCatalog: ProductCatalogService,
     private readonly purchaseDrafts: PurchaseDraftService,
     private readonly conversationAccess: ChatConversationAccess,
+    @Optional() private readonly orders?: OrdersService,
+    @Optional() private readonly addresses?: UserAddressesService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -497,6 +506,24 @@ export class ChatRecordsService {
       createProductSearchTool(this.productCatalog),
       ...createPurchaseTools(
         this.purchaseDrafts,
+        prepared.persistedConversation.userId,
+        prepared.persistedConversation.id,
+        (draftId) => {
+          prepared.purchaseToolUsed = true;
+          if (draftId) prepared.purchaseReferencedDraftId = draftId;
+        },
+      ),
+      createListUserOrdersTool(
+        this.orders!,
+        prepared.persistedConversation.userId,
+      ),
+      createListShippingAddressesTool(
+        this.addresses!,
+        prepared.persistedConversation.userId,
+      ),
+      createSelectShippingAddressTool(
+        this.purchaseDrafts,
+        this.addresses!,
         prepared.persistedConversation.userId,
         prepared.persistedConversation.id,
         (draftId) => {

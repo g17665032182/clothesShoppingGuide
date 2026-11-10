@@ -344,3 +344,147 @@ test('独立及嵌套购买调用、非法调用和结果仅保存白名单副�
   assert.match(serialized, /"version":4/u);
   assert.match(serialized, /"changedFields":\["name","phone","recipient"\]/u);
 });
+
+test('订单和地址工具的 trace 仅保存专属安全白名单', async () => {
+  const { writer, rows } = createWriter();
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'model',
+      content: '',
+      model: 'model',
+      usage: null,
+      payload: {
+        tool_calls: [
+          {
+            id: 'orders-call',
+            name: 'list_my_orders',
+            args: {
+              orderNo: 'ORDER-1',
+              recipient: '张三',
+              phone: '13812345678',
+            },
+          },
+          {
+            id: 'addresses-call',
+            name: 'list_my_shipping_addresses',
+            args: { page: 1, userId: 'private-user-id' },
+          },
+          {
+            id: 'select-call',
+            name: 'select_my_shipping_address',
+            args: {
+              addressId: '11111111-1111-4111-8111-111111111111',
+              draftId: '22222222-2222-4222-8222-222222222222',
+              expectedVersion: 4,
+              phone: '13812345678',
+            },
+          },
+        ],
+      },
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'model',
+      toolCallId: 'orders-call',
+      toolName: 'list_my_orders',
+      args: { orderNo: 'ORDER-1', phone: '13812345678' },
+    },
+    {
+      sequence: 2,
+      type: 'tool_result',
+      messageId: 'orders-result',
+      toolCallId: 'orders-call',
+      toolName: 'list_my_orders',
+      content: JSON.stringify({
+        ok: true,
+        orders: [
+          {
+            orderNo: 'ORDER-1',
+            status: 'pending_shipment',
+            payableAmount: '99.00',
+            recipientName: '张三',
+            recipientPhone: '13812345678',
+            recipientAddress: '机密收货地址',
+            shipment: { trackingNo: 'PRIVATE-TRACKING' },
+            items: [
+              {
+                productName: '测试上衣',
+                color: '黑色',
+                size: 'M',
+                quantity: 1,
+                internalId: 'private-id',
+              },
+            ],
+          },
+        ],
+      }),
+      status: 'success',
+    },
+    {
+      sequence: 3,
+      type: 'tool_result',
+      messageId: 'address-result',
+      toolCallId: 'addresses-call',
+      toolName: 'list_my_shipping_addresses',
+      content: JSON.stringify({
+        items: [
+          {
+            addressId: '11111111-1111-4111-8111-111111111111',
+            isDefault: true,
+            displayName: '默认地址',
+            recipientName: '张三',
+            phone: '13812345678',
+            address: '机密收货地址',
+            label: '家庭 13812345678',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      }),
+      status: 'success',
+    },
+    {
+      sequence: 4,
+      type: 'tool_result',
+      messageId: 'select-result',
+      toolCallId: 'select-call',
+      toolName: 'select_my_shipping_address',
+      content: JSON.stringify({
+        ok: true,
+        result: {
+          draftId: '22222222-2222-4222-8222-222222222222',
+          version: 5,
+          filled: { name: true, phone: true, address: true },
+          recipient: {
+            name: '张三',
+            phone: '13812345678',
+            address: '机密收货地址',
+          },
+        },
+      }),
+      status: 'success',
+    },
+  ]);
+  const serialized = JSON.stringify(rows);
+  for (const privateValue of [
+    '张三',
+    '13812345678',
+    '机密收货地址',
+    'PRIVATE-TRACKING',
+    'private-user-id',
+    'private-id',
+    'recipient',
+  ]) {
+    assert.equal(serialized.includes(privateValue), false, privateValue);
+  }
+  assert.match(serialized, /"orderNo":"ORDER-1"/u);
+  assert.match(serialized, /默认地址/u);
+  assert.match(
+    serialized,
+    /"addressId":"11111111-1111-4111-8111-111111111111"/u,
+  );
+});

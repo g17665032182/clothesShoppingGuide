@@ -47,6 +47,9 @@ const {
   loadEarlierMessages,
   loadMoreProducts,
   purchase,
+  purchaseAddresses,
+  purchaseAddressStatus,
+  addressSaveStatus,
   purchaseDialogOpen,
   buyProduct,
   confirmReplacement,
@@ -54,6 +57,9 @@ const {
   replacementDialogOpen,
   replacementProductId,
   updatePurchase,
+  selectPurchaseAddress,
+  saveDraftAddress,
+  retryPurchaseAddresses,
   discardPurchase,
   confirmPurchaseOrder,
   retryPurchase,
@@ -110,7 +116,13 @@ const {
                     : purchase.status
                 "
                 :error-message="purchase.errorMessage"
+                :addresses="purchaseAddresses"
+                :address-status="purchaseAddressStatus"
+                :address-save-status="addressSaveStatus"
                 @update="updatePurchase($event)"
+                @select-address="selectPurchaseAddress"
+                @save-address="saveDraftAddress"
+                @retry-addresses="retryPurchaseAddresses"
                 @discard="discardPurchase"
                 @confirm="confirmPurchaseOrder"
                 @retry="retryPurchase"

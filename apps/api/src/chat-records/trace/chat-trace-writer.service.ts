@@ -20,6 +20,11 @@ const PURCHASE_TOOL_NAMES = new Set([
   'update_purchase_draft',
   'discard_purchase_draft',
 ]);
+const ADDRESS_TOOL_NAMES = new Set([
+  'list_my_orders',
+  'list_my_shipping_addresses',
+  'select_my_shipping_address',
+]);
 const PURCHASE_STATUSES = new Set([
   'collecting',
   'ready',
@@ -274,8 +279,200 @@ function sanitizeNestedPurchaseCalls(value: unknown): unknown {
   );
 }
 
+function sanitizeNestedAddressCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedAddressCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map(safeAddressToolCall)
+        : sanitizeNestedAddressCalls(entry),
+    ]),
+  );
+}
+
 function safePurchaseResult(content: string): string {
   return JSON.stringify(safePurchaseProjection(content));
+}
+
+function parseToolValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function safeAddressToolProjection(
+  toolName: string | null | undefined,
+  value: unknown,
+): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const record = source as Record<string, unknown>;
+  if (toolName === 'list_my_orders') {
+    const orders = Array.isArray(record.orders)
+      ? record.orders.flatMap((order) => {
+          if (
+            typeof order !== 'object' ||
+            order === null ||
+            Array.isArray(order)
+          )
+            return [];
+          const entry = order as Record<string, unknown>;
+          const result: Record<string, unknown> = {};
+          for (const key of [
+            'orderNo',
+            'status',
+            'closeReason',
+            'itemsAmount',
+            'payableAmount',
+            'itemCount',
+            'createdAt',
+            'paidAt',
+            'shippedAt',
+            'completedAt',
+          ]) {
+            const item = entry[key];
+            if (typeof item === 'string' || typeof item === 'number')
+              result[key] = item;
+            else if (item === null) result[key] = null;
+          }
+          result.items = Array.isArray(entry.items)
+            ? entry.items.flatMap((item) => {
+                if (
+                  typeof item !== 'object' ||
+                  item === null ||
+                  Array.isArray(item)
+                )
+                  return [];
+                const product = item as Record<string, unknown>;
+                return [
+                  Object.fromEntries(
+                    ['productName', 'color', 'size', 'quantity']
+                      .filter((key) => Object.hasOwn(product, key))
+                      .map((key) => [key, product[key]]),
+                  ),
+                ];
+              })
+            : [];
+          return [result];
+        })
+      : [];
+    return {
+      ...(typeof record.ok === 'boolean' ? { ok: record.ok } : {}),
+      orders,
+    };
+  }
+  if (toolName === 'list_my_shipping_addresses') {
+    const items = Array.isArray(record.items)
+      ? record.items.flatMap((item) => {
+          if (typeof item !== 'object' || item === null || Array.isArray(item))
+            return [];
+          const entry = item as Record<string, unknown>;
+          if (
+            typeof entry.addressId !== 'string' ||
+            typeof entry.isDefault !== 'boolean' ||
+            typeof entry.displayName !== 'string'
+          )
+            return [];
+          return [
+            {
+              addressId: entry.addressId,
+              isDefault: entry.isDefault,
+              displayName: entry.displayName,
+            },
+          ];
+        })
+      : [];
+    return {
+      items,
+      ...(Number.isSafeInteger(record.total) ? { total: record.total } : {}),
+      ...(Number.isSafeInteger(record.page) ? { page: record.page } : {}),
+      ...(Number.isSafeInteger(record.pageSize)
+        ? { pageSize: record.pageSize }
+        : {}),
+    };
+  }
+  const result =
+    typeof record.result === 'object' &&
+    record.result !== null &&
+    !Array.isArray(record.result)
+      ? (record.result as Record<string, unknown>)
+      : {};
+  const filled =
+    typeof result.filled === 'object' &&
+    result.filled !== null &&
+    !Array.isArray(result.filled)
+      ? (result.filled as Record<string, unknown>)
+      : {};
+  return {
+    ...(typeof record.ok === 'boolean' ? { ok: record.ok } : {}),
+    ...(typeof record.code === 'string' &&
+    ['version_conflict', 'not_found', 'unavailable'].includes(record.code)
+      ? { code: record.code }
+      : {}),
+    ...(typeof result.draftId === 'string'
+      ? { result: { draftId: result.draftId } }
+      : {}),
+    ...(Number.isSafeInteger(result.version)
+      ? { version: result.version }
+      : {}),
+    ...(Object.keys(filled).length > 0
+      ? {
+          filled: {
+            name: filled.name === true,
+            phone: filled.phone === true,
+            address: filled.address === true,
+          },
+        }
+      : {}),
+  };
+}
+
+function safeAddressToolCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return {};
+  const call = value as Record<string, unknown>;
+  const name = typeof call.name === 'string' ? call.name : null;
+  if (!name || !ADDRESS_TOOL_NAMES.has(name)) return redactValue(value);
+  return {
+    ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+    name,
+    ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
+    args: safeAddressToolArguments(
+      name,
+      call.args ?? call.arguments ?? call.input,
+    ),
+  };
+}
+
+function safeAddressToolArguments(
+  name: string,
+  value: unknown,
+): Record<string, unknown> {
+  const args = parseToolValue(value);
+  const source =
+    typeof args === 'object' && args !== null && !Array.isArray(args)
+      ? (args as Record<string, unknown>)
+      : {};
+  const safeArgs: Record<string, unknown> = {};
+  if (name === 'list_my_orders') {
+    for (const key of ['orderNo', 'status', 'page']) {
+      if (Object.hasOwn(source, key)) safeArgs[key] = source[key];
+    }
+  } else if (name === 'list_my_shipping_addresses') {
+    if (Object.hasOwn(source, 'page')) safeArgs.page = source.page;
+  } else {
+    for (const key of ['addressId', 'draftId', 'expectedVersion']) {
+      if (Object.hasOwn(source, key)) safeArgs[key] = source[key];
+    }
+  }
+  return safeArgs;
 }
 
 function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
@@ -310,7 +507,11 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         payload:
           event.payload === undefined
             ? null
-            : normalizePayload(sanitizeNestedPurchaseCalls(event.payload)),
+            : normalizePayload(
+                sanitizeNestedAddressCalls(
+                  sanitizeNestedPurchaseCalls(event.payload),
+                ),
+              ),
         model: event.model,
         usage: event.usage
           ? {
@@ -328,7 +529,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         payload: normalizePayload(
           isPurchaseTool(event.toolName)
             ? safePurchaseProjection(event.args)
-            : event.args,
+            : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+              ? safeAddressToolArguments(event.toolName, event.args)
+              : event.args,
         ),
       };
     case 'tool_result':
@@ -341,7 +544,11 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             ? '工具执行失败'
             : isPurchaseTool(event.toolName)
               ? safePurchaseResult(event.content)
-              : normalizeContent(event.content),
+              : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                ? JSON.stringify(
+                    safeAddressToolProjection(event.toolName, event.content),
+                  )
+                : normalizeContent(event.content),
         status:
           event.status === 'success'
             ? ChatTraceEventStatus.SUCCESS
@@ -352,7 +559,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             : normalizePayload(
                 isPurchaseTool(event.toolName)
                   ? safePurchaseProjection(event.payload)
-                  : event.payload,
+                  : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                    ? safeAddressToolProjection(event.toolName, event.payload)
+                    : event.payload,
               ),
       };
   }

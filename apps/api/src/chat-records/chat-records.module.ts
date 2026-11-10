@@ -18,6 +18,8 @@ import { LlmChatController } from './controller/llm-chat.controller.js';
 import { ChatDisplayService } from './display/chat-display.service.js';
 import { ChatPurchaseModule } from '../chat-purchase/index.js';
 import { ChatConversationAccessModule } from './conversation-access/index.js';
+import { OrdersModule } from '../orders/index.js';
+import { UserAddressesModule } from '../user-addresses/index.js';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { ChatConversationAccessModule } from './conversation-access/index.js';
     ProductCatalogModule,
     ChatPurchaseModule,
     ChatConversationAccessModule,
+    OrdersModule,
+    UserAddressesModule,
   ],
   controllers: [
     ChatRecordsController,
