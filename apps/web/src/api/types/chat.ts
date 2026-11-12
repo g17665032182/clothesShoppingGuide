@@ -108,6 +108,35 @@ export type ChatProductResults = {
   loadMoreError?: string;
 };
 
+export type ChatTryOnAction = {
+  productExternalId: string;
+  color: string;
+  photoId: string;
+  consentVersion: string;
+};
+
+export type ChatTryOnResult = {
+  taskId: string;
+  product: {
+    externalId: string;
+    name: string;
+    color: string;
+  };
+  result: {
+    width: number;
+    height: number;
+    mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  };
+};
+
+export type ChatTryOnStatus =
+  | { status: 'queued' | 'processing'; taskId: string }
+  | {
+      status: 'failed' | 'timed_out';
+      taskId?: string;
+      code: string;
+    };
+
 export type ProductSearchQuery = {
   category?: ChatProductCard['category'];
   size?: string;
@@ -147,6 +176,8 @@ export interface ChatMessage {
   orderCancellationCandidates: ChatOrderCancellationCandidate[];
   context: ChatContextUsage | null;
   purchase: PurchaseReference | null;
+  tryOnResult: ChatTryOnResult | null;
+  tryOnStatus: ChatTryOnStatus | null;
   status: ChatTurnStatus;
 }
 
@@ -174,6 +205,8 @@ export interface ChatApiMessage {
   orderCancellationCandidates?: OrderCancellationCandidate[];
   context?: ChatContextUsage | null;
   purchase?: PurchaseReference | null;
+  tryOnResult?: ChatTryOnResult | null;
+  tryOnStatus?: ChatTryOnStatus | null;
 }
 
 export interface ChatApiConversation {
@@ -204,6 +237,7 @@ export interface ChatRequestMessage {
 export interface ChatRequest {
   messages: ChatRequestMessage[];
   conversationId?: string;
+  tryOnAction?: ChatTryOnAction;
 }
 
 export type ChatStreamEvent =
@@ -228,8 +262,17 @@ export type ChatStreamEvent =
         totalTokens: number | null;
       } | null;
       context?: ChatContextUsage | null;
+      tryOnResult?: ChatTryOnResult;
+      tryOnStatus?: Extract<
+        ChatTryOnStatus,
+        { status: 'failed' | 'timed_out' }
+      >;
     }
   | { type: 'activity'; activity: ChatActivity }
+  | {
+      type: 'try-on-status';
+      status: Extract<ChatTryOnStatus, { status: 'queued' | 'processing' }>;
+    }
   | { type: 'sources'; sources: ChatSource[] }
   | { type: 'card'; card: ChatCard }
   | {

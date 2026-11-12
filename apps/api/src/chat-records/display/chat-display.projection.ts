@@ -16,6 +16,8 @@ import type {
   PurchaseReference,
   PublicDisplayEnvelope,
   ChatCardSelection,
+  ChatTryOnResult,
+  ChatTryOnStatus,
 } from './chat-display.types.js';
 
 export const MAX_DISPLAY_BYTES = 16_384;
@@ -31,6 +33,39 @@ const purchaseReferenceSchema = z.strictObject({
   version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   orderId: z.uuid().nullable(),
 });
+const chatTryOnResultSchema = z.strictObject({
+  taskId: z.uuid(),
+  product: z.strictObject({
+    externalId: z.string().trim().min(1).max(160),
+    name: z.string().trim().min(1).max(200),
+    color: z.string().trim().min(1).max(32),
+  }),
+  result: z.strictObject({
+    width: z.number().int().positive().max(4096),
+    height: z.number().int().positive().max(4096),
+    mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+  }),
+});
+const chatTryOnStatusSchema = z.strictObject({
+  status: z.enum(['failed', 'timed_out']),
+  taskId: z.uuid().optional(),
+  code: z.string().regex(/^[A-Z0-9_]{1,80}$/u),
+});
+
+export function restoreChatTryOnResult(value: unknown): ChatTryOnResult | null {
+  const parsed = chatTryOnResultSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export function restoreChatTryOnStatus(value: unknown): ChatTryOnStatus | null {
+  const parsed = chatTryOnStatusSchema.safeParse(value);
+  if (!parsed.success) return null;
+  return {
+    status: parsed.data.status,
+    ...(parsed.data.taskId ? { taskId: parsed.data.taskId } : {}),
+    code: parsed.data.code,
+  };
+}
 const orderCancellationCandidateItemSchema = z.strictObject({
   productName: z.string().trim().min(1).max(60),
   color: z.string().max(16),
@@ -223,6 +258,8 @@ const envelopeSchema = z.object({
     .max(5)
     .default([]),
   purchase: purchaseReferenceSchema.nullable().default(null),
+  tryOnResult: chatTryOnResultSchema.optional(),
+  tryOnStatus: chatTryOnStatusSchema.optional(),
   context: z
     .object({
       contextWindowTokens: z
@@ -389,6 +426,8 @@ export function displayEnvelope(
     orderCancellationCandidates: data.orderCancellationCandidates,
     context: data.context,
     purchase: data.purchase,
+    ...(data.tryOnResult ? { tryOnResult: data.tryOnResult } : {}),
+    ...(data.tryOnStatus ? { tryOnStatus: data.tryOnStatus } : {}),
   };
 }
 
@@ -409,6 +448,24 @@ export function reservedDisplayBytes(data: ChatDisplayData): number {
       orderCancellationCandidates: ORDER_CANDIDATE_RESERVATION,
       // 预留流末绑定最大合法购买引用所需空间。
       purchase: PURCHASE_REFERENCE_RESERVATION,
+      tryOnResult: {
+        taskId: BINDING_ID_RESERVATION,
+        product: {
+          externalId: 'x'.repeat(160),
+          name: 'x'.repeat(200),
+          color: 'x'.repeat(32),
+        },
+        result: {
+          width: 4096,
+          height: 4096,
+          mimeType: 'image/webp',
+        },
+      },
+      tryOnStatus: {
+        status: 'timed_out',
+        taskId: BINDING_ID_RESERVATION,
+        code: 'X'.repeat(80),
+      },
       // 在发送活动前预留最终用量数字，避免实时成功而最终绑定超限。
       context: {
         contextWindowTokens:
@@ -508,6 +565,12 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
       orderCancellationCandidates,
       context,
       purchase: source.purchase,
+      ...(source.tryOnResult
+        ? { tryOnResult: source.tryOnResult as ChatTryOnResult }
+        : {}),
+      ...(source.tryOnStatus
+        ? { tryOnStatus: source.tryOnStatus as ChatTryOnStatus }
+        : {}),
     },
     source.assistantMessageId,
   );

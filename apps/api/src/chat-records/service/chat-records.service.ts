@@ -12,12 +12,21 @@ import {
   TransactionPropagation,
   type EntityManager,
 } from '@mikro-orm/core';
+import {
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from '@langchain/core/messages';
 import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 
-import type { ChatInput } from '../../llm/dto/chat.dto.js';
-import { LlmService, type ChatOutput } from '../../llm/service/llm.service.js';
+import type { ChatInput, TryOnActionInput } from '../../llm/dto/chat.dto.js';
+import {
+  LlmService,
+  type ChatOutput,
+  type LlmExecutionOptions,
+} from '../../llm/service/llm.service.js';
 import type { LlmTraceEvent } from '../../llm/trace/llm-trace.types.js';
 import { mapTraceEventsToMessages } from '../history/chat-history.mapper.js';
 import type { User } from '../../users/entity/user.entity.js';
@@ -48,6 +57,8 @@ import { ChatDisplayService } from '../display/chat-display.service.js';
 import type {
   ChatDisplayData,
   ChatDisplayEvent,
+  ChatTryOnResult,
+  ChatTryOnStatus,
 } from '../display/chat-display.types.js';
 import { createChatCardDisplayTool } from '../display/chat-card-display.tool.js';
 import { createChatCardSourceRegistry } from '../display/chat-card-source-registry.js';
@@ -67,6 +78,14 @@ import {
   UserAddressesService,
   createListShippingAddressesTool,
 } from '../../user-addresses/index.js';
+import {
+  CHAT_TRY_ON_PORT,
+  type ChatTryOnOutcome,
+  type ChatTryOnPort,
+  type ChatTryOnStatus as ChatTryOnProgress,
+} from '../../virtual-try-on/port/chat-try-on.port.js';
+import { createChatTryOnTool } from '../try-on/chat-try-on.tool.js';
+import type { BaseMessage } from '@langchain/core/messages';
 
 export type Page<T> = {
   items: T[];
@@ -105,6 +124,8 @@ export type PersistedChatOutput = ChatOutput & {
   title: string;
   cards: ChatDisplayData['cards'];
   purchase: ChatDisplayData['purchase'];
+  tryOnResult?: ChatTryOnResult;
+  tryOnStatus?: ChatTryOnStatus;
 };
 
 export type ChatStreamEvent =
@@ -121,13 +142,25 @@ export type ChatStreamEvent =
       content: string;
     }
   | {
+      type: 'try-on-status';
+      taskId: string;
+      status: 'queued' | 'processing';
+    }
+  | {
       type: 'done';
       conversationId: string;
       title: string;
       model: string;
       usage: ChatOutput['usage'];
       context: ChatDisplayData['context'];
+      tryOnResult?: ChatTryOnResult;
+      tryOnStatus?: ChatTryOnStatus;
     };
+
+type TryOnExecution = {
+  outcome: ChatTryOnOutcome;
+  ephemeralModelMessages: BaseMessage[];
+};
 
 type PreparedChat = {
   conversation: ChatConversation | null;
@@ -143,7 +176,34 @@ type PreparedChat = {
   purchaseState: PurchaseRunState;
   purchaseToolUsed: boolean;
   purchaseReferencedDraftId?: string;
+  tryOnAction?: TryOnActionInput;
 };
+
+class AsyncSignalQueue {
+  private readonly waiters: Array<() => void> = [];
+  private count = 0;
+  private closed = false;
+
+  public push(): void {
+    const waiter = this.waiters.shift();
+    if (waiter) waiter();
+    else this.count += 1;
+  }
+
+  public next(): Promise<void> {
+    if (this.count > 0) {
+      this.count -= 1;
+      return Promise.resolve();
+    }
+    if (this.closed) return Promise.resolve();
+    return new Promise((resolve) => this.waiters.push(resolve));
+  }
+
+  public close(): void {
+    this.closed = true;
+    for (const waiter of this.waiters.splice(0)) waiter();
+  }
+}
 
 @Injectable()
 export class ChatRecordsService {
@@ -174,19 +234,20 @@ export class ChatRecordsService {
     private readonly conversationAccess: ChatConversationAccess,
     @Optional() private readonly orders?: OrdersService,
     @Optional() private readonly addresses?: UserAddressesService,
+    @Optional()
+    @Inject(CHAT_TRY_ON_PORT)
+    private readonly tryOn?: ChatTryOnPort,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
     const prepared = await this.prepareChat(user, dto);
     await this.ensureConversationPersisted(prepared);
     const display = this.displayService.create(prepared.contextWindowTokens);
-    const result = await this.llmService.chatPrepared(
-      {
-        messages: prepared.plan.messages,
-      },
-      this.traceContext(prepared),
-      this.tools(prepared, display),
-    );
+    const tryOn = prepared.tryOnAction
+      ? await this.executeTryOn(prepared)
+      : undefined;
+    this.applyTryOnDisplay(display, tryOn?.outcome);
+    const result = await this.runChatModel(prepared, display, tryOn);
     if (
       result.finalTraceSequence === null ||
       result.finalTraceSequence === undefined
@@ -205,6 +266,8 @@ export class ChatRecordsService {
       title: prepared.persistedConversation.title,
       cards: display.cards,
       purchase: display.purchase,
+      ...(display.tryOnResult ? { tryOnResult: display.tryOnResult } : {}),
+      ...(display.tryOnStatus ? { tryOnStatus: display.tryOnStatus } : {}),
     };
   }
 
@@ -236,6 +299,39 @@ export class ChatRecordsService {
       };
       if (signal?.aborted) {
         throw new DOMException('The operation was aborted', 'AbortError');
+      }
+
+      const tryOn = prepared.tryOnAction
+        ? yield* this.executeTryOnWithStatus(prepared, signal)
+        : undefined;
+      this.applyTryOnDisplay(display, tryOn?.outcome);
+
+      if (tryOn) {
+        let result: ChatOutput;
+        try {
+          result = await this.llmService.chatPrepared(
+            { messages: prepared.plan.messages },
+            this.traceContext(prepared, signal),
+            this.tools(prepared, display),
+            this.executionOptions(tryOn),
+          );
+        } catch (error) {
+          if (
+            tryOn.outcome.status !== 'succeeded' ||
+            signal?.aborted ||
+            (error instanceof DOMException && error.name === 'AbortError')
+          ) {
+            throw error;
+          }
+          result = await this.serverFallback(prepared);
+        }
+        await this.finalizeStream(prepared, display, result);
+        persistedMessages = true;
+        yield { type: 'delta', content: result.content };
+        if (display.purchase)
+          yield { type: 'purchase', purchase: display.purchase };
+        yield this.doneEvent(prepared, display, result);
+        return;
       }
 
       const resultIterator = this.llmService.streamEventsPrepared(
@@ -278,14 +374,7 @@ export class ChatRecordsService {
       persistedMessages = true;
       if (display.purchase)
         yield { type: 'purchase', purchase: display.purchase };
-      yield {
-        type: 'done',
-        conversationId: prepared.persistedConversation.id,
-        title: prepared.persistedConversation.title,
-        model: result.model,
-        usage: result.usage,
-        context: display.context,
-      };
+      yield this.doneEvent(prepared, display, result);
     } finally {
       if (
         !persistedMessages &&
@@ -502,6 +591,355 @@ export class ChatRecordsService {
       contextWindowTokens: this.contextService.getContextWindow(),
       purchaseState,
       purchaseToolUsed: false,
+      ...(dto.tryOnAction ? { tryOnAction: dto.tryOnAction } : {}),
+    };
+  }
+
+  private async executeTryOn(
+    prepared: PreparedChat,
+    signal?: AbortSignal,
+    onStatus?: (status: ChatTryOnProgress) => void,
+  ): Promise<TryOnExecution> {
+    if (!prepared.tryOnAction || !this.tryOn) {
+      throw new ServiceUnavailableException('试穿工具暂不可用');
+    }
+    const action = prepared.tryOnAction;
+    const callId = randomUUID();
+    const actionMessageId = randomUUID();
+    let outcome: ChatTryOnOutcome;
+
+    try {
+      const tryOnTool = createChatTryOnTool(this.tryOn, {
+        userId: prepared.persistedConversation.userId,
+        color: action.color,
+        consentVersion: action.consentVersion,
+        ...(signal ? { signal } : {}),
+        ...(onStatus ? { onStatus } : {}),
+      });
+      const toolMessage = await tryOnTool.invoke({
+        type: 'tool_call',
+        id: callId,
+        name: tryOnTool.name,
+        args: {
+          productExternalId: action.productExternalId,
+          photoId: action.photoId,
+        },
+      });
+      if (!(toolMessage instanceof ToolMessage)) {
+        throw new Error('invalid tool result');
+      }
+      outcome = this.restoreTryOnOutcome(toolMessage.artifact);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      outcome = {
+        status: 'failed',
+        code: 'TRY_ON_UNAVAILABLE',
+      };
+    }
+
+    const safeCall = {
+      id: callId,
+      name: 'try_on_product',
+      type: 'tool_call',
+      // 照片 ID、同意版本只存在本次服务端调用上下文，不写入历史参数。
+      args: { productExternalId: action.productExternalId },
+    };
+    const safeToolResult =
+      outcome.status === 'succeeded'
+        ? { status: outcome.status, taskId: outcome.result.taskId }
+        : {
+            status: outcome.status,
+            ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+            code: outcome.code,
+          };
+    await this.traceWriter.writeEvents(
+      {
+        conversationId: prepared.persistedConversation.id,
+        runId: prepared.runId,
+      },
+      [
+        {
+          sequence: 0,
+          type: 'input',
+          messageId: null,
+          content: prepared.currentUserMessage,
+        },
+        {
+          sequence: 1,
+          type: 'model_response',
+          messageId: actionMessageId,
+          content: '',
+          model: null,
+          usage: null,
+          status: 'partial',
+          payload: { origin: 'server_action', toolCalls: [safeCall] },
+        },
+        {
+          sequence: 2,
+          type: 'tool_result',
+          messageId: null,
+          toolCallId: callId,
+          toolName: 'try_on_product',
+          content: JSON.stringify(safeToolResult),
+          status: 'success',
+        },
+      ],
+    );
+
+    return {
+      outcome,
+      ephemeralModelMessages: this.tryOnModelMessages(outcome),
+    };
+  }
+
+  private async *executeTryOnWithStatus(
+    prepared: PreparedChat,
+    signal?: AbortSignal,
+  ): AsyncGenerator<ChatStreamEvent, TryOnExecution> {
+    const statuses: ChatStreamEvent[] = [];
+    const notifications = new AsyncSignalQueue();
+    let emitted = 0;
+    const execution = this.executeTryOn(prepared, signal, (status) => {
+      statuses.push({ type: 'try-on-status', ...status });
+      notifications.push();
+    }).finally(() => notifications.close());
+
+    while (true) {
+      if (emitted < statuses.length) {
+        yield statuses[emitted++]!;
+        continue;
+      }
+      const next = await Promise.race([
+        execution.then((value) => ({ done: true as const, value })),
+        notifications.next().then(() => ({ done: false as const })),
+      ]);
+      if (next.done) {
+        while (emitted < statuses.length) {
+          yield statuses[emitted++]!;
+        }
+        return next.value;
+      }
+    }
+  }
+
+  private restoreTryOnOutcome(value: unknown): ChatTryOnOutcome {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return { status: 'failed', code: 'TRY_ON_UNAVAILABLE' };
+    }
+    const source = value as Record<string, unknown>;
+    if (
+      source.status === 'failed' &&
+      typeof source.code === 'string' &&
+      /^[A-Z0-9_]{1,80}$/u.test(source.code)
+    ) {
+      return {
+        status: 'failed',
+        ...(typeof source.taskId === 'string' ? { taskId: source.taskId } : {}),
+        code: source.code,
+      };
+    }
+    if (
+      source.status === 'timed_out' &&
+      typeof source.code === 'string' &&
+      /^[A-Z0-9_]{1,80}$/u.test(source.code)
+    ) {
+      return {
+        status: 'timed_out',
+        ...(typeof source.taskId === 'string' ? { taskId: source.taskId } : {}),
+        code: source.code,
+      };
+    }
+    if (
+      source.status !== 'succeeded' ||
+      typeof source.result !== 'object' ||
+      source.result === null ||
+      Array.isArray(source.result)
+    ) {
+      return { status: 'failed', code: 'TRY_ON_UNAVAILABLE' };
+    }
+    const result = source.result as Record<string, unknown>;
+    const product =
+      typeof result.product === 'object' &&
+      result.product !== null &&
+      !Array.isArray(result.product)
+        ? (result.product as Record<string, unknown>)
+        : {};
+    const summary =
+      typeof result.result === 'object' &&
+      result.result !== null &&
+      !Array.isArray(result.result)
+        ? (result.result as Record<string, unknown>)
+        : {};
+    if (
+      typeof result.taskId !== 'string' ||
+      !Buffer.isBuffer(result.image) ||
+      result.image.byteLength === 0 ||
+      result.image.byteLength > 10 * 1024 * 1024 ||
+      typeof product.externalId !== 'string' ||
+      typeof product.name !== 'string' ||
+      typeof product.color !== 'string' ||
+      !Number.isSafeInteger(summary.width) ||
+      !Number.isSafeInteger(summary.height) ||
+      !['image/png', 'image/jpeg', 'image/webp'].includes(
+        String(summary.mimeType),
+      )
+    ) {
+      return { status: 'failed', code: 'TRY_ON_UNAVAILABLE' };
+    }
+    return {
+      status: 'succeeded',
+      result: {
+        taskId: result.taskId,
+        product: {
+          externalId: product.externalId,
+          name: product.name,
+          color: product.color,
+        },
+        result: {
+          width: summary.width as number,
+          height: summary.height as number,
+          mimeType: summary.mimeType as
+            'image/png' | 'image/jpeg' | 'image/webp',
+        },
+        image: result.image,
+      },
+    };
+  }
+
+  private tryOnModelMessages(outcome: ChatTryOnOutcome): BaseMessage[] {
+    if (outcome.status !== 'succeeded') {
+      return [
+        new SystemMessage(
+          `服务端试穿状态为 ${outcome.status}，状态码为 ${outcome.code}。请只据此向用户说明，不要臆测生成结果。`,
+        ),
+      ];
+    }
+    const image = outcome.result.image.toString('base64');
+    const url = `data:${outcome.result.result.mimeType};base64,${image}`;
+    return [
+      new HumanMessage({
+        content: [
+          { type: 'text', text: '这是本次试穿结果，仅供视觉参考。' },
+          { type: 'image_url', image_url: { url } },
+        ],
+      }),
+    ];
+  }
+
+  private executionOptions(execution?: TryOnExecution): LlmExecutionOptions {
+    return execution
+      ? {
+          traceSequence: 3,
+          skipPersistInput: true,
+          ephemeralModelMessages: execution.ephemeralModelMessages,
+        }
+      : {};
+  }
+
+  private applyTryOnDisplay(
+    display: ChatDisplayData,
+    outcome?: ChatTryOnOutcome,
+  ): void {
+    if (!outcome) return;
+    if (outcome.status === 'succeeded') {
+      this.displayService.setTryOnResult(display, {
+        taskId: outcome.result.taskId,
+        product: outcome.result.product,
+        result: outcome.result.result,
+      });
+    } else {
+      this.displayService.setTryOnStatus(display, {
+        status: outcome.status,
+        ...(outcome.taskId ? { taskId: outcome.taskId } : {}),
+        code: outcome.code,
+      });
+    }
+  }
+
+  private async runChatModel(
+    prepared: PreparedChat,
+    display: ChatDisplayData,
+    execution?: TryOnExecution,
+  ): Promise<ChatOutput> {
+    try {
+      return await this.llmService.chatPrepared(
+        { messages: prepared.plan.messages },
+        this.traceContext(prepared),
+        this.tools(prepared, display),
+        this.executionOptions(execution),
+      );
+    } catch (error) {
+      if (execution?.outcome.status === 'succeeded') {
+        return this.serverFallback(prepared);
+      }
+      throw error;
+    }
+  }
+
+  private async serverFallback(prepared: PreparedChat): Promise<ChatOutput> {
+    const content =
+      '试穿结果已生成，但暂时无法生成文字回复。你可以直接查看结果图。';
+    const traceContext = {
+      conversationId: prepared.persistedConversation.id,
+      runId: prepared.runId,
+    };
+    const sequence = await this.traceWriter.nextSequence(traceContext);
+    const model = this.llmService.assertConfigured();
+    await this.traceWriter.writeEvents(traceContext, [
+      {
+        sequence,
+        type: 'model_response',
+        messageId: randomUUID(),
+        content,
+        model,
+        usage: null,
+        status: 'failed',
+        payload: {
+          origin: 'server_fallback',
+          code: 'TRY_ON_CHAT_MODEL_UNAVAILABLE',
+        },
+      },
+    ]);
+    return {
+      content,
+      model,
+      usage: null,
+      finalTraceSequence: sequence,
+    };
+  }
+
+  private async finalizeStream(
+    prepared: PreparedChat,
+    display: ChatDisplayData,
+    result: ChatOutput,
+  ): Promise<void> {
+    if (
+      result.finalTraceSequence === null ||
+      result.finalTraceSequence === undefined
+    ) {
+      throw new ServiceUnavailableException('最终模型记录缺失，无法保存回复');
+    }
+    this.displayService.complete(display, result.usage);
+    await this.persistChat(prepared, result, {
+      data: display,
+      sequence: result.finalTraceSequence,
+    });
+  }
+
+  private doneEvent(
+    prepared: PreparedChat,
+    display: ChatDisplayData,
+    result: ChatOutput,
+  ): ChatStreamEvent {
+    return {
+      type: 'done',
+      conversationId: prepared.persistedConversation.id,
+      title: prepared.persistedConversation.title,
+      model: result.model,
+      usage: result.usage,
+      context: display.context,
+      ...(display.tryOnResult ? { tryOnResult: display.tryOnResult } : {}),
+      ...(display.tryOnStatus ? { tryOnStatus: display.tryOnStatus } : {}),
     };
   }
 
@@ -753,6 +1191,7 @@ export class ChatRecordsService {
       messages
         .filter((message) => message.role === ChatRecordMessageRole.ASSISTANT)
         .map((message) => message.id),
+      where.userId,
     );
     return {
       ...this.toConversationResponse(conversation),

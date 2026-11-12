@@ -51,6 +51,8 @@ export type GraphTraceContext = {
   streaming?: boolean;
   eventStreaming?: boolean;
   streamLifecycle?: LlmStreamLifecycle;
+  skipPersistInput?: boolean;
+  ephemeralModelMessages?: BaseMessage[];
 };
 
 function asRecord(value: unknown): UnknownRecord {
@@ -86,6 +88,8 @@ const LlmTraceContextSchema = new StateSchema({
   streaming: z.boolean().optional(),
   eventStreaming: z.boolean().optional(),
   streamLifecycle: z.custom<LlmStreamLifecycle>().optional(),
+  skipPersistInput: z.boolean().optional(),
+  ephemeralModelMessages: z.custom<BaseMessage[]>().optional(),
 });
 
 function routeAfterChatModel(state: LlmStateValue): 'tools' | typeof END {
@@ -239,6 +243,8 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
     state: LlmStateValue,
     runtime: Runtime<Record<string, unknown>>,
   ): Promise<LlmStateUpdate> => {
+    const context = runtime.context as unknown as GraphTraceContext | undefined;
+    if (context?.skipPersistInput) return {};
     const input = [...state.messages]
       .reverse()
       .find((message) => message.type === 'human');
@@ -260,13 +266,17 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
     runtime: Runtime<Record<string, unknown>>,
   ): Promise<LlmStateUpdate> => {
     const context = runtime.context as unknown as GraphTraceContext | undefined;
+    const modelMessages = [
+      ...state.messages,
+      ...(context?.ephemeralModelMessages ?? []),
+    ];
     // 正文增量立即发送；工具参数仍聚合为完整消息后才进入工具节点。
     if (context?.streaming) {
       const finish = context.streamLifecycle?.begin();
       try {
         let aggregate: AIMessageChunk | undefined;
         const stream = (await modelWithTools.stream(
-          state.messages,
+          modelMessages,
           context.signal ? { signal: context.signal } : undefined,
         )) as AsyncIterable<BaseMessageChunk>;
         for await (const rawChunk of stream) {
@@ -296,7 +306,7 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
     }
 
     // 非流式路径保持 invoke，兼容不实现 _streamResponseChunks 的模型。
-    const response = await modelWithTools.invoke(state.messages);
+    const response = await modelWithTools.invoke(modelMessages);
     const usage = normalizeUsage(response);
     return { messages: [response], usage };
   };

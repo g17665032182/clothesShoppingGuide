@@ -12,6 +12,8 @@ import type {
   ChatSource,
   JsonValue,
   PageResponse,
+  ChatTryOnResult,
+  ChatTryOnStatus,
 } from '@/api/types/chat';
 import type { PurchaseReference } from '@/api/types/chat-purchase';
 
@@ -44,21 +46,35 @@ export async function getConversation(
     ...detail,
     messages: {
       ...detail.messages,
-      items: detail.messages.items.map((message) => ({
-        ...message,
-        activities: isActivities(message.activities) ? message.activities : [],
-        sources: isSources(message.sources) ? message.sources : [],
-        cards: projectChatCards(message.cards),
-        productResults: isProductResults(message.productResults)
-          ? message.productResults
-          : [],
-        orderCancellationCandidates: isOrderCancellationCandidates(
-          message.orderCancellationCandidates,
-        )
-          ? message.orderCancellationCandidates
-          : [],
-        context: isContext(message.context) ? message.context : null,
-      })),
+      items: detail.messages.items.map((message) => {
+        const tryOnResult =
+          message.tryOnResult === undefined || message.tryOnResult === null
+            ? null
+            : projectChatTryOnResult(message.tryOnResult);
+        const tryOnStatus =
+          message.tryOnStatus === undefined || message.tryOnStatus === null
+            ? null
+            : projectChatTryOnStatus(message.tryOnStatus);
+        return {
+          ...message,
+          activities: isActivities(message.activities)
+            ? message.activities
+            : [],
+          sources: isSources(message.sources) ? message.sources : [],
+          cards: projectChatCards(message.cards),
+          productResults: isProductResults(message.productResults)
+            ? message.productResults
+            : [],
+          orderCancellationCandidates: isOrderCancellationCandidates(
+            message.orderCancellationCandidates,
+          )
+            ? message.orderCancellationCandidates
+            : [],
+          context: isContext(message.context) ? message.context : null,
+          tryOnResult,
+          tryOnStatus: tryOnResult ? null : tryOnStatus,
+        };
+      }),
     },
   };
 }
@@ -91,6 +107,7 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'start',
       'delta',
       'activity',
+      'try-on-status',
       'sources',
       'card',
       'product-results',
@@ -130,6 +147,18 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
   }
   if (eventName === 'activity' && isRecord(data) && isActivity(data.activity)) {
     return { type: 'activity', activity: data.activity };
+  }
+  if (
+    eventName === 'try-on-status' &&
+    isRecord(data) &&
+    hasOnlyKeys(data, ['taskId', 'status']) &&
+    isUuid(data.taskId) &&
+    (data.status === 'queued' || data.status === 'processing')
+  ) {
+    return {
+      type: 'try-on-status',
+      status: { taskId: data.taskId, status: data.status },
+    };
   }
   if (eventName === 'sources' && isRecord(data) && isSources(data.sources)) {
     return { type: 'sources', sources: data.sources };
@@ -200,6 +229,21 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
     ) {
       throw new ApiError('聊天流上下文用量无效', 0);
     }
+    const tryOnResult =
+      data.tryOnResult === undefined
+        ? undefined
+        : projectChatTryOnResult(data.tryOnResult);
+    const tryOnStatus =
+      data.tryOnStatus === undefined
+        ? undefined
+        : projectChatTryOnFinalStatus(data.tryOnStatus);
+    if (
+      (data.tryOnResult !== undefined && !tryOnResult) ||
+      (data.tryOnStatus !== undefined && !tryOnStatus) ||
+      (tryOnResult && tryOnStatus)
+    ) {
+      throw new ApiError('聊天流试穿结果格式无效', 0);
+    }
     return {
       type: 'done',
       conversationId: data.conversationId,
@@ -214,6 +258,8 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
               totalTokens: data.usage.totalTokens,
             },
       context: isContext(data.context) ? data.context : null,
+      ...(tryOnResult ? { tryOnResult } : {}),
+      ...(tryOnStatus ? { tryOnStatus } : {}),
     };
   }
   if (eventName === 'error' && isRecord(data)) {
@@ -517,6 +563,95 @@ function hasOnlyKeys(
   keys: readonly string[],
 ): boolean {
   return Object.keys(value).every((key) => keys.includes(key));
+}
+
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      value,
+    )
+  );
+}
+
+function projectChatTryOnResult(value: unknown): ChatTryOnResult | null {
+  // 只投影固定摘要字段，拒绝将 URL、对象键等额外字段带入消息状态。
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ['taskId', 'product', 'result']) ||
+    !isUuid(value.taskId) ||
+    !isRecord(value.product) ||
+    !hasOnlyKeys(value.product, ['externalId', 'name', 'color']) ||
+    !hasString(value.product, 'externalId') ||
+    !value.product.externalId.trim() ||
+    value.product.externalId.length > 160 ||
+    !hasString(value.product, 'name') ||
+    !value.product.name.trim() ||
+    value.product.name.length > 200 ||
+    !hasString(value.product, 'color') ||
+    !value.product.color.trim() ||
+    value.product.color.length > 32 ||
+    !isRecord(value.result) ||
+    !hasOnlyKeys(value.result, ['width', 'height', 'mimeType']) ||
+    !isPositiveInteger(value.result.width) ||
+    value.result.width > 4096 ||
+    !isPositiveInteger(value.result.height) ||
+    value.result.height > 4096 ||
+    !['image/png', 'image/jpeg', 'image/webp'].includes(
+      String(value.result.mimeType),
+    )
+  )
+    return null;
+  return {
+    taskId: value.taskId,
+    product: {
+      externalId: value.product.externalId,
+      name: value.product.name,
+      color: value.product.color,
+    },
+    result: {
+      width: value.result.width,
+      height: value.result.height,
+      mimeType: value.result.mimeType as ChatTryOnResult['result']['mimeType'],
+    },
+  };
+}
+
+function projectChatTryOnStatus(
+  value: unknown,
+  finalOnly = false,
+): ChatTryOnStatus | null {
+  if (!isRecord(value) || !hasString(value, 'status')) return null;
+  if (
+    (value.status === 'queued' || value.status === 'processing') &&
+    !finalOnly &&
+    hasOnlyKeys(value, ['taskId', 'status']) &&
+    isUuid(value.taskId)
+  )
+    return { taskId: value.taskId, status: value.status };
+  if (
+    (value.status === 'failed' || value.status === 'timed_out') &&
+    hasOnlyKeys(value, ['taskId', 'status', 'code']) &&
+    (value.taskId === undefined || isUuid(value.taskId)) &&
+    hasString(value, 'code') &&
+    /^[A-Z0-9_]{1,80}$/u.test(value.code)
+  ) {
+    return {
+      status: value.status,
+      ...(isUuid(value.taskId) ? { taskId: value.taskId } : {}),
+      code: value.code,
+    };
+  }
+  return null;
+}
+
+function projectChatTryOnFinalStatus(
+  value: unknown,
+): Extract<ChatTryOnStatus, { status: 'failed' | 'timed_out' }> | null {
+  const status = projectChatTryOnStatus(value, true);
+  if (status?.status === 'failed' || status?.status === 'timed_out')
+    return status;
+  return null;
 }
 
 function isPublicHttpUrl(value: unknown): value is string | null {

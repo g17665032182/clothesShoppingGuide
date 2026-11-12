@@ -33,6 +33,7 @@ const {
   refreshUncertainTurn,
   selectConversation,
   sendMessage,
+  sendTryOnAction,
   startNewConversation,
   status,
   stopGeneration,
@@ -160,6 +161,7 @@ const {
               @load-earlier="loadEarlierMessages"
               @more-products="loadMoreProducts"
               @buy-product="buyProduct"
+              @try-on="sendTryOnAction"
               @open-order="loadOrder"
               @cancel-candidate-order="cancelCandidateOrder"
               @retry-history="loadEarlierMessages"

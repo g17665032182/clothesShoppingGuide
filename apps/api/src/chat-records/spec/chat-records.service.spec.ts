@@ -12,6 +12,7 @@ import { ChatContextService } from '../context/chat-context.service.js';
 import { ChatConversation } from '../entity/chat-conversation.entity.js';
 import { ChatMessage } from '../entity/chat-message.entity.js';
 import { PaginationDto } from '../dto/pagination.dto.js';
+import type { ChatTryOnPort } from '../../virtual-try-on/port/chat-try-on.port.js';
 
 function createService(
   options: {
@@ -21,12 +22,16 @@ function createService(
     tools?: boolean;
     cancellationCandidates?: boolean;
     failedReader?: 'preferences' | 'memory';
+    tryOn?: ChatTryOnPort;
+    modelFailure?: boolean;
   } = {},
 ) {
   const persisted: unknown[] = [];
   const removed: unknown[] = [];
   const modelInputs: unknown[] = [];
+  const modelExecutionOptions: unknown[] = [];
   const bindings: unknown[] = [];
+  const traceEvents: unknown[] = [];
   const contextInputs: Array<{ memoryContext?: string }> = [];
   let flushCount = 0;
   const manager = {
@@ -73,8 +78,15 @@ function createService(
   };
   const llmService = {
     assertConfigured: () => 'fake-model',
-    chatPrepared: async (input: unknown) => {
+    chatPrepared: async (
+      input: unknown,
+      _traceContext: unknown,
+      _tools: unknown,
+      execution: unknown,
+    ) => {
       modelInputs.push(input);
+      modelExecutionOptions.push(execution);
+      if (options.modelFailure) throw new Error('controlled model failure');
       return {
         content: '回复',
         model: 'fake-model',
@@ -167,7 +179,19 @@ function createService(
     },
   };
   const summaryService = { summarize: async () => null };
-  const traceWriter = { writeEvents: async () => undefined };
+  const traceWriter = {
+    writeEvents: async (_context: unknown, events: unknown[]) => {
+      traceEvents.push(...events);
+    },
+    nextSequence: async () =>
+      Math.max(
+        -1,
+        ...traceEvents.map((event) => {
+          const sequence = (event as { sequence?: unknown }).sequence;
+          return typeof sequence === 'number' ? sequence : -1;
+        }),
+      ) + 1,
+  };
   const memoryReader = {
     readContext: async () => {
       if (options.failedReader === 'memory')
@@ -220,9 +244,21 @@ function createService(
       runStateInTransaction: async () => emptyPurchaseState,
     } as never,
     { lockOwnedInTransaction: async () => undefined } as never,
+    undefined,
+    undefined,
+    options.tryOn,
   );
 
-  return { service, persisted, removed, modelInputs, bindings, contextInputs };
+  return {
+    service,
+    persisted,
+    removed,
+    modelInputs,
+    modelExecutionOptions,
+    traceEvents,
+    bindings,
+    contextInputs,
+  };
 }
 
 test('持久化聊天仅将系统上下文传给模型，不写入消息或响应', async () => {
@@ -452,4 +488,192 @@ test('任一上下文读取失败仅跳过该领域，另一来源继续进入�
       failedReader === 'preferences' ? '可用文档' : '可用偏好',
     );
   }
+});
+
+test('聊天动作只调用一次试穿工具，图片仅作为临时模型输入且不进入 trace 或历史', async () => {
+  const image = Buffer.from('synthetic-image-bytes');
+  const calls: unknown[] = [];
+  const { service, persisted, modelExecutionOptions, traceEvents } =
+    createService({
+      tryOn: {
+        run: async (input) => {
+          calls.push(input);
+          return {
+            status: 'succeeded',
+            result: {
+              taskId: '33333333-3333-4333-8333-333333333333',
+              product: {
+                externalId: 'coat-1',
+                name: '试穿大衣',
+                color: '黑色',
+              },
+              result: {
+                width: 1200,
+                height: 1600,
+                mimeType: 'image/webp',
+              },
+              image,
+            },
+          };
+        },
+        canReadResult: async () => true,
+      },
+    });
+
+  const result = await service.chat(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '帮我试穿' }],
+      tryOnAction: {
+        productExternalId: 'coat-1',
+        color: '黑色',
+        photoId: '22222222-2222-4222-8222-222222222222',
+        consentVersion: 'private-consent-version',
+      },
+    } as never,
+  );
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], {
+    userId: 'user-1',
+    productExternalId: 'coat-1',
+    color: '黑色',
+    photoId: '22222222-2222-4222-8222-222222222222',
+    consentVersion: 'private-consent-version',
+  });
+  const execution = modelExecutionOptions[0] as {
+    traceSequence: number;
+    skipPersistInput: boolean;
+    ephemeralModelMessages: Array<{ content: unknown }>;
+  };
+  assert.equal(execution.traceSequence, 3);
+  assert.equal(execution.skipPersistInput, true);
+  const imageMessage = execution.ephemeralModelMessages[0]!;
+  assert.equal(
+    JSON.stringify(imageMessage.content).includes(image.toString('base64')),
+    true,
+  );
+  assert.equal(
+    result.tryOnResult?.taskId,
+    '33333333-3333-4333-8333-333333333333',
+  );
+
+  const persistedJson = JSON.stringify(persisted);
+  const traceJson = JSON.stringify(traceEvents);
+  for (const serialized of [persistedJson, traceJson]) {
+    assert.equal(serialized.includes('private-consent-version'), false);
+    assert.equal(
+      serialized.includes('22222222-2222-4222-8222-222222222222'),
+      false,
+    );
+    assert.equal(serialized.includes(image.toString('base64')), false);
+    assert.equal(serialized.includes('synthetic-image-bytes'), false);
+  }
+});
+
+test('流式试穿状态回调先于任务完成时仍发送 queued 状态事件', async () => {
+  const { service } = createService({
+    tryOn: {
+      run: async (input) => {
+        input.onStatus?.({
+          taskId: '33333333-3333-4333-8333-333333333333',
+          status: 'queued',
+        });
+        return {
+          status: 'failed',
+          taskId: '33333333-3333-4333-8333-333333333333',
+          code: 'PROVIDER_REJECTED',
+        };
+      },
+      canReadResult: async () => false,
+    },
+  });
+
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '帮我试穿' }],
+      tryOnAction: {
+        productExternalId: 'coat-1',
+        color: '黑色',
+        photoId: '22222222-2222-4222-8222-222222222222',
+        consentVersion: 'v1',
+      },
+    } as never,
+  );
+  const received = [];
+  for await (const event of events) received.push(event);
+
+  assert.deepEqual(
+    received.map((event) => event.type),
+    ['start', 'try-on-status', 'delta', 'done'],
+  );
+  assert.deepEqual(received[1], {
+    type: 'try-on-status',
+    taskId: '33333333-3333-4333-8333-333333333333',
+    status: 'queued',
+  });
+  const done = received.at(-1);
+  assert.equal(done?.type === 'done' && done.tryOnStatus?.status, 'failed');
+});
+
+test('试穿图片已生成但聊天模型失败时保存安全降级回复和失败 trace', async () => {
+  const { service, traceEvents } = createService({
+    modelFailure: true,
+    tryOn: {
+      run: async () => ({
+        status: 'succeeded',
+        result: {
+          taskId: '33333333-3333-4333-8333-333333333333',
+          product: {
+            externalId: 'coat-1',
+            name: '试穿大衣',
+            color: '黑色',
+          },
+          result: {
+            width: 1200,
+            height: 1600,
+            mimeType: 'image/webp',
+          },
+          image: Buffer.from('synthetic-image-bytes'),
+        },
+      }),
+      canReadResult: async () => true,
+    },
+  });
+
+  const result = await service.chat(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '帮我试穿' }],
+      tryOnAction: {
+        productExternalId: 'coat-1',
+        color: '黑色',
+        photoId: '22222222-2222-4222-8222-222222222222',
+        consentVersion: 'v1',
+      },
+    } as never,
+  );
+
+  assert.equal(
+    result.content,
+    '试穿结果已生成，但暂时无法生成文字回复。你可以直接查看结果图。',
+  );
+  assert.equal(
+    result.tryOnResult?.taskId,
+    '33333333-3333-4333-8333-333333333333',
+  );
+  assert.equal(
+    traceEvents.some(
+      (event) =>
+        (event as { status?: string }).status === 'failed' &&
+        (event as { payload?: { origin?: string } }).payload?.origin ===
+          'server_fallback',
+    ),
+    true,
+  );
+  assert.equal(
+    JSON.stringify(traceEvents).includes('synthetic-image-bytes'),
+    false,
+  );
 });

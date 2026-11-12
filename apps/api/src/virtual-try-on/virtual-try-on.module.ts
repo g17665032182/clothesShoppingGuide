@@ -24,6 +24,8 @@ import { TryOnWorkerService } from './service/try-on-worker.service.js';
 import { TryOnObjectCleanupService } from './service/try-on-object-cleanup.service.js';
 import { TRY_ON_IMAGE_PROVIDER } from './port/try-on-image-provider.port.js';
 import { TRY_ON_OBJECT_STORE } from './port/try-on-object-store.port.js';
+import { CHAT_TRY_ON_PORT } from './port/chat-try-on.port.js';
+import { ChatTryOnService } from './service/chat-try-on.service.js';
 
 @Module({
   imports: [
@@ -44,6 +46,7 @@ import { TRY_ON_OBJECT_STORE } from './port/try-on-object-store.port.js';
   providers: [
     TryOnPhotoService,
     TryOnTaskService,
+    ChatTryOnService,
     TryOnQuotaService,
     TryOnNotificationService,
     TryOnWorkerService,
@@ -80,12 +83,17 @@ import { TRY_ON_OBJECT_STORE } from './port/try-on-object-store.port.js';
         LocalTryOnObjectStoreService,
       ],
     },
+    {
+      provide: CHAT_TRY_ON_PORT,
+      useExisting: ChatTryOnService,
+    },
   ],
   exports: [
     TryOnPhotoService,
     TryOnTaskService,
     TRY_ON_IMAGE_PROVIDER,
     TRY_ON_OBJECT_STORE,
+    CHAT_TRY_ON_PORT,
   ],
 })
 export class VirtualTryOnModule {}

@@ -29,6 +29,47 @@ test('聊天 schema 接受合法消息并去除内容首尾空白', () => {
   if (result.success) assert.equal(result.data.messages[0]?.content, '你好');
 });
 
+test('聊天 schema 接受严格的试穿动作并拒绝未知字段', () => {
+  const valid = chatSchema.safeParse({
+    messages: [{ role: ChatMessageRole.USER, content: '帮我试穿' }],
+    tryOnAction: {
+      productExternalId: 'coat-1',
+      color: '黑色',
+      photoId: '9c2c6f3b-4d12-4a9e-8c0a-8d6d0a8b8c1e',
+      consentVersion: 'v1',
+    },
+  });
+  assert.equal(valid.success, true);
+  if (valid.success) {
+    assert.equal(valid.data.tryOnAction?.productExternalId, 'coat-1');
+    assert.equal(valid.data.tryOnAction?.color, '黑色');
+  }
+
+  for (const tryOnAction of [
+    {
+      productExternalId: 'coat-1',
+      color: '黑色',
+      photoId: 'not-a-uuid',
+      consentVersion: 'v1',
+    },
+    {
+      productExternalId: 'coat-1',
+      color: '黑色',
+      photoId: '9c2c6f3b-4d12-4a9e-8c0a-8d6d0a8b8c1e',
+      consentVersion: 'v1',
+      userId: 'attacker-controlled',
+    },
+  ]) {
+    assert.equal(
+      chatSchema.safeParse({
+        messages: [{ role: ChatMessageRole.USER, content: '帮我试穿' }],
+        tryOnAction,
+      }).success,
+      false,
+    );
+  }
+});
+
 test('聊天 schema 拒绝空消息、未知角色和超长内容', () => {
   const result = chatSchema.safeParse({
     messages: [

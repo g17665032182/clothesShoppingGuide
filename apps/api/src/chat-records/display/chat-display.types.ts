@@ -102,6 +102,26 @@ export type PurchaseReference = {
   orderId: string | null;
 };
 
+export type ChatTryOnResult = {
+  taskId: string;
+  product: {
+    externalId: string;
+    name: string;
+    color: string;
+  };
+  result: {
+    width: number;
+    height: number;
+    mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  };
+};
+
+export type ChatTryOnStatus = {
+  status: 'failed' | 'timed_out';
+  taskId?: string;
+  code: string;
+};
+
 export type OrderCancellationCandidate = {
   orderId: string;
   orderNo: string;
@@ -126,6 +146,8 @@ export type ChatDisplayData = {
   orderCancellationCandidates: OrderCancellationCandidate[];
   context: ChatContextUsage | null;
   purchase: PurchaseReference | null;
+  tryOnResult?: ChatTryOnResult;
+  tryOnStatus?: ChatTryOnStatus;
 };
 
 /** 展示消息 ID 独立绑定，保留 trace 自身的 LangChain messageId。 */

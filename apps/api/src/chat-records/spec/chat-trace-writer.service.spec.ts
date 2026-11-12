@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ChatTraceEvent } from '../entity/chat-trace-event.entity.js';
+import {
+  ChatTraceEvent,
+  ChatTraceEventStatus,
+} from '../entity/chat-trace-event.entity.js';
 import { ChatTraceWriterService } from '../trace/chat-trace-writer.service.js';
 
 type TraceRow = ChatTraceEvent;
@@ -161,6 +164,32 @@ test('过长工具结果和失败详情不会被写入', async () => {
     },
   ]);
   assert.equal(rows[0]?.content, '工具执行失败');
+});
+
+test('模型降级事件保留失败状态和安全来源标记', async () => {
+  const { writer, rows } = createWriter();
+
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'fallback-message',
+      content: '试穿结果已生成，但暂时无法生成文字回复。',
+      model: 'model',
+      usage: null,
+      status: 'failed',
+      payload: {
+        origin: 'server_fallback',
+        code: 'TRY_ON_CHAT_MODEL_UNAVAILABLE',
+      },
+    },
+  ]);
+
+  assert.equal(rows[0]?.status, ChatTraceEventStatus.FAILED);
+  assert.deepEqual(rows[0]?.payload, {
+    origin: 'server_fallback',
+    code: 'TRY_ON_CHAT_MODEL_UNAVAILABLE',
+  });
 });
 
 test('不可序列化的循环 payload 被拒绝', async () => {

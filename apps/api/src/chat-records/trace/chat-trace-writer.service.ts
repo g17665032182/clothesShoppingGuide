@@ -561,6 +561,14 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                 ),
               ),
         model: event.model,
+        status:
+          event.status === 'success'
+            ? ChatTraceEventStatus.SUCCESS
+            : event.status === 'failed'
+              ? ChatTraceEventStatus.FAILED
+              : event.status === 'partial'
+                ? ChatTraceEventStatus.PARTIAL
+                : null,
         usage: event.usage
           ? {
               inputTokens: event.usage.inputTokens,
@@ -664,6 +672,17 @@ export class ChatTraceWriterService {
       if (error instanceof ConflictException) throw error;
       throw new Error('聊天过程记录保存失败');
     }
+  }
+
+  public async nextSequence(context: LlmTraceWriteContext): Promise<number> {
+    const latest = await this.events.findOne(
+      {
+        conversationId: context.conversationId,
+        runId: context.runId,
+      },
+      { fields: ['sequence'], orderBy: { sequence: 'DESC' } },
+    );
+    return (latest?.sequence ?? -1) + 1;
   }
 
   private async persistIdempotently(

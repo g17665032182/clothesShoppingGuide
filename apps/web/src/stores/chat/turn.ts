@@ -21,6 +21,8 @@ export function toChatMessage(message: ChatApiMessage): ChatMessage {
       })) ?? [],
     context: message.context ?? null,
     purchase: message.purchase ?? null,
+    tryOnResult: message.tryOnResult ?? null,
+    tryOnStatus: message.tryOnStatus ?? null,
     status: 'saved',
   };
 }
@@ -42,6 +44,8 @@ export function createPendingMessage(
     orderCancellationCandidates: [],
     context: null,
     purchase: null,
+    tryOnResult: null,
+    tryOnStatus: null,
     status: 'submitted',
   };
 }
@@ -62,6 +66,9 @@ export function applyTurnEvent(
   if (event.type === 'sources') message.sources = event.sources;
   if (event.type === 'card') message.cards.push(event.card);
   if (event.type === 'purchase') message.purchase = event.purchase;
+  if (event.type === 'try-on-status') {
+    message.tryOnStatus = { ...event.status };
+  }
   if (event.type === 'order-cancellation-candidates') {
     message.orderCancellationCandidates = event.orderCancellationCandidates.map(
       (candidate) => ({ ...candidate }),
@@ -77,6 +84,9 @@ export function applyTurnEvent(
   }
   if (event.type === 'done') {
     message.context = event.context ?? null;
+    message.tryOnResult = event.tryOnResult ?? null;
+    message.tryOnStatus =
+      event.tryOnStatus ?? (event.tryOnResult ? null : message.tryOnStatus);
     finishTurn(message, 'saved');
   } else if (event.type !== 'start' && event.type !== 'error') {
     message.status = 'streaming';

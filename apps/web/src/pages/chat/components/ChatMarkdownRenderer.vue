@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChatCard } from '@/api/types/chat';
+import type { ChatCard, ChatProductCard } from '@/api/types/chat';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import ChatCardTemplate from './ChatCardTemplate.vue';
 
@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'buyProduct', externalId: string): void;
+  (event: 'tryOn', product: ChatProductCard): void;
 }>();
 
 // 卡片由独立服务端投影传入，Markdown 正文始终只交给开启净化的通用渲染器。
@@ -34,6 +35,7 @@ const emit = defineEmits<{
         :card="card"
         :disabled="props.disabled"
         @buy-product="(externalId) => emit('buyProduct', externalId)"
+        @try-on="(product) => emit('tryOn', product)"
       />
     </section>
   </div>

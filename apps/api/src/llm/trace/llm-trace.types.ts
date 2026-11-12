@@ -20,6 +20,7 @@ export type LlmTraceEvent =
       model: string | null;
       usage: LlmUsage | null;
       payload?: unknown;
+      status?: 'success' | 'failed' | 'partial' | null;
     }
   | {
       sequence: number;

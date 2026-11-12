@@ -20,6 +20,7 @@ import { ChatPurchaseModule } from '../chat-purchase/index.js';
 import { ChatConversationAccessModule } from './conversation-access/index.js';
 import { OrdersModule } from '../orders/index.js';
 import { UserAddressesModule } from '../user-addresses/index.js';
+import { VirtualTryOnModule } from '../virtual-try-on/virtual-try-on.module.js';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { UserAddressesModule } from '../user-addresses/index.js';
     ChatConversationAccessModule,
     OrdersModule,
     UserAddressesModule,
+    VirtualTryOnModule,
   ],
   controllers: [
     ChatRecordsController,

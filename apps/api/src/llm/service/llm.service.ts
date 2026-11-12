@@ -51,6 +51,12 @@ export type ChatInput = {
   >;
 };
 
+export type LlmExecutionOptions = {
+  traceSequence?: number;
+  skipPersistInput?: boolean;
+  ephemeralModelMessages?: BaseMessage[];
+};
+
 export type ChatOutput = {
   content: string;
   model: string;
@@ -148,6 +154,7 @@ export class LlmService {
     input: ChatInput,
     traceContext?: LlmTraceContext,
     extraTools: LlmTool[] = [],
+    execution: LlmExecutionOptions = {},
   ): Promise<ChatOutput> {
     const model = this.assertConfigured();
 
@@ -156,8 +163,25 @@ export class LlmService {
       result = await this.activeGraph(extraTools).invoke(
         {
           messages: input.messages.map(toLangChainMessage),
+          ...(execution.traceSequence === undefined
+            ? {}
+            : { traceSequence: execution.traceSequence }),
         },
-        traceContext ? { context: traceContext as any } : undefined,
+        traceContext || Object.keys(execution).length > 0
+          ? {
+              context: {
+                ...(traceContext ?? {}),
+                ...(execution.skipPersistInput
+                  ? { skipPersistInput: true }
+                  : {}),
+                ...(execution.ephemeralModelMessages
+                  ? {
+                      ephemeralModelMessages: execution.ephemeralModelMessages,
+                    }
+                  : {}),
+              } as any,
+            }
+          : undefined,
       );
     } catch (error) {
       this.rethrowMappedError(error);
@@ -221,6 +245,7 @@ export class LlmService {
     signal?: AbortSignal,
     traceContext?: LlmTraceContext,
     extraTools: LlmTool[] = [],
+    execution: LlmExecutionOptions = {},
   ): AsyncGenerator<LlmStreamEvent, LlmEventStreamResult> {
     const model = this.assertConfigured();
     const controller = new AbortController();
@@ -235,7 +260,12 @@ export class LlmService {
     try {
       controller.signal.throwIfAborted();
       const stream = await this.activeGraph(extraTools).stream(
-        { messages: input.messages.map(toLangChainMessage) },
+        {
+          messages: input.messages.map(toLangChainMessage),
+          ...(execution.traceSequence === undefined
+            ? {}
+            : { traceSequence: execution.traceSequence }),
+        },
         {
           streamMode: ['custom', 'values'],
           signal: controller.signal,
@@ -245,6 +275,12 @@ export class LlmService {
             eventStreaming: true,
             streamLifecycle: lifecycle,
             signal: controller.signal,
+            ...(execution.skipPersistInput ? { skipPersistInput: true } : {}),
+            ...(execution.ephemeralModelMessages
+              ? {
+                  ephemeralModelMessages: execution.ephemeralModelMessages,
+                }
+              : {}),
           } as any,
         },
       );

@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { ArrowUpRight, Check, ImageOff, Shirt, ShoppingBag } from '@lucide/vue';
-import type { ChatProductResults } from '@/api/types/chat';
-import { auth } from '@/lib/auth';
+import type { ChatProductCard, ChatProductResults } from '@/api/types/chat';
 
 const props = defineProps<{
   resultSets: ChatProductResults[];
@@ -12,8 +10,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'more', resultIndex: number): void;
   (event: 'buy', externalId: string): void;
+  (event: 'tryOn', product: ChatProductCard): void;
 }>();
-const router = useRouter();
 const failedImages = ref(new Set<string>());
 
 const categoryLabels: Record<string, string> = {
@@ -83,23 +81,8 @@ function publicUrl(value: string | null): string | null {
   }
 }
 
-function openTryOn(item: (typeof resultSets.value)[number]['items'][number]) {
-  const query = {
-    productExternalId: item.externalId,
-    productName: item.name,
-    category: item.category,
-    imageUrl: item.imageSrc ?? undefined,
-    colors: item.colors.join(','),
-  };
-  const destination = router.resolve({ name: 'my-try-ons', query });
-  if (!auth.isAuthenticated.value) {
-    void router.push({
-      path: '/login',
-      query: { redirect: destination.fullPath },
-    });
-    return;
-  }
-  void router.push(destination);
+function openTryOn(item: ChatProductCard) {
+  emit('tryOn', item);
 }
 </script>
 

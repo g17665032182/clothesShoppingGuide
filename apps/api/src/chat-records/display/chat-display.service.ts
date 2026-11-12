@@ -9,11 +9,16 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 
 import type { LlmUsage } from '../../llm/graph/llm.state.js';
 import type { LlmStreamEvent } from '../../llm/stream/llm-stream.types.js';
+import {
+  CHAT_TRY_ON_PORT,
+  type ChatTryOnPort,
+} from '../../virtual-try-on/port/chat-try-on.port.js';
 import {
   PRODUCT_CATALOG_TRY_ON_PORT,
   productSearchQuerySchema,
@@ -39,6 +44,8 @@ import {
   restoreOrderCancellationCandidates,
   restoreProductResults,
   safeToolName,
+  restoreChatTryOnResult,
+  restoreChatTryOnStatus,
 } from './chat-display.projection.js';
 import type {
   ChatActivity,
@@ -47,6 +54,7 @@ import type {
   ChatDisplayEvent,
   OrderCancellationCandidate,
   PurchaseReference,
+  ChatTryOnResult,
 } from './chat-display.types.js';
 
 @Injectable()
@@ -71,6 +79,9 @@ export class ChatDisplayService {
     private readonly events: EntityRepository<ChatTraceEvent>,
     @Inject(PRODUCT_CATALOG_TRY_ON_PORT)
     private readonly catalog: ProductCatalogTryOnPort,
+    @Optional()
+    @Inject(CHAT_TRY_ON_PORT)
+    private readonly tryOn?: ChatTryOnPort,
   ) {}
 
   public create(contextWindowTokens: number): ChatDisplayData {
@@ -307,6 +318,44 @@ export class ChatDisplayService {
     }
   }
 
+  public setTryOnResult(data: ChatDisplayData, value: unknown): void {
+    const result = restoreChatTryOnResult(value);
+    if (!result) {
+      throw new ServiceUnavailableException('试穿结果引用不符合安全要求');
+    }
+    const previousResult = data.tryOnResult;
+    const previousStatus = data.tryOnStatus;
+    data.tryOnResult = result;
+    delete data.tryOnStatus;
+    try {
+      this.assertBudget(data);
+    } catch (error) {
+      if (previousResult) data.tryOnResult = previousResult;
+      else delete data.tryOnResult;
+      if (previousStatus) data.tryOnStatus = previousStatus;
+      throw error;
+    }
+  }
+
+  public setTryOnStatus(data: ChatDisplayData, value: unknown): void {
+    const status = restoreChatTryOnStatus(value);
+    if (!status) {
+      throw new ServiceUnavailableException('试穿状态不符合安全要求');
+    }
+    const previousResult = data.tryOnResult;
+    const previousStatus = data.tryOnStatus;
+    data.tryOnStatus = status;
+    delete data.tryOnResult;
+    try {
+      this.assertBudget(data);
+    } catch (error) {
+      if (previousStatus) data.tryOnStatus = previousStatus;
+      else delete data.tryOnStatus;
+      if (previousResult) data.tryOnResult = previousResult;
+      throw error;
+    }
+  }
+
   public assertBudget(data: ChatDisplayData): void {
     if (reservedDisplayBytes(data) > MAX_DISPLAY_BYTES) {
       throw new ServiceUnavailableException('聊天展示数据超出安全保存上限');
@@ -360,6 +409,7 @@ export class ChatDisplayService {
   public async read(
     conversationId: string,
     assistantMessageIds: string[],
+    ownerUserId?: string,
   ): Promise<Map<string, ChatDisplayData>> {
     const result = new Map<string, ChatDisplayData>();
     if (assistantMessageIds.length === 0) return result;
@@ -411,10 +461,33 @@ export class ChatDisplayService {
         orderCancellationCandidates: restored.orderCancellationCandidates,
         context: restored.context,
         purchase: restored.purchase,
+        ...(restored.tryOnResult ? { tryOnResult: restored.tryOnResult } : {}),
+        ...(restored.tryOnStatus ? { tryOnStatus: restored.tryOnStatus } : {}),
       });
     }
     await this.refreshTryOnAvailability(result);
+    await this.refreshTryOnResults(result, ownerUserId);
     return result;
+  }
+
+  private async refreshTryOnResults(
+    displays: Map<string, ChatDisplayData>,
+    ownerUserId?: string,
+  ): Promise<void> {
+    for (const display of displays.values()) {
+      const result: ChatTryOnResult | undefined = display.tryOnResult;
+      if (!result) continue;
+      if (!ownerUserId) {
+        delete display.tryOnResult;
+        continue;
+      }
+      if (
+        !this.tryOn ||
+        !(await this.tryOn.canReadResult(ownerUserId, result.taskId))
+      ) {
+        delete display.tryOnResult;
+      }
+    }
   }
 
   private async refreshTryOnAvailability(

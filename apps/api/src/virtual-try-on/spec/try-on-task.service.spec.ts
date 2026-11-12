@@ -209,6 +209,91 @@ test('最终失败后保存照片保持有效且解除任务占用', async () =>
   assert.equal(fixture.cleanups.length, 0);
 });
 
+test('聊天试穿结果仅按本人成功任务读取并返回受检图片字节', async () => {
+  const userId = '00000000-0000-4000-8000-000000000002';
+  const taskId = '00000000-0000-4000-8000-000000000003';
+  const source = Buffer.from('synthetic-image');
+  const body = Buffer.from('normalized-synthetic-image');
+  const task = Object.assign(new TryOnTask(), {
+    id: taskId,
+    userId,
+    status: TryOnTaskStatus.SUCCEEDED,
+    deletedAt: null,
+    productExternalId: 'coat-1',
+    productName: '试穿大衣',
+    color: '黑色',
+  });
+  const result = Object.assign(new TryOnResult(), {
+    taskId,
+    userId,
+    deletedAt: null,
+    objectKey: 'private/try-on/result.webp',
+    mimeType: 'image/webp',
+    byteSize: source.byteLength,
+    width: 1200,
+    height: 1600,
+  });
+  const requestedOwners: string[] = [];
+  let objectKeyRead: string | undefined;
+  const service = new TryOnTaskService(
+    {
+      findOne: async (where: { userId: string }) => {
+        requestedOwners.push(where.userId);
+        return where.userId === userId ? task : null;
+      },
+    } as never,
+    {
+      findOne: async (where: { userId: string }) =>
+        where.userId === userId ? result : null,
+    } as never,
+    {} as never,
+    {
+      getObject: async (objectKey: string) => {
+        objectKeyRead = objectKey;
+        return source;
+      },
+    } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {
+      normalize: async () => ({
+        body,
+        mimeType: 'image/webp',
+        byteSize: body.byteLength,
+        width: 1200,
+        height: 1600,
+      }),
+    } as never,
+  );
+
+  const loaded = await service.readChatResult(userId, taskId);
+
+  assert.deepEqual(loaded, {
+    taskId,
+    product: {
+      externalId: 'coat-1',
+      name: '试穿大衣',
+      color: '黑色',
+    },
+    result: {
+      width: 1200,
+      height: 1600,
+      mimeType: 'image/webp',
+    },
+    image: body,
+  });
+  assert.deepEqual(requestedOwners, [userId]);
+  assert.equal(objectKeyRead, 'private/try-on/result.webp');
+  assert.equal(
+    JSON.stringify(loaded).includes('private/try-on/result.webp'),
+    false,
+  );
+  await assert.rejects(service.readChatResult('another-user', taskId), {
+    status: 404,
+  });
+});
+
 test('每日额度日期以 Asia/Shanghai 自然日计算', () => {
   const service = new TryOnQuotaService({} as never);
   assert.equal(

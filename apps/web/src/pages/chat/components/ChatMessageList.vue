@@ -13,7 +13,7 @@ import {
   MessageScrollerViewport,
 } from '@/components/ui/message-scroller';
 import { Spinner } from '@/components/ui/spinner';
-import type { ChatMessage } from '@/api/types/chat';
+import type { ChatMessage, ChatTryOnAction } from '@/api/types/chat';
 import ChatAssistantMessage from './ChatAssistantMessage.vue';
 
 const props = withDefaults(
@@ -37,6 +37,7 @@ const emit = defineEmits<{
   (event: 'retryHistory'): void;
   (event: 'moreProducts', messageId: string, resultIndex: number): void;
   (event: 'buyProduct', externalId: string): void;
+  (event: 'tryOn', request: { content: string; action: ChatTryOnAction }): void;
   (event: 'openOrder', orderId: string): void;
   (event: 'cancelCandidateOrder', orderId: string): void;
 }>();
@@ -151,6 +152,7 @@ function formatSessionTime(createdAt: string): string {
                   emit('moreProducts', messageId, resultIndex)
               "
               @buy-product="(externalId) => emit('buyProduct', externalId)"
+              @try-on="(request) => emit('tryOn', request)"
               @open-order="(orderId) => emit('openOrder', orderId)"
               @cancel-candidate-order="
                 (orderId) => emit('cancelCandidateOrder', orderId)

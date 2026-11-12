@@ -12,6 +12,7 @@ import {
 } from '@/api/modules/user-addresses';
 import type { UserAddress } from '@/api/types/user-addresses';
 import { ApiError } from '@/api';
+import type { ChatTryOnAction } from '@/api/types/chat';
 
 export function useChatPage() {
   const chat = useChatStore();
@@ -148,6 +149,14 @@ export function useChatPage() {
     const content = draft.value.trim();
     draft.value = '';
     void chat.sendMessage(content);
+  }
+
+  function sendTryOnAction(request: {
+    content: string;
+    action: ChatTryOnAction;
+  }) {
+    if (!chat.canSubmit || !request.content.trim()) return;
+    void chat.sendMessage(request.content, request.action);
   }
 
   function loadMoreProducts(messageId: string, resultIndex: number) {
@@ -423,6 +432,7 @@ export function useChatPage() {
     canSend,
     handleKeydown,
     sendMessage,
+    sendTryOnAction,
     loadMoreProducts,
     buyProduct,
     confirmReplacement,

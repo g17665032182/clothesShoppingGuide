@@ -10,6 +10,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'buyProduct', externalId: string): void;
+  (
+    event: 'tryOn',
+    product: Extract<ChatCard, { name: 'product' }>['data']['items'][number],
+  ): void;
 }>();
 
 // 固定模板映射，不根据消息数据动态解析组件名或路径。
@@ -21,6 +25,7 @@ const emit = defineEmits<{
     :items="props.card.data.items"
     :disabled="props.disabled"
     @buy="(externalId) => emit('buyProduct', externalId)"
+    @try-on="(product) => emit('tryOn', product)"
   />
   <ChatOrderCardList
     v-else-if="props.card.name === 'order'"

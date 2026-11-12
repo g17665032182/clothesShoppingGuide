@@ -32,8 +32,14 @@ import type {
 } from '../dto/try-on-task.dto.js';
 import { TryOnPhotoService } from './try-on-photo.service.js';
 import { TryOnQuotaService } from './try-on-quota.service.js';
+import { TryOnImageProcessingService } from './image-processing.service.js';
 
 const ALLOWED_CATEGORIES = new Set(['tops', 'bottoms', 'dresses', 'outerwear']);
+const CHAT_RESULT_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+]);
 
 @Injectable()
 export class TryOnTaskService {
@@ -49,6 +55,7 @@ export class TryOnTaskService {
     private readonly photos: TryOnPhotoService,
     private readonly quota: TryOnQuotaService,
     private readonly config: ConfigService,
+    private readonly imageProcessing?: TryOnImageProcessingService,
   ) {}
 
   public async create(userId: string, input: CreateTryOnTaskInput) {
@@ -414,6 +421,64 @@ export class TryOnTaskService {
       };
     } catch {
       throw new ServiceUnavailableException('暂时无法生成下载地址');
+    }
+  }
+
+  public async readChatResult(userId: string, id: string) {
+    const task = await this.tasks.findOne({
+      id,
+      userId,
+      status: TryOnTaskStatus.SUCCEEDED,
+      deletedAt: null,
+    });
+    if (!task) throw new NotFoundException('试穿结果不存在');
+    const result = await this.results.findOne({
+      taskId: task.id,
+      userId,
+      deletedAt: null,
+    });
+    if (
+      !result ||
+      !CHAT_RESULT_MIME_TYPES.has(result.mimeType) ||
+      !Number.isSafeInteger(result.byteSize) ||
+      result.byteSize < 1 ||
+      result.byteSize > 10 * 1024 * 1024
+    ) {
+      throw new ServiceUnavailableException('试穿结果暂不可用');
+    }
+    if (!this.imageProcessing) {
+      throw new ServiceUnavailableException('试穿结果暂不可用');
+    }
+
+    try {
+      const stored = await this.objectStore.getObject(result.objectKey);
+      if (stored.byteLength !== result.byteSize) {
+        throw new Error('result size mismatch');
+      }
+      const image = await this.imageProcessing.normalize(stored);
+      if (
+        image.mimeType !== result.mimeType ||
+        image.width !== result.width ||
+        image.height !== result.height
+      ) {
+        throw new Error('result metadata mismatch');
+      }
+      return {
+        taskId: task.id,
+        product: {
+          externalId: task.productExternalId,
+          name: task.productName,
+          color: task.color,
+        },
+        result: {
+          width: image.width,
+          height: image.height,
+          mimeType: image.mimeType,
+        },
+        image: image.body,
+      };
+    } catch {
+      throw new ServiceUnavailableException('试穿结果暂不可用');
     }
   }
 

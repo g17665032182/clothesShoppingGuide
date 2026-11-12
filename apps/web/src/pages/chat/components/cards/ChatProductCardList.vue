@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: 'buy', externalId: string): void;
+  (event: 'tryOn', product: ChatProductCard): void;
 }>();
 
 const resultSets = computed<ChatProductResults[]>(() => [
@@ -28,5 +29,6 @@ const resultSets = computed<ChatProductResults[]>(() => [
     :result-sets="resultSets"
     :disabled="props.disabled"
     @buy="(externalId) => emit('buy', externalId)"
+    @try-on="(product) => emit('tryOn', product)"
   />
 </template>

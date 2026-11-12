@@ -112,6 +112,7 @@ watch(
           }}</span>
         </button>
         <Button
+          v-if="photo.kind === 'saved'"
           variant="ghost"
           size="icon"
           :disabled="disabled || deletingPhotoId === photo.id"

@@ -30,6 +30,7 @@ import { flushMemoryTasks } from '@/api/modules/memories';
 import type {
   ChatApiConversation,
   ChatProductResults,
+  ChatTryOnAction,
   Conversation,
 } from '@/api/types/chat';
 import type {
@@ -1054,7 +1055,7 @@ export const useChatStore = defineStore('chat', () => {
     );
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, tryOnAction?: ChatTryOnAction) {
     const token = auth.state.token;
     if (!token || !canSubmit.value || !content.trim() || content.length > 2000)
       return;
@@ -1108,6 +1109,8 @@ export const useChatStore = defineStore('chat', () => {
           ...(session.conversationId && {
             conversationId: session.conversationId,
           }),
+          // 试穿元数据独立于可见消息正文提交，不写入聊天内容。
+          ...(tryOnAction && { tryOnAction }),
         },
         task.controller.signal,
       )) {
