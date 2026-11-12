@@ -186,5 +186,6 @@ pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images
 | 聊天取消订单   | [实施记录](./docs/chat-order-cancellation/chat-order-cancellation-implementation.md)                                                 |
 | 虚拟试穿       | [技术方案](./docs/virtual-try-on/virtual-try-on-technical.md)、[商品配置](./docs/virtual-try-on/product-try-on-setting-technical.md) |
 | 全量验证       | [测试索引](./docs/testing/README.md)、[计划、执行与修复复测](./docs/testing/project-full-validation-plan.md)                         |
+| 进度完善计划   | [文档、数据库、浏览器及供应商后续工作](./docs/testing/project-progress-improvement-plan.md)                                          |
 
 各模块实施文档保留当时的验证结果与缺口；后续跨模块复测以全量验证记录对应日期的结果为准。

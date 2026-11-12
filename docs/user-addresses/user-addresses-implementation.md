@@ -6,8 +6,8 @@
 - 设计文档：[收货地址簿与 LLM 查询设计](./user-addresses-design.md)，已于 2026-11-10 确认。
 - CRUD 契约：[收货地址 CRUD 契约](../contracts/user-address-crud-contract.md)，已于 2026-11-10 确认。
 - 技术文档：[收货地址簿与 LLM 查询技术文档](./user-addresses-technical.md)，已于 2026-11-10 确认。
-- 实现状态：核心实现与自动化验证已完成；隔离 PostgreSQL Migration 测试和登录后浏览器 Smoke Test 尚未执行。
-- 最后更新：2026-11-10。
+- 实现状态：核心实现与自动化验证已完成；2026-11-11 隔离 PostgreSQL Migration 测试通过；登录后浏览器 Smoke Test 尚未执行。
+- 最后更新：2026-11-12（依据 2026-11-11 项目全量验证复测）。
 
 ## 实际完成记录
 
@@ -16,8 +16,9 @@
 - 账号地址管理页和购买弹框地址选择/保存交互已接入。新地址只在用户点击后保存；未知结果重用原 `requestKey`；账号或会话切换会清理待处理保存状态。
 - LLM 系统上下文与售后流程已更新，允许查询本人订单摘要和地址引用，同时明确禁止模型执行订单写操作或读取完整联系方式。
 - 2026-11-10 验证：`pnpm --filter @clothes-shopping-guide/api typecheck`、`pnpm --filter @clothes-shopping-guide/api test`、`pnpm --filter @clothes-shopping-guide/web typecheck`、`pnpm --filter @clothes-shopping-guide/web build`、`pnpm format:check`、`pnpm check` 均通过。API 测试为 259 passed、15 skipped、0 failed；跳过项包含需专用 PostgreSQL 数据库的 Migration/集成套件。
+- 2026-11-11 跨模块复测：全量验证记录确认 `RUN_USER_ADDRESSES_POSTGRES_TEST=1` 地址簿 Migration 在具名隔离库 `clothes_guide_user_addresses_test_full20261111_migration` 中 1 passed、0 failed。该结果引用自[项目全量验证计划](../testing/project-full-validation-plan.md)，不是本次重新执行。
 - `git diff --check` 通过。没有运行 `migration:fresh`，也没有连接默认开发数据库。
-- 待补验证：使用具名、空的 disposable PostgreSQL 数据库运行 `RUN_USER_ADDRESSES_POSTGRES_TEST=1` Migration 测试；使用已认证开发账号执行地址页和购买弹框浏览器 Smoke Test。未提供隔离数据库和可用登录会话，故本轮不声称这两项已通过。
+- 待补验证：使用已认证开发账号执行地址页和购买弹框浏览器 Smoke Test。没有本次新的已登录浏览器证据，故不声称该流程已通过。
 
 ## 开发流程总览
 
