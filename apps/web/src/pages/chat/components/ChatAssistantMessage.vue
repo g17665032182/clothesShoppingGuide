@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ChatMessage } from '@/api/types/chat';
-import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import {
   Message,
   MessageContent,
@@ -9,6 +8,7 @@ import {
 } from '@/components/ui/message';
 import { Spinner } from '@/components/ui/spinner';
 import ChatActivityList from './ChatActivityList.vue';
+import ChatMarkdownRenderer from './ChatMarkdownRenderer.vue';
 import ChatProductResults from './ChatProductResults.vue';
 import ChatSources from './ChatSources.vue';
 import { Button } from '@/components/ui/button';
@@ -68,10 +68,12 @@ function formatOrderDate(value: string): string {
         :answering="Boolean(message.content)"
         :status="message.status"
       />
-      <MarkdownRenderer
-        v-if="message.content"
-        class="max-w-full"
+      <ChatMarkdownRenderer
+        v-if="message.content || message.cards.length"
         :markdown="message.content"
+        :cards="message.cards"
+        :disabled="isRunning"
+        @buy-product="(externalId) => emit('buyProduct', externalId)"
       />
       <p
         v-else-if="isRunning && !message.activities.length"

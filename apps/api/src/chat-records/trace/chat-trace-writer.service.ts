@@ -7,6 +7,10 @@ import type {
   LlmTraceEvent,
   LlmTraceWriteContext,
 } from '../../llm/trace/llm-trace.types.js';
+import {
+  chatCardSchema,
+  chatCardSelectionSchema,
+} from '../display/chat-display.projection.js';
 
 import {
   ChatTraceEvent,
@@ -477,6 +481,46 @@ function safeAddressToolArguments(
   return safeArgs;
 }
 
+function safeChatCardArguments(value: unknown): Record<string, unknown> {
+  const parsed = chatCardSelectionSchema.safeParse(parseToolValue(value));
+  if (!parsed.success) return {};
+  return parsed.data;
+}
+
+function safeChatCardCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return {};
+  const call = value as Record<string, unknown>;
+  const id = typeof call.id === 'string' ? call.id.slice(0, 128) : null;
+  const name = typeof call.name === 'string' ? call.name : null;
+  if (name !== 'display_chat_card') return redactValue(value);
+  return {
+    ...(id ? { id } : {}),
+    name,
+    ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
+    args: safeChatCardArguments(call.args ?? call.arguments ?? call.input),
+  };
+}
+
+function sanitizeNestedChatCardCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedChatCardCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map(safeChatCardCall)
+        : sanitizeNestedChatCardCalls(entry),
+    ]),
+  );
+}
+
+function safeChatCardResult(value: unknown): string {
+  const parsed = chatCardSchema.safeParse(parseToolValue(value));
+  return JSON.stringify(parsed.success ? parsed.data : {});
+}
+
 function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
   if (
     event.type === 'model_response' &&
@@ -511,7 +555,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             ? null
             : normalizePayload(
                 sanitizeNestedAddressCalls(
-                  sanitizeNestedPurchaseCalls(event.payload),
+                  sanitizeNestedPurchaseCalls(
+                    sanitizeNestedChatCardCalls(event.payload),
+                  ),
                 ),
               ),
         model: event.model,
@@ -529,11 +575,13 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
         payload: normalizePayload(
-          isPurchaseTool(event.toolName)
-            ? safePurchaseProjection(event.args)
-            : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-              ? safeAddressToolArguments(event.toolName, event.args)
-              : event.args,
+          event.toolName === 'display_chat_card'
+            ? safeChatCardArguments(event.args)
+            : isPurchaseTool(event.toolName)
+              ? safePurchaseProjection(event.args)
+              : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                ? safeAddressToolArguments(event.toolName, event.args)
+                : event.args,
         ),
       };
     case 'tool_result':
@@ -544,13 +592,15 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         content:
           event.status === 'failed'
             ? '工具执行失败'
-            : isPurchaseTool(event.toolName)
-              ? safePurchaseResult(event.content)
-              : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                ? JSON.stringify(
-                    safeAddressToolProjection(event.toolName, event.content),
-                  )
-                : normalizeContent(event.content),
+            : event.toolName === 'display_chat_card'
+              ? safeChatCardResult(event.content)
+              : isPurchaseTool(event.toolName)
+                ? safePurchaseResult(event.content)
+                : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                  ? JSON.stringify(
+                      safeAddressToolProjection(event.toolName, event.content),
+                    )
+                  : normalizeContent(event.content),
         status:
           event.status === 'success'
             ? ChatTraceEventStatus.SUCCESS
@@ -559,11 +609,13 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
           event.payload === undefined
             ? null
             : normalizePayload(
-                isPurchaseTool(event.toolName)
-                  ? safePurchaseProjection(event.payload)
-                  : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                    ? safeAddressToolProjection(event.toolName, event.payload)
-                    : event.payload,
+                event.toolName === 'display_chat_card'
+                  ? safeChatCardResult(event.payload)
+                  : isPurchaseTool(event.toolName)
+                    ? safePurchaseProjection(event.payload)
+                    : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                      ? safeAddressToolProjection(event.toolName, event.payload)
+                      : event.payload,
               ),
       };
   }

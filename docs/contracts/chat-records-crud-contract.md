@@ -9,7 +9,7 @@
 - 确认依据：用户回复；现有 `LlmModule`、JWT Guard、RolesGuard 和 MikroORM 约定。
 - 涉及模块：`apps/api/src/chat-records`、`apps/api/src/llm`、数据库迁移、内部聊天事件存储。
 - 当前框架：NestJS 12、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3。
-- 最后更新：2026-11-03（设计关联扩展已确认，尚未实现）。
+- 最后更新：2026-11-12（2026-11-03 确认的 AI Elements 展示扩展已实现；自动化/数据库证据见[实施记录](../chat-streaming/ai-elements-implementation.md)和[全量验证记录](../testing/project-full-validation-plan.md)，登录态完整浏览器验收仍未完成）。
 
 ## 范围
 

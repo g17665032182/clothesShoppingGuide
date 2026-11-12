@@ -13,6 +13,7 @@ export function toChatMessage(message: ChatApiMessage): ChatMessage {
     createdAt: message.createdAt,
     activities: message.activities ?? [],
     sources: message.sources ?? [],
+    cards: message.cards ?? [],
     productResults: message.productResults ?? [],
     orderCancellationCandidates:
       message.orderCancellationCandidates?.map((candidate) => ({
@@ -36,6 +37,7 @@ export function createPendingMessage(
     createdAt: new Date().toISOString(),
     activities: [],
     sources: [],
+    cards: [],
     productResults: [],
     orderCancellationCandidates: [],
     context: null,
@@ -58,6 +60,7 @@ export function applyTurnEvent(
     else message.activities[index] = event.activity;
   }
   if (event.type === 'sources') message.sources = event.sources;
+  if (event.type === 'card') message.cards.push(event.card);
   if (event.type === 'purchase') message.purchase = event.purchase;
   if (event.type === 'order-cancellation-candidates') {
     message.orderCancellationCandidates = event.orderCancellationCandidates.map(

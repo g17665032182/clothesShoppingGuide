@@ -503,3 +503,116 @@ test('订单和地址工具的 trace 仅保存专属安全白名单', async () =
     /"addressId":"11111111-1111-4111-8111-111111111111"/u,
   );
 });
+
+test('卡片工具 trace 仅保存引用参数和通过 schema 的公开卡片', async () => {
+  const { writer, rows } = createWriter();
+  const card = {
+    type: 'card',
+    name: 'product',
+    data: {
+      items: [
+        {
+          externalId: 'coat-1',
+          name: '羊毛外套',
+          brand: null,
+          category: 'outerwear',
+          description: null,
+          imageUrl: null,
+          productUrl: null,
+          price: '999.00',
+          currency: 'CNY',
+          sizes: ['M'],
+          colors: ['黑色'],
+          inStock: true,
+          tryOnEnabled: false,
+          matchReasons: ['category_match'],
+        },
+      ],
+    },
+  };
+
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'card-model',
+      content: '',
+      model: 'test-model',
+      usage: null,
+      payload: {
+        tool_calls: [
+          {
+            id: 'nested-card',
+            name: 'display_chat_card',
+            args: {
+              name: 'order',
+              orderNos: ['ORDER-1'],
+              recipient: '张三',
+            },
+          },
+        ],
+      },
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'card-model',
+      toolCallId: 'valid-card',
+      toolName: 'display_chat_card',
+      args: { name: 'product', externalIds: ['coat-1'] },
+    },
+    {
+      sequence: 2,
+      type: 'tool_result',
+      messageId: 'card-result',
+      toolCallId: 'valid-card',
+      toolName: 'display_chat_card',
+      content: JSON.stringify(card),
+      status: 'success',
+    },
+    {
+      sequence: 3,
+      type: 'tool_call',
+      messageId: 'invalid-card-model',
+      toolCallId: 'invalid-card',
+      toolName: 'display_chat_card',
+      args: {
+        name: 'order',
+        orderNos: ['ORDER-1'],
+        recipient: '张三',
+      },
+    },
+    {
+      sequence: 4,
+      type: 'tool_result',
+      messageId: 'invalid-card-result',
+      toolCallId: 'invalid-card',
+      toolName: 'display_chat_card',
+      content: JSON.stringify({
+        ...card,
+        data: {
+          items: [{ ...card.data.items[0], recipient: '张三' }],
+        },
+      }),
+      status: 'success',
+    },
+  ]);
+
+  assert.deepEqual(rows[0]?.payload, {
+    tool_calls: [
+      {
+        id: 'nested-card',
+        name: 'display_chat_card',
+        args: {},
+      },
+    ],
+  });
+  assert.deepEqual(rows[1]?.payload, {
+    name: 'product',
+    externalIds: ['coat-1'],
+  });
+  assert.deepEqual(JSON.parse(rows[2]?.content ?? '{}'), card);
+  assert.deepEqual(rows[3]?.payload, {});
+  assert.deepEqual(JSON.parse(rows[4]?.content ?? '{}'), {});
+  assert.equal(JSON.stringify(rows).includes('张三'), false);
+});

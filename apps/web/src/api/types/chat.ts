@@ -55,6 +55,45 @@ export type ChatProductCard = {
   matchReasons: string[];
 };
 
+export type ChatOrderCardItem = {
+  productName: string;
+  color: string;
+  size: string;
+  quantity: number;
+};
+
+export type ChatOrderCardSummary = {
+  orderNo: string;
+  status:
+    | 'pending_payment'
+    | 'pending_shipment'
+    | 'pending_receipt'
+    | 'completed'
+    | 'closed';
+  closeReason:
+    'user_cancelled' | 'payment_expired' | 'product_unavailable' | null;
+  itemsAmount: string;
+  payableAmount: string;
+  itemCount: number;
+  createdAt: string;
+  paidAt: string | null;
+  shippedAt: string | null;
+  completedAt: string | null;
+  items: ChatOrderCardItem[];
+};
+
+export type ChatCard =
+  | {
+      type: 'card';
+      name: 'product';
+      data: { items: ChatProductCard[] };
+    }
+  | {
+      type: 'card';
+      name: 'order';
+      data: { items: ChatOrderCardSummary[] };
+    };
+
 export type ChatProductResults = {
   items: ChatProductCard[];
   nextCursor: string | null;
@@ -103,6 +142,7 @@ export interface ChatMessage {
   duration?: string;
   activities: ChatActivity[];
   sources: ChatSource[];
+  cards: ChatCard[];
   productResults: ChatProductResults[];
   orderCancellationCandidates: ChatOrderCancellationCandidate[];
   context: ChatContextUsage | null;
@@ -129,6 +169,7 @@ export interface ChatApiMessage {
   createdAt: string;
   activities?: ChatActivity[];
   sources?: ChatSource[];
+  cards?: ChatCard[];
   productResults?: ChatProductResults[];
   orderCancellationCandidates?: OrderCancellationCandidate[];
   context?: ChatContextUsage | null;
@@ -190,6 +231,7 @@ export type ChatStreamEvent =
     }
   | { type: 'activity'; activity: ChatActivity }
   | { type: 'sources'; sources: ChatSource[] }
+  | { type: 'card'; card: ChatCard }
   | {
       type: 'product-results';
       results: ChatProductResults;

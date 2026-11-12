@@ -26,6 +26,13 @@ test(
     timeout: 60_000,
   },
   async (t) => {
+    const dbName = config.dbName ?? '';
+    assert.match(
+      dbName,
+      /^clothes_guide_chat_display_test_[a-z0-9_]+$/u,
+      '必须通过 DB_NAME 显式指定具名可销毁测试库',
+    );
+    assert.notEqual(dbName, 'clothes_guide');
     const queries: string[] = [];
     const entities = [User, ChatConversation, ChatMessage, ChatTraceEvent];
     const orm = await MikroORM.init({

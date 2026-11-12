@@ -1,6 +1,6 @@
 import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
 
-import type { JsonValue } from '../display/chat-display.types.js';
+import type { ChatCard, JsonValue } from '../display/chat-display.types.js';
 
 export class ChatToolActivityResponseDto {
   @ApiProperty({ enum: ['tool'] })
@@ -131,6 +131,59 @@ export class ChatMessageResponseDto {
     description: '来源快照，默认为 []',
   })
   public sources!: ChatSourceResponseDto[];
+
+  @ApiProperty({
+    type: 'array',
+    description:
+      '由服务端白名单投影并绑定到本条 assistant 消息的商品或只读订单卡片',
+    items: {
+      oneOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['type', 'name', 'data'],
+          properties: {
+            type: { type: 'string', enum: ['card'] },
+            name: { type: 'string', enum: ['product'] },
+            data: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['items'],
+              properties: {
+                items: {
+                  type: 'array',
+                  maxItems: 5,
+                  items: { type: 'object', additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['type', 'name', 'data'],
+          properties: {
+            type: { type: 'string', enum: ['card'] },
+            name: { type: 'string', enum: ['order'] },
+            data: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['items'],
+              properties: {
+                items: {
+                  type: 'array',
+                  maxItems: 5,
+                  items: { type: 'object', additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  })
+  public cards!: ChatCard[];
 
   @ApiProperty({
     type: () => ChatContextResponseDto,

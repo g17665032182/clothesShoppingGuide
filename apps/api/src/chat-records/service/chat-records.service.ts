@@ -49,6 +49,8 @@ import type {
   ChatDisplayData,
   ChatDisplayEvent,
 } from '../display/chat-display.types.js';
+import { createChatCardDisplayTool } from '../display/chat-card-display.tool.js';
+import { createChatCardSourceRegistry } from '../display/chat-card-source-registry.js';
 import type { LlmEventStreamResult } from '../../llm/stream/llm-stream.types.js';
 import { ProductCatalogService } from '../../product-catalog/index.js';
 import { createProductSearchTool } from '../../product-catalog/tool/product-search.tool.js';
@@ -101,6 +103,7 @@ export type ConversationDetailResponse = ConversationResponse & {
 export type PersistedChatOutput = ChatOutput & {
   conversationId: string;
   title: string;
+  cards: ChatDisplayData['cards'];
   purchase: ChatDisplayData['purchase'];
 };
 
@@ -176,19 +179,19 @@ export class ChatRecordsService {
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
     const prepared = await this.prepareChat(user, dto);
     await this.ensureConversationPersisted(prepared);
+    const display = this.displayService.create(prepared.contextWindowTokens);
     const result = await this.llmService.chatPrepared(
       {
         messages: prepared.plan.messages,
       },
       this.traceContext(prepared),
-      this.tools(prepared),
+      this.tools(prepared, display),
     );
     if (
       result.finalTraceSequence === null ||
       result.finalTraceSequence === undefined
     )
       throw new ServiceUnavailableException('最终模型记录缺失，无法保存回复');
-    const display = this.displayService.create(prepared.contextWindowTokens);
     this.displayService.complete(display, result.usage);
     await this.persistChat(prepared, result, {
       data: display,
@@ -200,6 +203,7 @@ export class ChatRecordsService {
       ...publicResult,
       conversationId: prepared.persistedConversation.id,
       title: prepared.persistedConversation.title,
+      cards: display.cards,
       purchase: display.purchase,
     };
   }
@@ -238,7 +242,7 @@ export class ChatRecordsService {
         { messages: prepared.plan.messages },
         signal,
         this.traceContext(prepared, signal),
-        this.tools(prepared),
+        this.tools(prepared, display),
       );
       let result: LlmEventStreamResult | undefined;
       try {
@@ -501,9 +505,12 @@ export class ChatRecordsService {
     };
   }
 
-  private tools(prepared: PreparedChat) {
+  private tools(prepared: PreparedChat, display: ChatDisplayData) {
+    const cardSources = createChatCardSourceRegistry();
     return [
-      createProductSearchTool(this.productCatalog),
+      createProductSearchTool(this.productCatalog, (results) =>
+        cardSources.registerProducts(results),
+      ),
       ...createPurchaseTools(
         this.purchaseDrafts,
         prepared.persistedConversation.userId,
@@ -516,6 +523,10 @@ export class ChatRecordsService {
       createListUserOrdersTool(
         this.orders!,
         prepared.persistedConversation.userId,
+        (orders) => cardSources.registerOrders(orders),
+      ),
+      createChatCardDisplayTool(cardSources, (card) =>
+        this.displayService.stageCard(display, card),
       ),
       createListShippingAddressesTool(
         this.addresses!,
@@ -797,6 +808,7 @@ export class ChatRecordsService {
       productResults: [],
       orderCancellationCandidates: [],
       context: null,
+      cards: [],
       purchase: null,
     };
   }

@@ -34,12 +34,15 @@ import {
   projectSources,
   reservedDisplayBytes,
   restoreDisplay,
+  restoreChatCard,
+  restoreChatCardOutput,
   restoreOrderCancellationCandidates,
   restoreProductResults,
   safeToolName,
 } from './chat-display.projection.js';
 import type {
   ChatActivity,
+  ChatCard,
   ChatDisplayData,
   ChatDisplayEvent,
   OrderCancellationCandidate,
@@ -57,6 +60,10 @@ export class ChatDisplayService {
   private readonly cancellationQueries = new WeakMap<
     ChatDisplayData,
     Set<string>
+  >();
+  private readonly stagedCardOutputs = new WeakMap<
+    ChatDisplayData,
+    Map<string, number>
   >();
 
   public constructor(
@@ -76,6 +83,7 @@ export class ChatDisplayService {
     const data: ChatDisplayData = {
       activities: [],
       sources: [],
+      cards: [],
       productResults: [],
       orderCancellationCandidates: [],
       context: projectContext(contextWindowTokens, null),
@@ -85,11 +93,48 @@ export class ChatDisplayService {
     return data;
   }
 
+  public stageCard(data: ChatDisplayData, value: unknown): ChatCard {
+    const card = restoreChatCard(value);
+    if (!card) {
+      throw new ServiceUnavailableException('卡片展示数据不符合安全要求');
+    }
+    const cards = [...data.cards, card];
+    this.assertBudget({ ...data, cards });
+    data.cards = cards;
+
+    const key = JSON.stringify(card);
+    const staged =
+      this.stagedCardOutputs.get(data) ?? new Map<string, number>();
+    staged.set(key, (staged.get(key) ?? 0) + 1);
+    this.stagedCardOutputs.set(data, staged);
+    return card;
+  }
+
   public apply(
     data: ChatDisplayData,
     event: LlmStreamEvent,
   ): ChatDisplayEvent | null {
     if (event.type === 'delta') return null;
+    if (event.type === 'tool-call' && event.toolName === 'display_chat_card') {
+      return null;
+    }
+    if (
+      event.type === 'tool-result' &&
+      event.toolName === 'display_chat_card' &&
+      event.status === 'success'
+    ) {
+      const card = restoreChatCardOutput(event.output);
+      if (card) {
+        const key = JSON.stringify(card);
+        const staged = this.stagedCardOutputs.get(data);
+        const count = staged?.get(key) ?? 0;
+        if (count > 0) {
+          if (count === 1) staged?.delete(key);
+          else staged?.set(key, count - 1);
+          return { type: 'card', card };
+        }
+      }
+    }
     if (
       event.type === 'tool-call' &&
       event.toolName === 'search_local_clothing_products'
@@ -361,6 +406,7 @@ export class ChatDisplayService {
       result.set(id, {
         activities: restored.activities,
         sources: restored.sources,
+        cards: restored.cards,
         productResults: restored.productResults,
         orderCancellationCandidates: restored.orderCancellationCandidates,
         context: restored.context,
@@ -374,9 +420,12 @@ export class ChatDisplayService {
   private async refreshTryOnAvailability(
     displays: Map<string, ChatDisplayData>,
   ): Promise<void> {
-    const items = [...displays.values()].flatMap((display) =>
-      display.productResults.flatMap((results) => results.items),
-    );
+    const items = [...displays.values()].flatMap((display) => [
+      ...display.productResults.flatMap((results) => results.items),
+      ...display.cards.flatMap((card) =>
+        card.name === 'product' ? card.data.items : [],
+      ),
+    ]);
     const externalIds = [...new Set(items.map((item) => item.externalId))];
     if (externalIds.length === 0) return;
 

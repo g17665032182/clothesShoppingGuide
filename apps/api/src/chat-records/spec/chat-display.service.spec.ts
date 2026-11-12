@@ -268,6 +268,68 @@ test('商品工具结果非法时不生成公开商品投影', () => {
   assert.equal(restoreDisplay(oldSnapshot)?.purchase, null);
 });
 
+test('展示工具只发布已暂存的白名单卡片并兼容损坏历史卡片', () => {
+  const { display } = createState();
+  const data = display.create(10_000);
+  const card = {
+    type: 'card' as const,
+    name: 'product' as const,
+    data: { items: [productCard()] },
+  };
+
+  display.apply(data, {
+    type: 'tool-call',
+    id: 'card-call',
+    toolName: 'display_chat_card',
+    input: { name: 'product', externalIds: ['coat-1'] },
+  });
+  const staged = display.stageCard(data, card);
+  const event = display.apply(data, {
+    type: 'tool-result',
+    id: 'card-call',
+    toolName: 'display_chat_card',
+    status: 'success',
+    output: JSON.stringify(staged),
+  });
+
+  assert.deepEqual(event, { type: 'card', card });
+  assert.deepEqual(data.cards, [card]);
+  const restored = restoreDisplay(displayEnvelope(data, assistantMessageId));
+  assert.deepEqual(restored?.cards, [card]);
+
+  const damaged = restoreDisplay({
+    ...displayEnvelope(data, assistantMessageId),
+    cards: [
+      card,
+      {
+        ...card,
+        data: { items: [{ ...productCard(), privateField: 'secret' }] },
+      },
+      { type: 'card', name: 'unknown', data: {} },
+    ],
+  });
+  assert.deepEqual(damaged?.cards, [card]);
+});
+
+test('未由当前展示工具暂存的卡片结果不会进入公开展示', () => {
+  const { display } = createState();
+  const data = display.create(10_000);
+  const card = {
+    type: 'card',
+    name: 'product',
+    data: { items: [productCard()] },
+  };
+  const event = display.apply(data, {
+    type: 'tool-result',
+    id: 'untrusted-card',
+    toolName: 'display_chat_card',
+    status: 'success',
+    output: JSON.stringify(card),
+  });
+  assert.notEqual(event?.type, 'card');
+  assert.deepEqual(data.cards, []);
+});
+
 test('仅待付款订单工具查询的严格成功结果生成候选卡片并可恢复', () => {
   const { display } = createState();
   const data = display.create(10_000);

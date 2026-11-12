@@ -98,6 +98,7 @@ export function createListUserOrdersTool(
     'listForUser' | 'getForUser' | 'listCancelableForUser'
   >,
   boundUserId: string,
+  onResults?: (orders: unknown) => void,
 ): StructuredToolInterface {
   return tool(
     async ({ orderNo, status, page }) => {
@@ -130,6 +131,7 @@ export function createListUserOrdersTool(
             return safeOrder(summary, detail.items);
           }),
         );
+        onResults?.(safeOrders);
         return JSON.stringify({ ok: true, orders: safeOrders });
       } catch (error) {
         const statusCode =

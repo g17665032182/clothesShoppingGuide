@@ -7,6 +7,7 @@ import type { LlmUsage } from '../../llm/graph/llm.state.js';
 import { productSearchQuerySchema } from '../../product-catalog/index.js';
 import type {
   ChatActivity,
+  ChatCard,
   ChatContextUsage,
   ChatDisplayData,
   OrderCancellationCandidate,
@@ -14,6 +15,7 @@ import type {
   ChatSource,
   PurchaseReference,
   PublicDisplayEnvelope,
+  ChatCardSelection,
 } from './chat-display.types.js';
 
 export const MAX_DISPLAY_BYTES = 16_384;
@@ -132,6 +134,76 @@ const productResultsSchema = z.strictObject({
   query: productSearchQuerySchema.optional(),
 });
 
+const chatOrderCardItemSchema = z.strictObject({
+  productName: z.string().trim().min(1).max(200),
+  color: z.string().max(100),
+  size: z.string().max(100),
+  quantity: z.number().int().positive().max(999),
+});
+const chatOrderCardSummarySchema = z.strictObject({
+  orderNo: z.string().trim().min(1).max(100),
+  status: z.enum([
+    'pending_payment',
+    'pending_shipment',
+    'pending_receipt',
+    'completed',
+    'closed',
+  ]),
+  closeReason: z
+    .enum(['user_cancelled', 'payment_expired', 'product_unavailable'])
+    .nullable(),
+  itemsAmount: z.string().regex(/^\d{1,10}\.\d{2}$/u),
+  payableAmount: z.string().regex(/^\d{1,10}\.\d{2}$/u),
+  itemCount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  createdAt: z.iso.datetime({ offset: true }),
+  paidAt: z.iso.datetime({ offset: true }).nullable(),
+  shippedAt: z.iso.datetime({ offset: true }).nullable(),
+  completedAt: z.iso.datetime({ offset: true }).nullable(),
+  items: z.array(chatOrderCardItemSchema).max(50),
+});
+const productChatCardSchema = z.strictObject({
+  type: z.literal('card'),
+  name: z.literal('product'),
+  data: z.strictObject({
+    items: z.array(productCardSchema).min(1).max(5),
+  }),
+});
+const orderChatCardSchema = z.strictObject({
+  type: z.literal('card'),
+  name: z.literal('order'),
+  data: z.strictObject({
+    items: z.array(chatOrderCardSummarySchema).min(1).max(5),
+  }),
+});
+export const chatCardSchema = z.discriminatedUnion('name', [
+  productChatCardSchema,
+  orderChatCardSchema,
+]);
+
+function uniqueReferences(maxLength: number) {
+  return <T extends string>(value: T[]) =>
+    new Set(value).size === value.length && value.length <= maxLength;
+}
+
+export const chatCardSelectionSchema = z.discriminatedUnion('name', [
+  z.strictObject({
+    name: z.literal('product'),
+    externalIds: z
+      .array(z.string().trim().min(1).max(160))
+      .min(1)
+      .max(5)
+      .refine(uniqueReferences(5)),
+  }),
+  z.strictObject({
+    name: z.literal('order'),
+    orderNos: z
+      .array(z.string().trim().min(1).max(100))
+      .min(1)
+      .max(5)
+      .refine(uniqueReferences(5)),
+  }),
+]);
+
 const envelopeSchema = z.object({
   version: z.literal(1),
   assistantMessageId: z.uuid(),
@@ -143,6 +215,7 @@ const envelopeSchema = z.object({
       url: z.string(),
     }),
   ),
+  cards: z.array(z.unknown()).default([]),
   // 缺字段兼容导购上线前已保存的聊天快照。
   productResults: z.array(productResultsSchema).max(5).default([]),
   orderCancellationCandidates: z
@@ -311,6 +384,7 @@ export function displayEnvelope(
     assistantMessageId,
     activities: data.activities,
     sources: data.sources,
+    cards: data.cards,
     productResults: data.productResults,
     orderCancellationCandidates: data.orderCancellationCandidates,
     context: data.context,
@@ -329,6 +403,7 @@ export function reservedDisplayBytes(data: ChatDisplayData): number {
     displayEnvelope({
       activities: data.activities,
       sources: data.sources,
+      cards: data.cards,
       productResults: data.productResults,
       // 候选卡片字段均有长度上限，因此可预留可验证的最大合法投影空间。
       orderCancellationCandidates: ORDER_CANDIDATE_RESERVATION,
@@ -375,6 +450,10 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
     );
   }
   const sources = projectSources(source.sources, new Map(), true);
+  const cards: ChatCard[] = source.cards.flatMap((card) => {
+    const restored = restoreChatCard(card);
+    return restored ? [restored] : [];
+  });
   const productResults: ChatProductResults[] = source.productResults.map(
     (entry) => {
       const { query, ...result } = entry;
@@ -424,6 +503,7 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
     {
       activities,
       sources,
+      cards,
       productResults,
       orderCancellationCandidates,
       context,
@@ -431,6 +511,58 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
     },
     source.assistantMessageId,
   );
+}
+
+export function restoreChatCard(value: unknown): ChatCard | null {
+  const parsed = chatCardSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const card = parsed.data;
+  if (card.name === 'product') {
+    return {
+      ...card,
+      data: {
+        items: card.data.items.map((item) => ({
+          ...item,
+          imageUrl: item.imageUrl
+            ? (publicSourceUrl(item.imageUrl)?.toString() ?? null)
+            : null,
+          productUrl: item.productUrl
+            ? (publicSourceUrl(item.productUrl)?.toString() ?? null)
+            : null,
+        })),
+      },
+    };
+  }
+  return {
+    ...card,
+    data: {
+      items: card.data.items.map((order) => ({
+        ...order,
+        orderNo: order.orderNo.trim(),
+        items: order.items.map((item) => ({
+          ...item,
+          productName: item.productName.trim(),
+        })),
+      })),
+    },
+  };
+}
+
+export function restoreChatCardOutput(output: string): ChatCard | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(output);
+  } catch {
+    return null;
+  }
+  return restoreChatCard(value);
+}
+
+export function parseChatCardSelection(
+  value: unknown,
+): ChatCardSelection | null {
+  const parsed = chatCardSelectionSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 export function restoreOrderCancellationCandidates(

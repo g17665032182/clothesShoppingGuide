@@ -60,6 +60,7 @@ function makeDetail(id: string) {
 
 test('订单工具只绑定本人、固定最多五条并投影安全摘要', async () => {
   const calls: Array<{ method: string; userId: string; value: unknown }> = [];
+  const registered: unknown[] = [];
   const summaries = Array.from({ length: 6 }, (_, index) =>
     makeSummary(`00000000-0000-4000-8000-${String(index).padStart(12, '0')}`),
   );
@@ -76,7 +77,11 @@ test('订单工具只绑定本人、固定最多五条并投影安全摘要', as
       return makeDetail(id);
     },
   };
-  const orderTool = createListUserOrdersTool(service as never, ownerId);
+  const orderTool = createListUserOrdersTool(
+    service as never,
+    ownerId,
+    (orders) => registered.push(orders),
+  );
 
   const raw = await orderTool.invoke({
     orderNo: ' ORDER-1 ',
@@ -89,6 +94,8 @@ test('订单工具只绑定本人、固定最多五条并投影安全摘要', as
   };
 
   assert.equal(output.ok, true);
+  assert.equal(registered.length, 1);
+  assert.deepEqual(registered[0], output.orders);
   assert.equal(output.orders.length, 5);
   const listCall = calls[0];
   assert.equal(listCall?.method, 'list');
@@ -166,6 +173,7 @@ test('待付款筛选走未过期候选查询并仅增加卡片引用白名单',
   };
   let candidateUserId = '';
   let listCalled = false;
+  let registered = false;
   const orderTool = createListUserOrdersTool(
     {
       async listCancelableForUser(userId: string) {
@@ -183,6 +191,9 @@ test('待付款筛选走未过期候选查询并仅增加卡片引用白名单',
       },
     } as never,
     ownerId,
+    () => {
+      registered = true;
+    },
   );
 
   const output = JSON.parse(
@@ -196,6 +207,7 @@ test('待付款筛选走未过期候选查询并仅增加卡片引用白名单',
 
   assert.equal(candidateUserId, ownerId);
   assert.equal(listCalled, false);
+  assert.equal(registered, false);
   assert.equal(output.orders.length, 1);
   assert.equal(output.orders[0]?.orderId, summary.id);
   assert.equal(output.orders[0]?.expiresAt, summary.expiresAt);
@@ -222,6 +234,33 @@ test('待付款筛选走未过期候选查询并仅增加卡片引用白名单',
   ]) {
     assert.equal(serialized.includes(privateValue), false, privateValue);
   }
+});
+
+test('普通订单查询失败时不登记来源', async () => {
+  let registered = false;
+  const orderTool = createListUserOrdersTool(
+    {
+      async listCancelableForUser() {
+        return [];
+      },
+      async listForUser() {
+        throw new Error('private service failure');
+      },
+      async getForUser() {
+        throw new Error('unused');
+      },
+    } as never,
+    ownerId,
+    () => {
+      registered = true;
+    },
+  );
+
+  assert.deepEqual(JSON.parse(String(await orderTool.invoke({}))), {
+    ok: false,
+    code: 'unavailable',
+  });
+  assert.equal(registered, false);
 });
 
 test('订单工具把 service 异常映射为不含内部信息的通用结果', async () => {

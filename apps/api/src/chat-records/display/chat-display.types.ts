@@ -40,6 +40,55 @@ export type ChatProductResults = {
   query?: ProductSearchQuery;
 };
 
+export type ChatOrderCardItem = {
+  productName: string;
+  color: string;
+  size: string;
+  quantity: number;
+};
+
+export type ChatOrderCardSummary = {
+  orderNo: string;
+  status:
+    | 'pending_payment'
+    | 'pending_shipment'
+    | 'pending_receipt'
+    | 'completed'
+    | 'closed';
+  closeReason:
+    'user_cancelled' | 'payment_expired' | 'product_unavailable' | null;
+  itemsAmount: string;
+  payableAmount: string;
+  itemCount: number;
+  createdAt: string;
+  paidAt: string | null;
+  shippedAt: string | null;
+  completedAt: string | null;
+  items: ChatOrderCardItem[];
+};
+
+export type ChatCard =
+  | {
+      type: 'card';
+      name: 'product';
+      data: { items: ChatProductCard[] };
+    }
+  | {
+      type: 'card';
+      name: 'order';
+      data: { items: ChatOrderCardSummary[] };
+    };
+
+export type ChatCardSelection =
+  | { name: 'product'; externalIds: string[] }
+  | { name: 'order'; orderNos: string[] };
+
+export type ChatCardSourceRegistry = {
+  registerProducts(value: unknown): void;
+  registerOrders(value: unknown): void;
+  createCard(selection: ChatCardSelection): ChatCard;
+};
+
 export type ChatContextUsage = {
   contextWindowTokens: number;
   inputTokens: number | null;
@@ -72,6 +121,7 @@ export type OrderCancellationCandidate = {
 export type ChatDisplayData = {
   activities: ChatActivity[];
   sources: ChatSource[];
+  cards: ChatCard[];
   productResults: ChatProductResults[];
   orderCancellationCandidates: OrderCancellationCandidate[];
   context: ChatContextUsage | null;
@@ -87,6 +137,7 @@ export type PublicDisplayEnvelope = ChatDisplayData & {
 export type ChatDisplayEvent =
   | { type: 'activity'; activity: ChatActivity }
   | { type: 'sources'; sources: ChatSource[] }
+  | { type: 'card'; card: ChatCard }
   | {
       type: 'order-cancellation-candidates';
       orderCancellationCandidates: OrderCancellationCandidate[];

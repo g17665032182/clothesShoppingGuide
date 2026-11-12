@@ -43,11 +43,12 @@ export class LlmChatController {
   @ApiProduces('text/event-stream')
   @ApiOkResponse({
     description:
-      'SSE 事件流：start（含上下文窗口）、delta、activity、sources、done（含最终调用用量）；事务提交后发送 done，响应开始后的失败通过 error 事件返回。',
+      'SSE 事件流：start（含上下文窗口）、delta、activity、sources、card（经服务端校验的卡片）、done（含最终调用用量）；事务提交后发送 done，响应开始后的失败通过 error 事件返回。',
     content: {
       'text/event-stream': {
         schema: { type: 'string' },
-        example: 'event: delta\\ndata: {"content":"你好"}\\n\\n',
+        example:
+          'event: card\\ndata: {"card":{"type":"card","name":"product","data":{"items":[]}}}\\n\\n',
       },
     },
   })

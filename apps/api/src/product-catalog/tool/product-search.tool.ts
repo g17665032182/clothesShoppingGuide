@@ -7,6 +7,7 @@ import {
 
 export function createProductSearchTool(
   catalog: ProductCatalogService,
+  onResults?: (results: unknown) => void,
 ): StructuredToolInterface {
   let hasSearchedThisTurn = false;
   return tool(
@@ -19,7 +20,9 @@ export function createProductSearchTool(
         });
       }
       hasSearchedThisTurn = true;
-      return JSON.stringify(await catalog.search({ ...input, limit: 3 }));
+      const results = await catalog.search({ ...input, limit: 3 });
+      onResults?.(results);
+      return JSON.stringify(results);
     },
     {
       name: 'search_local_clothing_products',

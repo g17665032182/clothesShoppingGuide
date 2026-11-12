@@ -106,20 +106,50 @@ test('商品查询工具参数使用严格 schema 和约定分页默认值', () 
 
 test('商品查询工具每轮只搜索一次并忽略模型要求的较大页数', async () => {
   const limits: number[] = [];
+  const registered: unknown[] = [];
   const catalog = {
     async search(input: { limit: number }) {
       limits.push(input.limit);
-      return { items: [], nextCursor: null, noResultReason: null };
+      return {
+        items: [],
+        nextCursor: null,
+        noResultReason: null,
+      };
     },
   };
-  const searchTool = createProductSearchTool(catalog as never);
+  const searchTool = createProductSearchTool(catalog as never, (results) => {
+    registered.push(results);
+  });
 
   await searchTool.invoke({ size: 'M', limit: 20 });
   const blockedPage = await searchTool.invoke({ size: 'L', limit: 20 });
   assert.deepEqual(limits, [3]);
+  assert.equal(registered.length, 1);
+  assert.deepEqual(registered[0], {
+    items: [],
+    nextCursor: null,
+    noResultReason: null,
+  });
   assert.deepEqual(JSON.parse(String(blockedPage)), {
     items: [],
     nextCursor: null,
     noResultReason: null,
   });
+});
+
+test('商品查询失败时不登记来源', async () => {
+  let registered = false;
+  const searchTool = createProductSearchTool(
+    {
+      async search() {
+        throw new Error('catalog unavailable');
+      },
+    } as never,
+    () => {
+      registered = true;
+    },
+  );
+
+  await assert.rejects(searchTool.invoke({}));
+  assert.equal(registered, false);
 });

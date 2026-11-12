@@ -2,6 +2,7 @@ import { ApiError, apiRequest, apiStreamRequest } from '@/api';
 import type {
   ChatApiConversation,
   ChatActivity,
+  ChatCard,
   ChatContextUsage,
   ChatConversationDetail,
   OrderCancellationCandidate,
@@ -47,6 +48,7 @@ export async function getConversation(
         ...message,
         activities: isActivities(message.activities) ? message.activities : [],
         sources: isSources(message.sources) ? message.sources : [],
+        cards: projectChatCards(message.cards),
         productResults: isProductResults(message.productResults)
           ? message.productResults
           : [],
@@ -90,6 +92,7 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'delta',
       'activity',
       'sources',
+      'card',
       'product-results',
       'order-cancellation-candidates',
       'purchase',
@@ -130,6 +133,14 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
   }
   if (eventName === 'sources' && isRecord(data) && isSources(data.sources)) {
     return { type: 'sources', sources: data.sources };
+  }
+  if (
+    eventName === 'card' &&
+    isRecord(data) &&
+    hasOnlyKeys(data, ['card']) &&
+    isChatCard(data.card)
+  ) {
+    return { type: 'card', card: data.card };
   }
   if (
     eventName === 'purchase' &&
@@ -271,7 +282,7 @@ export async function* streamChat(
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isPurchaseReference(value: unknown): value is PurchaseReference {
@@ -499,6 +510,217 @@ function isSources(value: unknown): value is ChatSource[] {
       return false;
     }
   });
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
+}
+
+function isPublicHttpUrl(value: unknown): value is string | null {
+  if (value === null) return true;
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  if (!/^https?:\/\//iu.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return (
+      ['http:', 'https:'].includes(url.protocol) &&
+      Boolean(url.hostname) &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isChatProductCard(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      'externalId',
+      'name',
+      'brand',
+      'category',
+      'description',
+      'imageUrl',
+      'productUrl',
+      'price',
+      'currency',
+      'sizes',
+      'colors',
+      'inStock',
+      'tryOnEnabled',
+      'matchReasons',
+    ]) ||
+    !hasString(value, 'externalId') ||
+    value.externalId.length < 1 ||
+    value.externalId.length > 160 ||
+    !hasString(value, 'name') ||
+    value.name.length < 1 ||
+    value.name.length > 200 ||
+    !(
+      value.brand === null ||
+      (typeof value.brand === 'string' && value.brand.length <= 100)
+    ) ||
+    !['tops', 'bottoms', 'dresses', 'outerwear', 'shoes'].includes(
+      String(value.category),
+    ) ||
+    !(
+      value.description === null ||
+      (typeof value.description === 'string' &&
+        value.description.length <= 2000)
+    ) ||
+    !isPublicHttpUrl(value.imageUrl) ||
+    !isPublicHttpUrl(value.productUrl) ||
+    !hasString(value, 'price') ||
+    !/^\d{1,10}\.\d{2}$/u.test(value.price) ||
+    value.currency !== 'CNY' ||
+    !Array.isArray(value.sizes) ||
+    value.sizes.length > 100 ||
+    !value.sizes.every(
+      (size) => typeof size === 'string' && size.length <= 32,
+    ) ||
+    !Array.isArray(value.colors) ||
+    value.colors.length > 100 ||
+    !value.colors.every(
+      (color) => typeof color === 'string' && color.length <= 32,
+    ) ||
+    typeof value.inStock !== 'boolean' ||
+    typeof value.tryOnEnabled !== 'boolean' ||
+    !Array.isArray(value.matchReasons) ||
+    value.matchReasons.length > 9 ||
+    !value.matchReasons.every((reason) =>
+      [
+        'category_match',
+        'size_match',
+        'budget_match',
+        'stock_available',
+        'color_match',
+        'style_match',
+        'occasion_match',
+        'fit_match',
+        'preference_match',
+      ].includes(String(reason)),
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function isChatOrderCardItem(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ['productName', 'color', 'size', 'quantity']) &&
+    hasString(value, 'productName') &&
+    value.productName.trim().length > 0 &&
+    value.productName.length <= 200 &&
+    hasString(value, 'color') &&
+    value.color.length <= 100 &&
+    hasString(value, 'size') &&
+    value.size.length <= 100 &&
+    typeof value.quantity === 'number' &&
+    Number.isInteger(value.quantity) &&
+    value.quantity > 0 &&
+    value.quantity <= 999
+  );
+}
+
+function isChatOrderCardSummary(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, [
+      'orderNo',
+      'status',
+      'closeReason',
+      'itemsAmount',
+      'payableAmount',
+      'itemCount',
+      'createdAt',
+      'paidAt',
+      'shippedAt',
+      'completedAt',
+      'items',
+    ]) &&
+    hasString(value, 'orderNo') &&
+    value.orderNo.trim().length > 0 &&
+    value.orderNo.length <= 100 &&
+    [
+      'pending_payment',
+      'pending_shipment',
+      'pending_receipt',
+      'completed',
+      'closed',
+    ].includes(String(value.status)) &&
+    (value.closeReason === null ||
+      ['user_cancelled', 'payment_expired', 'product_unavailable'].includes(
+        String(value.closeReason),
+      )) &&
+    hasString(value, 'itemsAmount') &&
+    /^\d{1,10}\.\d{2}$/u.test(value.itemsAmount) &&
+    hasString(value, 'payableAmount') &&
+    /^\d{1,10}\.\d{2}$/u.test(value.payableAmount) &&
+    typeof value.itemCount === 'number' &&
+    Number.isSafeInteger(value.itemCount) &&
+    value.itemCount > 0 &&
+    isNullableDateTime(value.createdAt, false) &&
+    isNullableDateTime(value.paidAt, true) &&
+    isNullableDateTime(value.shippedAt, true) &&
+    isNullableDateTime(value.completedAt, true) &&
+    Array.isArray(value.items) &&
+    value.items.length <= 50 &&
+    value.items.every(isChatOrderCardItem)
+  );
+}
+
+function isNullableDateTime(value: unknown, nullable: boolean): boolean {
+  return (
+    (nullable && value === null) ||
+    (typeof value === 'string' && isIsoDateTime(value))
+  );
+}
+
+function isChatCard(value: unknown): value is ChatCard {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ['type', 'name', 'data']) ||
+    value.type !== 'card' ||
+    !isRecord(value.data) ||
+    !hasOnlyKeys(value.data, ['items']) ||
+    !Array.isArray(value.data.items) ||
+    value.data.items.length === 0 ||
+    value.data.items.length > 5
+  ) {
+    return false;
+  }
+  if (value.name === 'product') {
+    return value.data.items.every(isChatProductCard);
+  }
+  return (
+    value.name === 'order' && value.data.items.every(isChatOrderCardSummary)
+  );
+}
+
+function projectChatCards(value: unknown): ChatCard[] {
+  if (!Array.isArray(value)) return [];
+  const cards = value.filter(isChatCard);
+  const accepted: ChatCard[] = [];
+  for (const card of cards) {
+    const candidate = [...accepted, card];
+    try {
+      if (
+        new TextEncoder().encode(JSON.stringify(candidate)).byteLength > 16_384
+      )
+        break;
+    } catch {
+      break;
+    }
+    accepted.push(card);
+  }
+  return accepted;
 }
 
 function isOrderCancellationCandidates(
