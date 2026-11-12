@@ -139,6 +139,9 @@ export class Migration20261109120000 extends Migration {
     this.addSql('drop table "try_on_object_cleanups";');
     this.addSql('drop table "try_on_quotas";');
     this.addSql('drop table "try_on_results";');
+    this.addSql(
+      'alter table "try_on_photos" drop constraint "try_on_photos_task_fk";',
+    );
     this.addSql('drop table "try_on_tasks";');
     this.addSql('drop table "try_on_photos";');
   }

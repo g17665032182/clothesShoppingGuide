@@ -145,15 +145,18 @@ test(
         LLM_TOKEN_ENCODING: 'cl100k_base',
       });
       const model = new HttpToolStreamModel();
+      const echoTool = tool(
+        async ({ value }: { value: string }) => `内部回显:${value}`,
+        {
+          name: 'local_echo_tool',
+          description: '本地 HTTP 工具联调',
+          schema: z.strictObject({ value: z.string() }),
+        },
+      );
       const llm = new LlmService(
-        createLlmGraph(model, [
-          tool(async ({ value }: { value: string }) => `内部回显:${value}`, {
-            name: 'local_echo_tool',
-            description: '本地 HTTP 工具联调',
-            schema: z.strictObject({ value: z.string() }),
-          }),
-        ]),
+        createLlmGraph(model, [echoTool]),
         llmConfig,
+        (extraTools) => createLlmGraph(model, [echoTool, ...extraTools]),
       );
       const traces = em.getRepository(ChatTraceEvent);
       const display = new ChatDisplayService(traces, {
@@ -253,6 +256,9 @@ test(
       );
       const responseText = await response.text();
       const frames = parseFrames(responseText);
+      if (frames.some((frame) => frame.type === 'error')) {
+        t.diagnostic(`流式错误帧：${JSON.stringify(frames)}`);
+      }
       assert.deepEqual(
         frames.map((frame) => frame.type),
         ['start', 'delta', 'activity', 'activity', 'delta', 'delta', 'done'],

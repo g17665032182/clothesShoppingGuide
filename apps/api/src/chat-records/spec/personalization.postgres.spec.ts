@@ -30,11 +30,13 @@ import { UserMemoryReaderService } from '../../user-memory/service/user-memory-r
 import { UserMemoryTaskService } from '../../user-memory/service/user-memory-task.service.js';
 import { UserMemoryDocumentService } from '../../user-memory/service/user-memory-document.service.js';
 import { UserMemoryDocumentCleanupService } from '../../user-memory/service/user-memory-document-cleanup.service.js';
+import type { LlmTraceContext } from '../../llm/trace/llm-trace.types.js';
 import { ChatConversation } from '../entity/chat-conversation.entity.js';
 import { ChatMessage } from '../entity/chat-message.entity.js';
 import { ChatTraceEvent } from '../entity/chat-trace-event.entity.js';
 import { ChatContextService } from '../context/chat-context.service.js';
 import { ChatDisplayService } from '../display/chat-display.service.js';
+import { ChatTraceWriterService } from '../trace/chat-trace-writer.service.js';
 import { ChatRecordsService } from '../service/chat-records.service.js';
 import { ChatExtractionSourceService } from '../extraction-source/chat-extraction-source.service.js';
 import type { ChatExtractionInput } from '../extraction-source/chat-extraction-source.port.js';
@@ -145,15 +147,44 @@ test(
       em.getRepository(ChatTraceEvent),
       {
         assertConfigured: () => 'fake',
-        chatPrepared: async () => ({
-          content: 'fixture reply',
-          model: 'fake',
-          usage: null,
-        }),
+        chatPrepared: async (
+          _input: unknown,
+          traceContext: LlmTraceContext,
+        ) => {
+          // 假模型仍通过真实 trace writer 满足聊天持久化所需的最终事件绑定。
+          await traceContext.writer.writeEvents(
+            {
+              conversationId: traceContext.conversationId,
+              runId: traceContext.runId,
+            },
+            [
+              {
+                sequence: 0,
+                type: 'input',
+                messageId: null,
+                content: 'style 通勤',
+              },
+              {
+                sequence: 1,
+                type: 'model_response',
+                messageId: null,
+                content: 'fixture reply',
+                model: 'fake',
+                usage: null,
+              },
+            ],
+          );
+          return {
+            content: 'fixture reply',
+            model: 'fake',
+            usage: null,
+            finalTraceSequence: 1,
+          };
+        },
       } as never,
       context,
       { summarize: async () => null } as never,
-      { writeEvents: async () => undefined } as never,
+      new ChatTraceWriterService(em.getRepository(ChatTraceEvent)),
       memoryReader,
       {
         async enqueueInTransaction(transaction, input) {
@@ -215,6 +246,8 @@ test(
             enabled: preferenceEnabled,
           });
           await memorySettings.update(userId, { enabled: memoryEnabled });
+          // 多轮集成测试复用服务对象；清空 identity map 模拟真实请求间的新上下文。
+          em.clear();
           assert.equal(
             (await preferenceReader.readContext(userId, 'style')).length > 0,
             preferenceEnabled,
@@ -236,6 +269,7 @@ test(
               conversationId: result.conversationId,
             }),
             Number(memoryEnabled),
+            `偏好开关=${preferenceEnabled}，记忆开关=${memoryEnabled}`,
           );
           // 关闭读取时，两个领域依然允许人工管理。
           await preferences.update(userId, preference.id, {

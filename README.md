@@ -1,121 +1,186 @@
 # clothesShoppingGuide
 
-服装购物指南 Monorepo，使用 pnpm 原生 Workspace 管理前端、后端和共享模块。
+服装购物助手，支持对话选购、商品试穿、地址管理、订单处理和管理员运营。项目使用 pnpm Workspace 管理 Vue 前端、NestJS API 与共享包。
 
-## 环境
+## 核心能力
 
-- Node.js 22 或以上，当前开发基线为 `.node-version` 中的版本。
-- pnpm 12.14.0，与根目录 `package.json` 的 `packageManager` 保持一致。
+| 能力       | 当前实现与边界                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| 账号与认证 | 注册、登录、JWT、HttpOnly Refresh Token、资料修改及管理员用户管理；开发环境关闭登录验证码，测试和生产环境启用 |
+| 对话导购   | LangGraph 模型工具调用、商品查询、流式回复、历史会话和内部调用追踪；公开消息与内部 trace 分开管理             |
+| 偏好与记忆 | 结构化穿衣偏好与独立 Markdown 长期记忆，支持用户查看、编辑及后台提取任务                                      |
+| 收货地址   | 本人地址增删改查及默认地址；模型仅查询安全引用，选择后由服务端填入购买草稿                                    |
+| 聊天购买   | 从商品卡创建草稿、选择规格和地址，用户确认后创建本站订单；新地址可显式保存到地址簿                            |
+| 本人订单   | 列表、筛选、详情、模拟支付、取消未过期待付款订单及确认收货；模拟支付不产生真实扣款                            |
+| 聊天取消   | 明确取消意图后查询本人可取消订单并展示卡片；用户选择并确认后提交，模型没有取消写工具                          |
+| 虚拟试穿   | 合格商品卡入口、照片上传、异步生成、结果查看/下载及删除；开发支持本地私有存储，真实人像流程保持关闭           |
+| 管理员运营 | 用户管理、商品/SKU/库存查询、商品试穿开关和缺图上传、订单查询及整单发货                                       |
 
-## 目录
+已付款取消、真实支付/退款及退换货尚不支持。管理员商品页支持试穿配置，不提供通用商品编辑、上下架、库存调整或订单改价。
+
+## 环境与目录
+
+- Node.js 22 或以上，开发基线见 [`.node-version`](./.node-version)。
+- pnpm 12.14.0，与根 `package.json` 的 `packageManager` 一致。
+- PostgreSQL 17；本地可通过 Docker Compose 启动。
 
 ```text
 apps/
-  web/                        Vue 3 + Vite + shadcn-vue 前端
-  api/                        NestJS + MikroORM + PostgreSQL 后端
+  web/                 Vue 3、Vite、TypeScript、Tailwind CSS 4、shadcn-vue
+  api/                 NestJS 12、MikroORM 7、PostgreSQL、LangGraph
 packages/
-  shared/                     共享模块骨架，目前没有业务实现
-  typescript-config/          共享 TypeScript 编译配置
-.github/workflows/ci.yml      安装、格式检查、类型检查和构建
+  shared/              共享包骨架
+  typescript-config/   共享 TypeScript 配置
+docs/
+  contracts/           API、字段、权限和迁移契约
+  testing/             全量验证计划、执行及修复记录
+  <业务模块>/          设计、技术和实施文档
+AGENTS.md              开发与验证约定
 ```
 
-## 常用命令
+## 本地启动
+
+安装依赖并创建后端配置；已有配置时保留原文件：
 
 ```bash
 pnpm install --frozen-lockfile
+cp -n apps/api/.env.example apps/api/.env
+```
+
+在 `apps/api/.env` 中设置：
+
+- `NODE_ENV=development`。
+- `DB_*`：示例值与项目 Docker Compose 一致，默认数据库为 `clothes_guide`。
+- `JWT_SECRET`：替换为随机长密钥；本地私有下载要求至少 32 字符。
+- `PRODUCT_QUERY_CURSOR_SECRET`：至少 32 字符的随机密钥，未设置时 API 无法启动。
+- `SEED_ADMIN_*`：按需设置本地管理员账号；示例默认值仅供开发。
+
+API、迁移 CLI 和 Seeder 共用配置加载器：**进程环境变量 > `apps/api/.env.dev` > `apps/api/.env`**。如果已有 `.env.dev`，其同名配置会覆盖 `.env`；修改配置后重启 API。真实密钥仅放在被 Git 忽略的服务端配置中。
+
+启动数据库、应用增量迁移并初始化管理员：
+
+```bash
 pnpm dev:db
-pnpm dev
-pnpm check
-pnpm migration:fresh
+pnpm --filter @clothes-shopping-guide/api migration:up
 pnpm seed
-pnpm seeder:create DatabaseSeeder
-pnpm format
-pnpm --filter @clothes-shopping-guide/shared build
+pnpm dev
 ```
 
-`pnpm dev` 会并行启动前端和后端开发服务：前端地址为
-`http://localhost:5173`，后端地址为 `http://localhost:3000`。首次启动或数据库容器
-停止后，先执行 `pnpm dev:db` 启动 PostgreSQL；该命令只负责基础设施，不会启动应用进程。
+`pnpm dev:db` 只启动数据库；`pnpm dev` 同时启动 Web 和 API。日常开发无需重复迁移或 Seed，数据库停止后先运行 `pnpm dev:db` 即可。
 
-`pnpm check` 依次执行格式检查、类型检查和构建；`pnpm seed` 会递归执行各应用的数据库 Seeder。`pnpm migration:fresh` 内置 `--drop-db --seed`，会删除并重建目标数据库、重跑迁移并执行默认 Seeder，也会清理不再映射到 Entity 的旧表，只应在可重建的本地或 CI 数据库中使用。`pnpm seeder:create DatabaseSeeder` 会在 `apps/api/src/database/seeders/` 生成 Seeder 类。后端业务测试通过 `pnpm --filter @clothes-shopping-guide/api test` 执行。
+| 服务     | 地址                               |
+| -------- | ---------------------------------- |
+| Web      | `http://localhost:5173`            |
+| API      | `http://localhost:3000/api`        |
+| 健康检查 | `http://localhost:3000/api/health` |
+| Swagger  | `http://localhost:3000/api/docs`   |
 
-## 前端
+Web 开发服务器将 `/api` 代理到本机 3000 端口。前端路由使用 history 模式，部署时需为页面路由配置回退入口。
 
-前端位于 `apps/web`，使用 Vue 3、Vite、TypeScript、Vue Router、Tailwind CSS 4 和 shadcn-vue。开发服务默认监听 `0.0.0.0`，本地访问地址为 `http://localhost:5173`。shadcn-vue 组件按需通过 CLI 添加，组件源码归前端应用维护。
+`pnpm migration:fresh` 内置 `--drop-db --seed`，会删除并重建目标数据库。只在明确可销毁的本地或 CI 数据库中使用；保留数据的环境使用增量迁移并先审查、备份。
 
-### 聊天购买与我的订单
+### 初始化测试商品
 
-启用账号登录后，可以从聊天商品卡的“购买”入口创建本会话草稿，选择真实规格、补全收货信息，再通过“确认下单”按钮创建本站订单。助手只能准备、修改或放弃草稿，不能替用户执行正式订单动作。
-
-`/account/orders` 提供本人订单列表、筛选、详情、模拟支付、取消待支付订单和确认收货；聊天订单卡也可打开共享订单详情。模拟支付不产生真实扣款。草稿最后有效修改后 24 小时失效，订单沿用 30 分钟支付期；重试和网络未知结果应先读取服务端状态，不另起订单。草稿收货信息不进入长期记忆或下次购买默认地址，用户主动发送的聊天原文仍按现有规则保存。
-
-本轮新增 `Migration20261108044411`，只增加购买草稿及消息来源资格，不清理历史商品、聊天、订单或幂等数据。保留数据的环境应按既有流程备份、审查并执行增量迁移，不使用 `migration:fresh`。本轮验证仅操作具名可销毁测试库，没有迁移默认数据库。功能、测试及未完成浏览器验收详见[购买实施记录](./docs/chat-purchase/chat-purchase-implementation.md)。
-
-### 管理员入口
-
-启用的管理员登录后，可从用户菜单进入 `/admin/products`（商品目录）、
-`/admin/orders`（订单履约）或原有 `/admin/users`（用户管理）。
-商品只读，支持分页筛选、SKU 详情和精确库存；订单支持分页筛选、收货/物流详情，
-以及待发货订单整单发货。不提供商品编辑、上下架、库存修改或订单改价/退款。
-页面与接口均受管理员权限保护；完整约定见
-[管理员运营契约](./docs/contracts/admin-management-crud-contract.md)。
-
-### 本地试穿测试
-
-开发环境使用服务端 SHA-256 白名单限制测试照片。已准备一张
-[公开试穿测试图片](./docs/virtual-try-on/fixtures/public-model.webp)，来源、许可证、
-规范化摘要及使用步骤见[测试图片说明](./docs/virtual-try-on/fixtures/README.md)。
-从服装商品卡进入“我的试穿”后，可选择该原始 WebP 文件验证上传。
-完整生成还需配置证书有效的七牛 HTTPS 下载域名；当前本地测试域名证书不匹配，
-上传成功不代表生成链路已经可用。
-渠道凭据只在后端本地配置；真实用户照片限制继续生效。
-
-## 后端 API
-
-后端位于 `apps/api`，使用 NestJS 12、MikroORM 7 和 PostgreSQL。复制 `apps/api/.env.example` 为 `.env` 后即可配置连接信息。
-
-首次配置本地环境时执行：
+默认 `DatabaseSeeder` 只创建管理员，不创建商品。需要测试目录时单独运行：
 
 ```bash
-cp apps/api/.env.example apps/api/.env
-pnpm dev:db
-pnpm migration:fresh
+pnpm --filter @clothes-shopping-guide/api catalog:seed:test
 ```
 
-之后日常开发只需执行 `pnpm dev:db`（数据库未运行时）和 `pnpm dev`。`pnpm migration:fresh` 会清空数据库，仅用于明确可重建的本地或 CI 数据库。
+该 Seeder 提供 20 个测试商品，覆盖上衣、下装、连衣裙、外套和鞋类，每类 4 个，包含多颜色、尺码、价格和无库存场景。重复执行会更新对应测试商品与 SKU，可能改变测试商品库存，仅用于开发或隔离测试库；库存低于当前预占量时会拒绝更新。
 
-健康检查地址为 `GET /api/health`。`migration:fresh` 会执行全部迁移并自动运行 `DatabaseSeeder`；单独执行 `pnpm seed` 只运行 Seeder。MikroORM CLI 使用 `tsx` 直接加载 TypeScript Entity，迁移和 Seeder 命令不依赖手工切换 loader。
+Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 `catalog:import`，具体输入及运行方式见[商品目录技术文档](./docs/product-guide/product-catalog-technical.md)。
 
-## 用户与鉴权
+## 配置与业务入口
 
-用户模块位于 `apps/api/src/users`，认证模块位于 `apps/api/src/auth`。除健康检查、注册和登录外，接口都要求携带 `Authorization: Bearer <accessToken>`。
+### 模型与聊天
 
-```text
-POST  /api/auth/register  注册并返回 JWT
-POST  /api/auth/login     登录并返回 JWT
-POST  /api/auth/refresh   使用 HttpOnly Cookie 刷新 JWT
-POST  /api/auth/logout    撤销当前 Refresh Token
-GET   /api/auth/me        获取当前用户
-GET   /api/users/me       获取当前资料
-PATCH /api/users/me       修改昵称或密码
-GET   /api/users          管理员查看用户列表
-PATCH /api/users/:id      管理员修改角色、状态或昵称
-DELETE /api/users/:id     管理员禁用用户
+在后端配置 `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，其余超时及上下文预算见 [`apps/api/.env.example`](./apps/api/.env.example)。登录后访问 `/chat` 使用导购、购买与订单查询功能；未配置模型时不能完成真实对话生成。
+
+订单和地址工具由服务端绑定当前用户，不接受模型提供的 `userId`。地址工具只返回地址 ID、默认标记及系统显示标签，不向模型返回完整姓名、手机号、地址或用户自定义标签。用户选择后由服务端校验归属并写入本次草稿。
+
+模型只能准备/修改草稿和执行允许的查询。正式下单、支付、取消及收货均由用户显式操作；新地址仅在点击保存后加入地址簿。用户主动发送的聊天原文仍按聊天历史规则保存，不应将工具脱敏理解为聊天原文不保存。
+
+### 账号与管理员
+
+| 页面           | 路由                 |
+| -------------- | -------------------- |
+| 个人资料       | `/account/profile`   |
+| 收货地址       | `/account/addresses` |
+| 我的订单       | `/account/orders`    |
+| 偏好与长期记忆 | `/account/memories`  |
+| 我的试穿       | `/account/try-ons`   |
+| 商品管理       | `/admin/products`    |
+| 订单履约       | `/admin/orders`      |
+| 用户管理       | `/admin/users`       |
+
+管理员页面与接口均受启用账号及角色权限保护。JWT 鉴权每次请求重新读取账号状态，禁用账号后旧 Token 失效。默认管理员由 `SEED_ADMIN_*` 控制，`pnpm seed` 不覆盖已存在账号。
+
+购买草稿在最后有效修改后 24 小时失效，订单支付期为 30 分钟。取消仅支持本人未过期的 `pending_payment` 订单：聊天卡片查询后，点击取消并在弹框确认才提交，服务端再次校验资格。网络结果未知时先读取服务端状态，避免重复下单或误报成功。
+
+### 开发环境试穿
+
+试穿默认关闭。开发环境没有七牛配置时，可在后端使用本地私有存储：
+
+```dotenv
+NODE_ENV=development
+TRY_ON_STORAGE_DRIVER=local
+TRY_ON_LOCAL_STORAGE_PATH=./.local-private/try-on
+TRY_ON_LOCAL_PUBLIC_URL=http://localhost:3000
+TRY_ON_ENABLED=true
+TRY_ON_REAL_PHOTOS_ENABLED=false
+TRY_ON_ALLOWED_TEST_IMAGE_SHA256=a545ae39c389e305725b53b766ef75d9a6b2e3d168c16f74d64511d60d4b5c55
 ```
 
-密码使用 `bcryptjs` 哈希后保存，API 响应不会返回密码；JWT Guard 每次请求都会重新读取用户状态，因此管理员禁用用户后其旧 Token 会立即失效。默认 Seeder 管理员账号由 `SEED_ADMIN_*` 环境变量控制，生产环境必须替换 `JWT_SECRET` 和默认密码。完整字段、权限和错误契约见 [`docs/contracts/user-crud-contract.md`](./docs/contracts/user-crud-contract.md)。
+以上配置仍需有效的 `JWT_SECRET`；真实生成还需独立配置 `TRY_ON_BASE_URL`、`TRY_ON_API_KEY` 和 `TRY_ON_MODEL`。本地存储仅限 `development`，文件位于 API 私有目录，不挂载静态路由。使用七牛时设置 `TRY_ON_STORAGE_DRIVER=qiniu` 并补齐 `QINIU_*` 私有空间及有效 HTTPS 域名配置，不关闭 TLS 校验。
 
-## 新增模块
+管理员在商品详情弹框配置“支持试穿”。仅有效的上衣、下装、连衣裙、外套且有有效颜色 SKU 和可用图片时允许开启；无库存不影响资格，鞋类不支持。无可用 SKU 图或商品级图时先上传商品试穿图。商品卡仅显示当前支持的入口，创建任务时服务端再次校验。
 
-在 `apps/<应用名>` 或 `packages/<模块名>` 中创建独立的 `package.json`。内部包使用 `@clothes-shopping-guide/` 命名空间，不需要发布的包设置 `"private": true`。
+照片上传使用[公开测试图片](./docs/virtual-try-on/fixtures/public-model.webp)原文件，来源、许可与规范化摘要见[素材说明](./docs/virtual-try-on/fixtures/README.md)。支持 JPEG、PNG、WebP，默认最大 10 MiB、最长边 4096，拒绝动画并清理 EXIF。不要重新压缩测试文件，否则可能无法命中摘要白名单。
 
-依赖共享包时使用 Workspace 协议：
+旧测试数据已有商品图片对象键但缺少本地文件时，可运行以下恢复脚本：
 
 ```bash
-pnpm --filter <应用包名> add '@clothes-shopping-guide/shared@workspace:*'
-pnpm --filter <应用包名> add -D '@clothes-shopping-guide/typescript-config@workspace:*'
+pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images
 ```
 
-Node.js 模块可继承 `@clothes-shopping-guide/typescript-config/base.json`；前端框架接入时应根据其官方要求增加专用配置。共享包只通过公开入口提供能力，避免应用之间或跨包引用私有源码。
+该脚本仅限开发环境的 `local` 模式，读取 `test-guide-*` 商品已有图片键，从白名单图片源恢复缺失文件，不为无图片键商品创建配置，也不自动开启试穿；它需要外部图片网络。
 
-根目录通过 pnpm 递归执行各包的 `build` 和 `typecheck` 脚本，按依赖关系处理顺序。应用开发服务由各应用自行提供，未初始化业务应用前不设置空的启动脚本。
+真实人像供应商的留存、处理地区及删除保障尚未完成确认，真实照片流程保持关闭。上传或本地存储验证通过不代表真实模型生成已验证。
+
+## 常用命令与验证
+
+| 命令                                                          | 用途                                 |
+| ------------------------------------------------------------- | ------------------------------------ |
+| `pnpm dev:db` / `pnpm dev`                                    | 启动数据库 / 前后端开发服务          |
+| `pnpm --filter @clothes-shopping-guide/api migration:up`      | 增量升级数据库                       |
+| `pnpm seed`                                                   | 初始化管理员                         |
+| `pnpm --filter @clothes-shopping-guide/api catalog:seed:test` | 写入或更新测试商品                   |
+| `pnpm seeder:create <类名>`                                   | 创建 Seeder                          |
+| `pnpm --filter @clothes-shopping-guide/api test`              | API 自动化测试，数据库用例受环境门控 |
+| `pnpm check`                                                  | 仓库格式检查、递归类型检查和构建     |
+| `pnpm format`                                                 | 格式化全仓，执行前检查已有修改       |
+
+`pnpm check` **不包含 API 测试**，两者需分别运行。当前 Web 包没有单元/组件或浏览器测试脚本；类型检查和构建不能替代交互验收。当前 CI 运行 `pnpm check`，并在临时 PostgreSQL 服务中执行 `migration:fresh`，不代表已执行全部业务测试。
+
+全量验证的并行/串行安排、各 `RUN_*` 门控及库名变量见[验证计划与执行记录](./docs/testing/project-full-validation-plan.md)。数据库测试只连接具名可销毁库，运行前核对初始化与清理逻辑；同库迁移和集成测试串行执行。跳过不能计为通过。
+
+2026-11-11 修复复测记录：API 共 280 项，265 通过、15 项数据库门控跳过、0 失败；`pnpm check` 通过。首轮失败的迁移回滚、迁移集合断言及两个聊天集成夹具均已修复并在隔离 PostgreSQL 库复测通过。已认证浏览器全流程、移动端键盘/视觉验收及真实 LLM/试穿供应商调用仍未完成；详见记录中的“修复复测”。
+
+## 开发与文档
+
+开发规范见 [`AGENTS.md`](./AGENTS.md)。新增应用位于 `apps/`，共享包位于 `packages/`，内部依赖使用 `workspace:*` 和 `@clothes-shopping-guide/` 命名空间。前端遵循独立页面目录、`page.ts`、统一 Axios API 层和 Sonner Toast；后端按业务模块组织，使用 Zod/Nest 参数校验，接口或数据结构变化先更新契约并验证迁移。
+
+| 文档           | 入口                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| API 与资源契约 | [契约索引](./docs/contracts/README.md)                                                                                               |
+| 商品目录       | [技术方案](./docs/product-guide/product-catalog-technical.md)                                                                        |
+| LLM 与上下文   | [模型模块](./docs/llm/llm-module-technical.md)、[系统上下文](./docs/llm/system-context-technical.md)                                 |
+| 偏好与记忆     | [分离方案](./docs/user-memory/user-preference-memory-separation-technical.md)                                                        |
+| 地址簿与工具   | [实施记录](./docs/user-addresses/user-addresses-implementation.md)                                                                   |
+| 订单与聊天购买 | [订单](./docs/orders/order-module-implementation.md)、[购买](./docs/chat-purchase/chat-purchase-implementation.md)                   |
+| 聊天取消订单   | [实施记录](./docs/chat-order-cancellation/chat-order-cancellation-implementation.md)                                                 |
+| 虚拟试穿       | [技术方案](./docs/virtual-try-on/virtual-try-on-technical.md)、[商品配置](./docs/virtual-try-on/product-try-on-setting-technical.md) |
+| 全量验证       | [测试索引](./docs/testing/README.md)、[计划、执行与修复复测](./docs/testing/project-full-validation-plan.md)                         |
+
+各模块实施文档保留当时的验证结果与缺口；后续跨模块复测以全量验证记录对应日期的结果为准。

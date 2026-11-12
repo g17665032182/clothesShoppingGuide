@@ -105,10 +105,17 @@ test(
       const before = await readLegacy();
       const oldMigrations = await orm.migrator.getExecuted();
       await orm.migrator.up();
-      assert.equal(
-        (await orm.migrator.getExecuted()).length,
-        oldMigrations.length + 2,
-        '试穿开关迁移和本次图片增量各新增一条迁移',
+      const addedMigrations = (await orm.migrator.getExecuted())
+        .slice(oldMigrations.length)
+        .map((migration) => migration.name);
+      assert.deepEqual(
+        addedMigrations,
+        [
+          'Migration20261109130000',
+          'Migration20261109184000',
+          'Migration20261110120000',
+        ],
+        '商品开关、图片快照和地址簿迁移均应按版本顺序应用',
       );
       assert.deepEqual(await readLegacy(), before, '升级不得改写既有业务记录');
       const [legacy] = await connection.execute<
