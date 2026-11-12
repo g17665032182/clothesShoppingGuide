@@ -33,6 +33,7 @@ packages/
   typescript-config/   共享 TypeScript 配置
 docs/
   contracts/           API、字段、权限和迁移契约
+  development/         按领域读取的前端、后端、安全和验证约定
   testing/             全量验证计划、执行及修复记录
   <业务模块>/          设计、技术和实施文档
 AGENTS.md              开发与验证约定
@@ -173,7 +174,7 @@ pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images
 
 ## 开发与文档
 
-开发规范见 [`AGENTS.md`](./AGENTS.md)。新增应用位于 `apps/`，共享包位于 `packages/`，内部依赖使用 `workspace:*` 和 `@clothes-shopping-guide/` 命名空间。前端遵循独立页面目录、`page.ts`、统一 Axios API 层和 Sonner Toast；后端按业务模块组织，使用 Zod/Nest 参数校验，接口或数据结构变化先更新契约并验证迁移。
+开发规范入口见 [`AGENTS.md`](./AGENTS.md)，其中按任务链接前端、后端、安全和验证专题约定。新增应用位于 `apps/`，共享包位于 `packages/`，内部依赖使用 `workspace:*` 和 `@clothes-shopping-guide/` 命名空间。
 
 | 文档           | 入口                                                                                                                                 |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
