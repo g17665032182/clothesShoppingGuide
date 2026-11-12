@@ -13,3 +13,12 @@ test('系统上下文包含选购和退换货工作流程', () => {
   assert.match(SYSTEM_CONTEXT, /售后尚未接入/);
   assert.match(SYSTEM_CONTEXT, /不从旧摘要恢复收货信息/);
 });
+
+test('选购流程遵守本地商品目录、分页和记忆边界', () => {
+  assert.match(SYSTEM_CONTEXT, /`tops`\s+\|\s+上衣/u);
+  assert.match(SYSTEM_CONTEXT, /`bottoms`\s+\|\s+下装/u);
+  assert.match(SYSTEM_CONTEXT, /工具首轮固定最多返回 3 件/u);
+  assert.match(SYSTEM_CONTEXT, /不声称已经比较或筛选出 5 件/u);
+  assert.match(SYSTEM_CONTEXT, /不得调用不存在的偏好写入工具或承诺已保存/u);
+  assert.match(SYSTEM_CONTEXT, /不发送聊天消息、不调用模型/u);
+});
