@@ -15,6 +15,7 @@ export class ApiError extends Error {
   public constructor(
     message: string,
     public readonly status: number,
+    public readonly details?: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -73,6 +74,7 @@ function toApiError(error: unknown): ApiError {
     return new ApiError(
       resolveErrorMessage(axiosError.response?.data),
       axiosError.response?.status ?? 0,
+      axiosError.response?.data,
     );
   }
 

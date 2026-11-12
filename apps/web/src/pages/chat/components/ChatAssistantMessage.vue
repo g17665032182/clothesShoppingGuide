@@ -7,6 +7,10 @@ import type {
   ChatTryOnAction,
   ChatTryOnStatus,
 } from '@/api/types/chat';
+import type {
+  ChatDynamicForm,
+  DynamicFormValues,
+} from '@/api/types/chat-dynamic-form';
 import {
   Message,
   MessageContent,
@@ -23,10 +27,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle2, XCircle } from '@lucide/vue';
+import ChatDynamicFormCard from './dynamic-form/ChatDynamicFormCard.vue';
 
 const props = defineProps<{
   message: ChatMessage;
   streamDuration: string | null;
+  dynamicFormSubmitting?: (formId: string) => boolean;
+  dynamicFormError?: (formId: string) => string;
 }>();
 const router = useRouter();
 const tryOnDialogOpen = ref(false);
@@ -37,6 +44,12 @@ const emit = defineEmits<{
   (event: 'tryOn', request: { content: string; action: ChatTryOnAction }): void;
   (event: 'openOrder', orderId: string): void;
   (event: 'cancelCandidateOrder', orderId: string): void;
+  (
+    event: 'submitDynamicForm',
+    form: ChatDynamicForm,
+    values: DynamicFormValues,
+  ): void;
+  (event: 'cancelDynamicForm', form: ChatDynamicForm): void;
 }>();
 
 const isRunning = computed(
@@ -139,6 +152,21 @@ function openTryOnTasks() {
         正在生成回复
       </p>
       <ChatSources v-if="message.sources.length" :sources="message.sources" />
+      <section
+        v-if="message.forms.length"
+        class="grid min-w-0 gap-3"
+        aria-label="需要补充的信息"
+      >
+        <ChatDynamicFormCard
+          v-for="form in message.forms"
+          :key="form.formId"
+          :form="form"
+          :submitting="dynamicFormSubmitting?.(form.formId) ?? false"
+          :error-message="dynamicFormError?.(form.formId) ?? ''"
+          @submit="(values) => emit('submitDynamicForm', form, values)"
+          @cancel="emit('cancelDynamicForm', form)"
+        />
+      </section>
       <Alert
         v-if="message.tryOnStatus"
         :variant="tryOnStatusIsFailure ? 'destructive' : 'default'"

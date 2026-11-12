@@ -102,6 +102,13 @@ export type PurchaseReference = {
   orderId: string | null;
 };
 
+export type ChatDynamicFormReference = {
+  formId: string;
+  revision: number;
+  formKind: string;
+  status: 'open' | 'submitted' | 'expired' | 'cancelled';
+};
+
 export type ChatTryOnResult = {
   taskId: string;
   product: {
@@ -146,6 +153,7 @@ export type ChatDisplayData = {
   orderCancellationCandidates: OrderCancellationCandidate[];
   context: ChatContextUsage | null;
   purchase: PurchaseReference | null;
+  forms?: ChatDynamicFormReference[];
   tryOnResult?: ChatTryOnResult;
   tryOnStatus?: ChatTryOnStatus;
 };
@@ -160,6 +168,7 @@ export type ChatDisplayEvent =
   | { type: 'activity'; activity: ChatActivity }
   | { type: 'sources'; sources: ChatSource[] }
   | { type: 'card'; card: ChatCard }
+  | { type: 'form'; form: unknown }
   | {
       type: 'order-cancellation-candidates';
       orderCancellationCandidates: OrderCancellationCandidate[];

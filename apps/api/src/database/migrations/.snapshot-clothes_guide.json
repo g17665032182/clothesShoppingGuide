@@ -138,35 +138,312 @@
           "keyName": "chat_conversations_pkey",
           "primary": true,
           "unique": true
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {},
+      "comment": null
+    },
+    {
+      "name": "chat_dynamic_forms",
+      "schema": "public",
+      "columns": {
+        "assistant_message_id": {
+          "name": "assistant_message_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "definition": {
+          "name": "definition",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "form_kind": {
+          "name": "form_kind",
+          "type": "varchar(80)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 80,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "handler_context": {
+          "name": "handler_context",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "result_reference": {
+          "name": "result_reference",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
+        "revision": {
+          "name": "revision",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "1",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 20,
+          "precision": null,
+          "scale": null,
+          "default": "'open'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "submission_fingerprint": {
+          "name": "submission_fingerprint",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "conversation_id",
+            "assistant_message_id"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "chat_dynamic_forms_conversation_message_index",
+          "primary": false,
+          "unique": false
         },
         {
           "columnNames": [
-            "user_id"
+            "id"
           ],
           "composite": false,
+          "constraint": true,
+          "keyName": "chat_dynamic_forms_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "user_id",
+            "conversation_id",
+            "created_at",
+            "id"
+          ],
+          "composite": true,
           "constraint": false,
-          "keyName": "chat_conversations_user_id_index",
+          "keyName": "chat_dynamic_forms_user_conversation_created_index",
           "primary": false,
           "unique": false
         }
       ],
       "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "chat_conversations_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "chat_conversations_user_id_foreign",
-          "localTableName": "public.chat_conversations",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -350,16 +627,6 @@
       "indexes": [
         {
           "columnNames": [
-            "conversation_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "chat_messages_conversation_id_index",
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
             "id"
           ],
           "composite": false,
@@ -378,21 +645,7 @@
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "chat_messages_conversation_id_foreign": {
-          "columnNames": [
-            "conversation_id"
-          ],
-          "constraintName": "chat_messages_conversation_id_foreign",
-          "localTableName": "public.chat_messages",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.chat_conversations",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -423,7 +676,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -628,20 +881,14 @@
           "primary": false,
           "nullable": false,
           "unique": false,
-          "length": null,
+          "length": 20,
           "precision": null,
           "scale": null,
           "default": "'collecting'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "collecting",
-            "ready",
-            "submitted",
-            "cancelled",
-            "expired"
-          ],
-          "mappedType": "enum"
+          "enumItems": [],
+          "mappedType": "string"
         },
         "submission_key": {
           "name": "submission_key",
@@ -732,17 +979,6 @@
       "indexes": [
         {
           "columnNames": [
-            "conversation_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "chat_purchase_drafts_active_conversation_unique",
-          "primary": false,
-          "unique": true,
-          "where": "(status)::text = ANY ((ARRAY['collecting'::character varying, 'ready'::character varying])::text[])"
-        },
-        {
-          "columnNames": [
             "conversation_id",
             "created_at",
             "id"
@@ -784,74 +1020,9 @@
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "chat_purchase_drafts_quantity_check",
-          "expression": "(quantity >= 1) AND (quantity <= 99)",
-          "definition": "CHECK (((quantity >= 1) AND (quantity <= 99)))",
-          "columnName": "quantity"
-        },
-        {
-          "name": "chat_purchase_drafts_status_check",
-          "expression": "\"status\" in ('collecting', 'ready', 'submitted', 'cancelled', 'expired')",
-          "definition": "check (\"status\" in ('collecting', 'ready', 'submitted', 'cancelled', 'expired'))",
-          "columnName": "status"
-        },
-        {
-          "name": "chat_purchase_drafts_submission_check",
-          "expression": "((status = 'submitted'::text) AND (order_id IS NOT NULL) AND (submitted_version IS NOT NULL) AND (submitted_version > 0)) OR ((status <> 'submitted'::text) AND (order_id IS NULL) AND (submitted_version IS NULL))",
-          "definition": "CHECK (((((status)::text = 'submitted'::text) AND (order_id IS NOT NULL) AND (submitted_version IS NOT NULL) AND (submitted_version > 0)) OR (((status)::text <> 'submitted'::text) AND (order_id IS NULL) AND (submitted_version IS NULL))))",
-          "columnName": "order_id"
-        },
-        {
-          "name": "chat_purchase_drafts_version_check",
-          "expression": "version > 0",
-          "definition": "CHECK ((version > 0))",
-          "columnName": "version"
-        }
-      ],
+      "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "chat_purchase_drafts_conversation_fk": {
-          "columnNames": [
-            "conversation_id"
-          ],
-          "constraintName": "chat_purchase_drafts_conversation_fk",
-          "localTableName": "public.chat_purchase_drafts",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.chat_conversations",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        },
-        "chat_purchase_drafts_order_fk": {
-          "columnNames": [
-            "order_id"
-          ],
-          "constraintName": "chat_purchase_drafts_order_fk",
-          "localTableName": "public.chat_purchase_drafts",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.orders",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
-        },
-        "chat_purchase_drafts_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "chat_purchase_drafts_user_fk",
-          "localTableName": "public.chat_purchase_drafts",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -882,7 +1053,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -1047,8 +1218,12 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [],
-          "mappedType": "text"
+          "enumItems": [
+            "success",
+            "failed",
+            "partial"
+          ],
+          "mappedType": "enum"
         },
         "tool_call_id": {
           "name": "tool_call_id",
@@ -1146,7 +1321,7 @@
           "constraint": false,
           "keyName": "chat_trace_events_run_sequence_unique",
           "primary": false,
-          "unique": true
+          "unique": false
         }
       ],
       "checks": [
@@ -1158,27 +1333,13 @@
         },
         {
           "name": "chat_trace_events_status_check",
-          "expression": "(status IS NULL) OR (status = ANY (ARRAY['success'::text, 'failed'::text, 'partial'::text]))",
-          "definition": "CHECK (((status IS NULL) OR (status = ANY (ARRAY['success'::text, 'failed'::text, 'partial'::text]))))",
+          "expression": "\"status\" in ('success', 'failed', 'partial')",
+          "definition": "check (\"status\" in ('success', 'failed', 'partial'))",
           "columnName": "status"
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "chat_trace_events_conversation_id_foreign": {
-          "columnNames": [
-            "conversation_id"
-          ],
-          "constraintName": "chat_trace_events_conversation_id_foreign",
-          "localTableName": "public.chat_trace_events",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.chat_conversations",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -1196,7 +1357,7 @@
           "length": 6,
           "precision": null,
           "scale": null,
-          "default": "now()",
+          "default": null,
           "comment": null,
           "collation": null,
           "enumItems": [],
@@ -1321,43 +1482,9 @@
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "order_idempotency_hash_check",
-          "expression": "length(request_hash) = 64",
-          "definition": "CHECK ((length((request_hash)::text) = 64))",
-          "columnName": "request_hash"
-        }
-      ],
+      "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "order_idempotency_order_fk": {
-          "columnNames": [
-            "order_id"
-          ],
-          "constraintName": "order_idempotency_order_fk",
-          "localTableName": "public.order_idempotency",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.orders",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
-        },
-        "order_idempotency_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "order_idempotency_user_fk",
-          "localTableName": "public.order_idempotency",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -1576,59 +1703,18 @@
         },
         {
           "columnNames": [
-            "sku_id",
-            "order_id"
+            "sku_id"
           ],
-          "composite": true,
+          "composite": false,
           "constraint": false,
-          "keyName": "order_items_sku_order_index",
+          "keyName": "order_items_sku_index",
           "primary": false,
           "unique": false
         }
       ],
-      "checks": [
-        {
-          "name": "order_items_amount_check",
-          "expression": "(unit_price >= 0) AND (line_amount = (unit_price * quantity))",
-          "definition": "CHECK (((unit_price >= (0)::numeric) AND (line_amount = (unit_price * (quantity)::numeric))))",
-          "columnName": "line_amount"
-        },
-        {
-          "name": "order_items_quantity_check",
-          "expression": "(quantity >= 1) AND (quantity <= 99)",
-          "definition": "CHECK (((quantity >= 1) AND (quantity <= 99)))",
-          "columnName": "quantity"
-        }
-      ],
+      "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "order_items_order_fk": {
-          "columnNames": [
-            "order_id"
-          ],
-          "constraintName": "order_items_order_fk",
-          "localTableName": "public.order_items",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.orders",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
-        },
-        "order_items_sku_fk": {
-          "columnNames": [
-            "sku_id"
-          ],
-          "constraintName": "order_items_sku_fk",
-          "localTableName": "public.order_items",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.product_skus",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -1637,20 +1723,24 @@
       "columns": {
         "close_reason": {
           "name": "close_reason",
-          "type": "varchar(40)",
+          "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": true,
           "unique": false,
-          "length": 40,
+          "length": null,
           "precision": null,
           "scale": null,
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [],
-          "mappedType": "string"
+          "enumItems": [
+            "user_cancelled",
+            "payment_expired",
+            "product_unavailable"
+          ],
+          "mappedType": "enum"
         },
         "closed_at": {
           "name": "closed_at",
@@ -1697,7 +1787,7 @@
           "length": 6,
           "precision": null,
           "scale": null,
-          "default": "now()",
+          "default": null,
           "comment": null,
           "collation": null,
           "enumItems": [],
@@ -1977,7 +2067,7 @@
         },
         "status": {
           "name": "status",
-          "type": "varchar(32)",
+          "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
@@ -1986,7 +2076,7 @@
           "length": null,
           "precision": null,
           "scale": null,
-          "default": null,
+          "default": "'pending_payment'",
           "comment": null,
           "collation": null,
           "enumItems": [
@@ -2009,7 +2099,7 @@
           "length": 6,
           "precision": null,
           "scale": null,
-          "default": "now()",
+          "default": null,
           "comment": null,
           "collation": null,
           "enumItems": [],
@@ -2046,18 +2136,6 @@
         },
         {
           "columnNames": [
-            "expires_at",
-            "id"
-          ],
-          "composite": true,
-          "constraint": false,
-          "keyName": "orders_pending_expiration_index",
-          "primary": false,
-          "unique": false,
-          "where": "(status)::text = 'pending_payment'::text"
-        },
-        {
-          "columnNames": [
             "id"
           ],
           "composite": false,
@@ -2076,20 +2154,7 @@
           "constraint": false,
           "keyName": "orders_status_created_index",
           "primary": false,
-          "unique": false,
-          "columns": [
-            {
-              "name": "status"
-            },
-            {
-              "name": "created_at",
-              "sort": "DESC"
-            },
-            {
-              "name": "id",
-              "sort": "DESC"
-            }
-          ]
+          "unique": false
         },
         {
           "columnNames": [
@@ -2101,51 +2166,15 @@
           "constraint": false,
           "keyName": "orders_user_created_index",
           "primary": false,
-          "unique": false,
-          "columns": [
-            {
-              "name": "user_id"
-            },
-            {
-              "name": "created_at",
-              "sort": "DESC"
-            },
-            {
-              "name": "id"
-            }
-          ]
+          "unique": false
         }
       ],
       "checks": [
         {
-          "name": "orders_amount_check",
-          "expression": "(currency = 'CNY'::text) AND (payment_mode = 'simulated'::text) AND (items_amount >= 0) AND (shipping_amount = 0) AND (discount_amount = 0) AND (payable_amount = items_amount)",
-          "definition": "CHECK ((((currency)::text = 'CNY'::text) AND ((payment_mode)::text = 'simulated'::text) AND (items_amount >= (0)::numeric) AND (shipping_amount = (0)::numeric) AND (discount_amount = (0)::numeric) AND (payable_amount = items_amount)))",
-          "columnName": "currency"
-        },
-        {
-          "name": "orders_close_state_check",
-          "expression": "((status = 'closed'::text) AND (close_reason IS NOT NULL) AND (close_reason = ANY (ARRAY['user_cancelled'::character varying, 'payment_expired'::character varying, 'product_unavailable'::character varying])) AND (closed_at IS NOT NULL)) OR ((status <> 'closed'::text) AND (close_reason IS NULL) AND (closed_at IS NULL))",
-          "definition": "CHECK (((((status)::text = 'closed'::text) AND (close_reason IS NOT NULL) AND ((close_reason)::text = ANY ((ARRAY['user_cancelled'::character varying, 'payment_expired'::character varying, 'product_unavailable'::character varying])::text[])) AND (closed_at IS NOT NULL)) OR (((status)::text <> 'closed'::text) AND (close_reason IS NULL) AND (closed_at IS NULL))))",
+          "name": "orders_close_reason_check",
+          "expression": "\"close_reason\" in ('user_cancelled', 'payment_expired', 'product_unavailable')",
+          "definition": "check (\"close_reason\" in ('user_cancelled', 'payment_expired', 'product_unavailable'))",
           "columnName": "close_reason"
-        },
-        {
-          "name": "orders_completed_state_check",
-          "expression": "((status = 'completed'::text) AND (completed_at IS NOT NULL)) OR ((status <> 'completed'::text) AND (completed_at IS NULL))",
-          "definition": "CHECK (((((status)::text = 'completed'::text) AND (completed_at IS NOT NULL)) OR (((status)::text <> 'completed'::text) AND (completed_at IS NULL))))",
-          "columnName": "completed_at"
-        },
-        {
-          "name": "orders_payment_state_check",
-          "expression": "((status = ANY (ARRAY['pending_payment'::character varying, 'closed'::character varying])) AND (paid_at IS NULL)) OR ((status = ANY (ARRAY['pending_shipment'::character varying, 'pending_receipt'::character varying, 'completed'::character varying])) AND (paid_at IS NOT NULL))",
-          "definition": "CHECK (((((status)::text = ANY ((ARRAY['pending_payment'::character varying, 'closed'::character varying])::text[])) AND (paid_at IS NULL)) OR (((status)::text = ANY ((ARRAY['pending_shipment'::character varying, 'pending_receipt'::character varying, 'completed'::character varying])::text[])) AND (paid_at IS NOT NULL))))",
-          "columnName": "paid_at"
-        },
-        {
-          "name": "orders_shipment_state_check",
-          "expression": "((status = ANY (ARRAY['pending_payment'::character varying, 'pending_shipment'::character varying, 'closed'::character varying])) AND (shipped_at IS NULL) AND (shipment_carrier IS NULL) AND (shipment_tracking_no IS NULL)) OR ((status = ANY (ARRAY['pending_receipt'::character varying, 'completed'::character varying])) AND (shipped_at IS NOT NULL) AND (shipment_carrier IS NOT NULL) AND (shipment_tracking_no IS NOT NULL))",
-          "definition": "CHECK (((((status)::text = ANY ((ARRAY['pending_payment'::character varying, 'pending_shipment'::character varying, 'closed'::character varying])::text[])) AND (shipped_at IS NULL) AND (shipment_carrier IS NULL) AND (shipment_tracking_no IS NULL)) OR (((status)::text = ANY ((ARRAY['pending_receipt'::character varying, 'completed'::character varying])::text[])) AND (shipped_at IS NOT NULL) AND (shipment_carrier IS NOT NULL) AND (shipment_tracking_no IS NOT NULL))))",
-          "columnName": "shipment_carrier"
         },
         {
           "name": "orders_status_check",
@@ -2155,21 +2184,7 @@
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "orders_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "orders_user_fk",
-          "localTableName": "public.orders",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "restrict"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -2218,16 +2233,14 @@
           "primary": false,
           "nullable": false,
           "unique": false,
-          "length": null,
+          "length": 3,
           "precision": null,
           "scale": null,
           "default": "'CNY'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "CNY"
-          ],
-          "mappedType": "enum"
+          "enumItems": [],
+          "mappedType": "string"
         },
         "external_sku_id": {
           "name": "external_sku_id",
@@ -2417,41 +2430,9 @@
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "product_skus_currency_check",
-          "expression": "\"currency\" in ('CNY')",
-          "definition": "check (\"currency\" in ('CNY'))",
-          "columnName": "currency"
-        },
-        {
-          "name": "product_skus_price_check",
-          "expression": "price >= 0",
-          "definition": "CHECK ((price >= (0)::numeric))",
-          "columnName": "price"
-        },
-        {
-          "name": "product_skus_stock_check",
-          "expression": "stock >= 0",
-          "definition": "CHECK ((stock >= 0))",
-          "columnName": "stock"
-        }
-      ],
+      "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "product_skus_product_id_fkey": {
-          "columnNames": [
-            "product_id"
-          ],
-          "constraintName": "product_skus_product_id_fkey",
-          "localTableName": "public.product_skus",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.products",
-          "deleteRule": "restrict"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -2466,16 +2447,14 @@
           "primary": false,
           "nullable": false,
           "unique": false,
-          "length": null,
+          "length": 16,
           "precision": null,
           "scale": null,
           "default": "'adult'",
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "adult"
-          ],
-          "mappedType": "enum"
+          "enumItems": [],
+          "mappedType": "string"
         },
         "brand": {
           "name": "brand",
@@ -2502,20 +2481,14 @@
           "primary": false,
           "nullable": false,
           "unique": false,
-          "length": null,
+          "length": 32,
           "precision": null,
           "scale": null,
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "tops",
-            "bottoms",
-            "dresses",
-            "outerwear",
-            "shoes"
-          ],
-          "mappedType": "enum"
+          "enumItems": [],
+          "mappedType": "string"
         },
         "created_at": {
           "name": "created_at",
@@ -2704,23 +2677,6 @@
           "enumItems": [],
           "mappedType": "boolean"
         },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamptz(6)",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "unique": false,
-          "length": 6,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "datetime"
-        },
         "try_on_image_key": {
           "name": "try_on_image_key",
           "type": "text",
@@ -2737,6 +2693,23 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "text"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
         }
       },
       "indexes": [
@@ -2772,26 +2745,7 @@
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "products_audience_check",
-          "expression": "\"audience\" in ('adult')",
-          "definition": "check (\"audience\" in ('adult'))",
-          "columnName": "audience"
-        },
-        {
-          "name": "products_category_check",
-          "expression": "\"category\" in ('tops', 'bottoms', 'dresses', 'outerwear', 'shoes')",
-          "definition": "check (\"category\" in ('tops', 'bottoms', 'dresses', 'outerwear', 'shoes'))",
-          "columnName": "category"
-        },
-        {
-          "name": "products_tags_array_check",
-          "expression": "(jsonb_typeof(styles) = 'array'::text) AND (jsonb_typeof(occasions) = 'array'::text) AND (jsonb_typeof(fits) = 'array'::text)",
-          "definition": "CHECK (((jsonb_typeof(styles) = 'array'::text) AND (jsonb_typeof(occasions) = 'array'::text) AND (jsonb_typeof(fits) = 'array'::text)))",
-          "columnName": "fits"
-        }
-      ],
+      "checks": [],
       "triggers": [],
       "foreignKeys": {},
       "comment": null
@@ -2902,20 +2856,10 @@
             "token_hash"
           ],
           "composite": false,
-          "constraint": false,
+          "constraint": true,
           "keyName": "refresh_sessions_token_hash_unique",
           "primary": false,
           "unique": true
-        },
-        {
-          "columnNames": [
-            "user_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "refresh_sessions_user_id_index",
-          "primary": false,
-          "unique": false
         }
       ],
       "checks": [],
@@ -2931,7 +2875,6 @@
             "id"
           ],
           "referencedTableName": "public.users",
-          "updateRule": "cascade",
           "deleteRule": "cascade"
         }
       },
@@ -3096,21 +3039,7 @@
       ],
       "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "try_on_object_cleanups_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "try_on_object_cleanups_user_fk",
-          "localTableName": "public.try_on_object_cleanups",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "set null"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -3221,7 +3150,7 @@
         },
         "kind": {
           "name": "kind",
-          "type": "varchar(20)",
+          "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
@@ -3275,7 +3204,7 @@
         },
         "status": {
           "name": "status",
-          "type": "varchar(20)",
+          "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
@@ -3410,18 +3339,6 @@
       ],
       "checks": [
         {
-          "name": "try_on_photos_byte_size_check",
-          "expression": "byte_size > 0",
-          "definition": "CHECK ((byte_size > 0))",
-          "columnName": "byte_size"
-        },
-        {
-          "name": "try_on_photos_dimensions_check",
-          "expression": "(width > 0) AND (height > 0)",
-          "definition": "CHECK (((width > 0) AND (height > 0)))",
-          "columnName": "height"
-        },
-        {
           "name": "try_on_photos_kind_check",
           "expression": "\"kind\" in ('temporary', 'saved')",
           "definition": "check (\"kind\" in ('temporary', 'saved'))",
@@ -3435,34 +3352,7 @@
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "try_on_photos_task_fk": {
-          "columnNames": [
-            "task_id"
-          ],
-          "constraintName": "try_on_photos_task_fk",
-          "localTableName": "public.try_on_photos",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.try_on_tasks",
-          "updateRule": "cascade",
-          "deleteRule": "set null"
-        },
-        "try_on_photos_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "try_on_photos_user_fk",
-          "localTableName": "public.try_on_photos",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -3595,30 +3485,9 @@
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "try_on_quotas_success_count_check",
-          "expression": "(success_count >= 0) AND (success_count <= 5)",
-          "definition": "CHECK (((success_count >= 0) AND (success_count <= 5)))",
-          "columnName": "success_count"
-        }
-      ],
+      "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "try_on_quotas_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "try_on_quotas_user_fk",
-          "localTableName": "public.try_on_quotas",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -3830,34 +3699,7 @@
       ],
       "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "try_on_results_task_fk": {
-          "columnNames": [
-            "task_id"
-          ],
-          "constraintName": "try_on_results_task_fk",
-          "localTableName": "public.try_on_results",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.try_on_tasks",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        },
-        "try_on_results_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "try_on_results_user_fk",
-          "localTableName": "public.try_on_results",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -4016,6 +3858,23 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "string"
+        },
+        "garment_image_object_key": {
+          "name": "garment_image_object_key",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "text"
         },
         "garment_image_url": {
           "name": "garment_image_url",
@@ -4189,7 +4048,7 @@
         },
         "status": {
           "name": "status",
-          "type": "varchar(20)",
+          "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
@@ -4234,23 +4093,6 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
-          "length": null,
-          "precision": null,
-          "scale": null,
-          "default": null,
-          "comment": null,
-          "collation": null,
-          "enumItems": [],
-          "mappedType": "uuid"
-        },
-        "garment_image_object_key": {
-          "name": "garment_image_object_key",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": true,
           "unique": false,
           "length": null,
           "precision": null,
@@ -4259,21 +4101,10 @@
           "comment": null,
           "collation": null,
           "enumItems": [],
-          "mappedType": "text"
+          "mappedType": "uuid"
         }
       },
       "indexes": [
-        {
-          "columnNames": [
-            "user_id"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "try_on_tasks_active_user_unique",
-          "primary": false,
-          "unique": true,
-          "where": "(status)::text = ANY ((ARRAY['queued'::character varying, 'processing'::character varying])::text[])"
-        },
         {
           "columnNames": [
             "status",
@@ -4299,35 +4130,16 @@
         {
           "columnNames": [
             "user_id",
-            "created_at",
-            "id"
+            "created_at"
           ],
           "composite": true,
           "constraint": false,
           "keyName": "try_on_tasks_user_created_index",
           "primary": false,
-          "unique": false,
-          "columns": [
-            {
-              "name": "user_id"
-            },
-            {
-              "name": "created_at",
-              "sort": "DESC"
-            },
-            {
-              "name": "id"
-            }
-          ]
+          "unique": false
         }
       ],
       "checks": [
-        {
-          "name": "try_on_tasks_attempts_check",
-          "expression": "(attempts >= 0) AND (attempts <= 2)",
-          "definition": "CHECK (((attempts >= 0) AND (attempts <= 2)))",
-          "columnName": "attempts"
-        },
         {
           "name": "try_on_tasks_status_check",
           "expression": "\"status\" in ('queued', 'processing', 'succeeded', 'failed', 'deleted')",
@@ -4336,34 +4148,222 @@
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "try_on_tasks_source_photo_fk": {
-          "columnNames": [
-            "source_photo_id"
-          ],
-          "constraintName": "try_on_tasks_source_photo_fk",
-          "localTableName": "public.try_on_tasks",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.try_on_photos",
-          "updateRule": "cascade",
-          "deleteRule": "set null"
+      "foreignKeys": {},
+      "comment": null
+    },
+    {
+      "name": "user_addresses",
+      "schema": "public",
+      "columns": {
+        "address": {
+          "name": "address",
+          "type": "varchar(500)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 500,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
         },
-        "try_on_tasks_user_fk": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "try_on_tasks_user_fk",
-          "localTableName": "public.try_on_tasks",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
+        "create_request_key": {
+          "name": "create_request_key",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "is_default": {
+          "name": "is_default",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "false",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "boolean"
+        },
+        "label": {
+          "name": "label",
+          "type": "varchar(40)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 40,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "phone": {
+          "name": "phone",
+          "type": "varchar(21)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 21,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "recipient_name": {
+          "name": "recipient_name",
+          "type": "varchar(100)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 100,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
         }
       },
+      "indexes": [
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "user_addresses_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "user_id",
+            "create_request_key"
+          ],
+          "composite": true,
+          "constraint": true,
+          "keyName": "user_addresses_user_request_key_unique",
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "user_id",
+            "updated_at",
+            "id"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "user_addresses_user_updated_index",
+          "primary": false,
+          "unique": false
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -4490,7 +4490,7 @@
             "object_key"
           ],
           "composite": false,
-          "constraint": false,
+          "constraint": true,
           "keyName": "user_memory_document_cleanups_object_key_unique",
           "primary": false,
           "unique": true
@@ -4506,14 +4506,7 @@
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "user_memory_document_cleanups_attempts_check",
-          "expression": "attempts >= 0",
-          "definition": "CHECK ((attempts >= 0))",
-          "columnName": "attempts"
-        }
-      ],
+      "checks": [],
       "triggers": [],
       "foreignKeys": {},
       "comment": null
@@ -4628,16 +4621,6 @@
       "indexes": [
         {
           "columnNames": [
-            "object_key"
-          ],
-          "composite": false,
-          "constraint": false,
-          "keyName": "user_memory_document_states_object_key_index",
-          "primary": false,
-          "unique": false
-        },
-        {
-          "columnNames": [
             "user_id"
           ],
           "composite": false,
@@ -4647,30 +4630,9 @@
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "user_memory_document_states_nonnegative_check",
-          "expression": "(revision >= 0) AND (document_generation >= 0)",
-          "definition": "CHECK (((revision >= 0) AND (document_generation >= 0)))",
-          "columnName": "document_generation"
-        }
-      ],
+      "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "user_memory_document_states_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "user_memory_document_states_user_id_foreign",
-          "localTableName": "public.user_memory_document_states",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -4763,7 +4725,7 @@
             "operation_key"
           ],
           "composite": true,
-          "constraint": false,
+          "constraint": true,
           "keyName": "user_memory_document_task_results_task_operation_unique",
           "primary": false,
           "unique": true
@@ -4771,21 +4733,7 @@
       ],
       "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "user_memory_document_task_results_task_id_foreign": {
-          "columnNames": [
-            "task_id"
-          ],
-          "constraintName": "user_memory_document_task_results_task_id_foreign",
-          "localTableName": "public.user_memory_document_task_results",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.user_memory_tasks",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -4875,21 +4823,7 @@
       ],
       "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "user_memory_settings_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "user_memory_settings_user_id_foreign",
-          "localTableName": "public.user_memory_settings",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -5192,7 +5126,7 @@
             "deduplication_key"
           ],
           "composite": false,
-          "constraint": false,
+          "constraint": true,
           "keyName": "user_memory_tasks_deduplication_key_unique",
           "primary": false,
           "unique": true
@@ -5216,37 +5150,10 @@
           "constraint": false,
           "keyName": "user_memory_tasks_user_index",
           "primary": false,
-          "unique": false,
-          "columns": [
-            {
-              "name": "user_id"
-            },
-            {
-              "name": "created_at",
-              "sort": "DESC"
-            }
-          ]
+          "unique": false
         }
       ],
       "checks": [
-        {
-          "name": "user_memory_tasks_attempts_check",
-          "expression": "attempts >= 0",
-          "definition": "CHECK ((attempts >= 0))",
-          "columnName": "attempts"
-        },
-        {
-          "name": "user_memory_tasks_document_generation_check",
-          "expression": "document_generation >= 0",
-          "definition": "CHECK ((document_generation >= 0))",
-          "columnName": "document_generation"
-        },
-        {
-          "name": "user_memory_tasks_source_turns_array_check",
-          "expression": "(source_turns IS NULL) OR (jsonb_typeof(source_turns) = 'array'::text)",
-          "definition": "CHECK (((source_turns IS NULL) OR (jsonb_typeof(source_turns) = 'array'::text)))",
-          "columnName": "source_turns"
-        },
         {
           "name": "user_memory_tasks_status_check",
           "expression": "\"status\" in ('pending', 'processing', 'succeeded', 'failed')",
@@ -5255,34 +5162,7 @@
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "user_memory_tasks_conversation_id_foreign": {
-          "columnNames": [
-            "conversation_id"
-          ],
-          "constraintName": "user_memory_tasks_conversation_id_foreign",
-          "localTableName": "public.user_memory_tasks",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.chat_conversations",
-          "updateRule": "cascade",
-          "deleteRule": "set null"
-        },
-        "user_memory_tasks_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "user_memory_tasks_user_id_foreign",
-          "localTableName": "public.user_memory_tasks",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -5372,21 +5252,7 @@
       ],
       "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "user_preference_settings_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "user_preference_settings_user_id_foreign",
-          "localTableName": "public.user_preference_settings",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -5395,23 +5261,20 @@
       "columns": {
         "action": {
           "name": "action",
-          "type": "text",
+          "type": "varchar(255)",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": false,
           "unique": false,
-          "length": null,
+          "length": 255,
           "precision": null,
           "scale": null,
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "upsert",
-            "delete"
-          ],
-          "mappedType": "enum"
+          "enumItems": [],
+          "mappedType": "string"
         },
         "applied_at": {
           "name": "applied_at",
@@ -5516,36 +5379,15 @@
             "operation_key"
           ],
           "composite": true,
-          "constraint": false,
+          "constraint": true,
           "keyName": "user_preference_task_results_task_operation_unique",
           "primary": false,
           "unique": true
         }
       ],
-      "checks": [
-        {
-          "name": "user_preference_task_results_action_check",
-          "expression": "\"action\" in ('upsert', 'delete')",
-          "definition": "check (\"action\" in ('upsert', 'delete'))",
-          "columnName": "action"
-        }
-      ],
+      "checks": [],
       "triggers": [],
-      "foreignKeys": {
-        "user_preference_task_results_task_id_foreign": {
-          "columnNames": [
-            "task_id"
-          ],
-          "constraintName": "user_preference_task_results_task_id_foreign",
-          "localTableName": "public.user_preference_task_results",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.user_preference_tasks",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -5814,7 +5656,7 @@
             "deduplication_key"
           ],
           "composite": false,
-          "constraint": false,
+          "constraint": true,
           "keyName": "user_preference_tasks_deduplication_key_unique",
           "primary": false,
           "unique": true
@@ -5838,25 +5680,10 @@
           "constraint": false,
           "keyName": "user_preference_tasks_user_index",
           "primary": false,
-          "unique": false,
-          "columns": [
-            {
-              "name": "user_id"
-            },
-            {
-              "name": "created_at",
-              "sort": "DESC"
-            }
-          ]
+          "unique": false
         }
       ],
       "checks": [
-        {
-          "name": "user_preference_tasks_attempts_check",
-          "expression": "attempts >= 0",
-          "definition": "CHECK ((attempts >= 0))",
-          "columnName": "attempts"
-        },
         {
           "name": "user_preference_tasks_status_check",
           "expression": "\"status\" in ('pending', 'processing', 'succeeded', 'failed')",
@@ -5865,34 +5692,7 @@
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "user_preference_tasks_conversation_id_foreign": {
-          "columnNames": [
-            "conversation_id"
-          ],
-          "constraintName": "user_preference_tasks_conversation_id_foreign",
-          "localTableName": "public.user_preference_tasks",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.chat_conversations",
-          "updateRule": "cascade",
-          "deleteRule": "set null"
-        },
-        "user_preference_tasks_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "user_preference_tasks_user_id_foreign",
-          "localTableName": "public.user_preference_tasks",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -5901,30 +5701,20 @@
       "columns": {
         "category": {
           "name": "category",
-          "type": "text",
+          "type": "varchar(255)",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": false,
           "unique": false,
-          "length": null,
+          "length": 255,
           "precision": null,
           "scale": null,
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "size",
-            "shoe_size",
-            "fit",
-            "style",
-            "color",
-            "occasion",
-            "budget",
-            "avoidance",
-            "purchase_preference"
-          ],
-          "mappedType": "enum"
+          "enumItems": [],
+          "mappedType": "string"
         },
         "created_at": {
           "name": "created_at",
@@ -6025,8 +5815,12 @@
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [],
-          "mappedType": "text"
+          "enumItems": [
+            "active",
+            "deleted",
+            "unavailable"
+          ],
+          "mappedType": "enum"
         },
         "status": {
           "name": "status",
@@ -6072,7 +5866,7 @@
           "autoincrement": false,
           "primary": false,
           "nullable": false,
-          "unique": true,
+          "unique": false,
           "length": null,
           "precision": null,
           "scale": null,
@@ -6118,24 +5912,20 @@
         },
         "value_type": {
           "name": "value_type",
-          "type": "text",
+          "type": "varchar(255)",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": false,
           "unique": false,
-          "length": null,
+          "length": 255,
           "precision": null,
           "scale": null,
           "default": null,
           "comment": null,
           "collation": null,
-          "enumItems": [
-            "single",
-            "multi",
-            "range"
-          ],
-          "mappedType": "enum"
+          "enumItems": [],
+          "mappedType": "string"
         }
       },
       "indexes": [
@@ -6163,19 +5953,6 @@
           "columnNames": [
             "user_id",
             "category",
-            "value_fingerprint"
-          ],
-          "composite": true,
-          "constraint": false,
-          "keyName": "user_preferences_user_category_fingerprint_active_unique",
-          "primary": false,
-          "unique": true,
-          "where": "status = 'active'::text"
-        },
-        {
-          "columnNames": [
-            "user_id",
-            "category",
             "status"
           ],
           "composite": true,
@@ -6194,38 +5971,14 @@
           "constraint": false,
           "keyName": "user_preferences_user_status_updated_index",
           "primary": false,
-          "unique": false,
-          "columns": [
-            {
-              "name": "user_id"
-            },
-            {
-              "name": "status"
-            },
-            {
-              "name": "updated_at",
-              "sort": "DESC"
-            }
-          ]
+          "unique": false
         }
       ],
       "checks": [
         {
-          "name": "user_preferences_category_check",
-          "expression": "\"category\" in ('size', 'shoe_size', 'fit', 'style', 'color', 'occasion', 'budget', 'avoidance', 'purchase_preference')",
-          "definition": "check (\"category\" in ('size', 'shoe_size', 'fit', 'style', 'color', 'occasion', 'budget', 'avoidance', 'purchase_preference'))",
-          "columnName": "category"
-        },
-        {
-          "name": "user_preferences_source_required_check",
-          "expression": "(source_conversation_id IS NULL) OR (source_status IS NOT NULL)",
-          "definition": "CHECK (((source_conversation_id IS NULL) OR (source_status IS NOT NULL)))",
-          "columnName": "source_conversation_id"
-        },
-        {
           "name": "user_preferences_source_status_check",
-          "expression": "(source_status IS NULL) OR (source_status = ANY (ARRAY['active'::text, 'deleted'::text, 'unavailable'::text]))",
-          "definition": "CHECK (((source_status IS NULL) OR (source_status = ANY (ARRAY['active'::text, 'deleted'::text, 'unavailable'::text]))))",
+          "expression": "\"source_status\" in ('active', 'deleted', 'unavailable')",
+          "definition": "check (\"source_status\" in ('active', 'deleted', 'unavailable'))",
           "columnName": "source_status"
         },
         {
@@ -6233,43 +5986,10 @@
           "expression": "\"status\" in ('active', 'deleted')",
           "definition": "check (\"status\" in ('active', 'deleted'))",
           "columnName": "status"
-        },
-        {
-          "name": "user_preferences_value_type_check",
-          "expression": "\"value_type\" in ('single', 'multi', 'range')",
-          "definition": "check (\"value_type\" in ('single', 'multi', 'range'))",
-          "columnName": "value_type"
         }
       ],
       "triggers": [],
-      "foreignKeys": {
-        "user_preferences_source_conversation_id_foreign": {
-          "columnNames": [
-            "source_conversation_id"
-          ],
-          "constraintName": "user_preferences_source_conversation_id_foreign",
-          "localTableName": "public.user_preferences",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.chat_conversations",
-          "updateRule": "cascade",
-          "deleteRule": "set null"
-        },
-        "user_preferences_user_id_foreign": {
-          "columnNames": [
-            "user_id"
-          ],
-          "constraintName": "user_preferences_user_id_foreign",
-          "localTableName": "public.user_preferences",
-          "referencedColumnNames": [
-            "id"
-          ],
-          "referencedTableName": "public.users",
-          "updateRule": "cascade",
-          "deleteRule": "cascade"
-        }
-      },
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -6460,12 +6180,6 @@
       "comment": null
     }
   ],
-  "views": [
-    {
-      "name": "active_order_sku_reservations",
-      "schema": "public",
-      "definition": "SELECT item.sku_id,\n    sum(item.quantity) AS reserved_quantity\n   FROM (order_items item\n     JOIN orders order_record ON ((order_record.id = item.order_id)))\n  WHERE ((order_record.status)::text = ANY ((ARRAY['pending_payment'::character varying, 'pending_shipment'::character varying])::text[]))\n  GROUP BY item.sku_id"
-    }
-  ],
+  "views": [],
   "nativeEnums": {}
 }

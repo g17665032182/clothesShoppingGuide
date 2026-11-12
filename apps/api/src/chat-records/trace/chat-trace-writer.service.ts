@@ -24,6 +24,7 @@ const PURCHASE_TOOL_NAMES = new Set([
   'update_purchase_draft',
   'discard_purchase_draft',
 ]);
+const DYNAMIC_FORM_TOOL_NAME = 'request_dynamic_form';
 const ADDRESS_TOOL_NAMES = new Set([
   'list_my_orders',
   'list_my_shipping_addresses',
@@ -176,6 +177,82 @@ function isPurchaseTool(name: string | null | undefined): boolean {
   return Boolean(name && PURCHASE_TOOL_NAMES.has(name));
 }
 
+function isDynamicFormTool(name: string | null | undefined): boolean {
+  return name === DYNAMIC_FORM_TOOL_NAME;
+}
+
+function safeDynamicFormArguments(value: unknown): Record<string, unknown> {
+  const source =
+    typeof value === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(value) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : value;
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  const fields = Array.isArray(input.fields)
+    ? input.fields.flatMap((field) => {
+        if (
+          typeof field !== 'object' ||
+          field === null ||
+          Array.isArray(field)
+        )
+          return [];
+        const entry = field as Record<string, unknown>;
+        return typeof entry.key === 'string' && typeof entry.type === 'string'
+          ? [{ key: entry.key.slice(0, 80), type: entry.type.slice(0, 32) }]
+          : [];
+      })
+    : [];
+  return {
+    ...(typeof input.formKind === 'string'
+      ? { formKind: input.formKind.slice(0, 80) }
+      : {}),
+    fields,
+  };
+}
+
+function safeDynamicFormProjection(value: unknown): Record<string, unknown> {
+  const source =
+    typeof value === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(value) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : value;
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  const result =
+    typeof input.result === 'object' &&
+    input.result !== null &&
+    !Array.isArray(input.result)
+      ? (input.result as Record<string, unknown>)
+      : input;
+  return {
+    ...(input.ok === true || input.ok === false ? { ok: input.ok } : {}),
+    ...(typeof result.formId === 'string' ? { formId: result.formId } : {}),
+    ...(typeof result.revision === 'number' &&
+    Number.isSafeInteger(result.revision) &&
+    result.revision > 0
+      ? { revision: result.revision }
+      : {}),
+    ...(result.status === 'open' ? { status: 'open' } : {}),
+    ...(typeof input.code === 'string' &&
+    ['unavailable', 'not_found', 'version_conflict'].includes(input.code)
+      ? { code: input.code }
+      : {}),
+  };
+}
+
 function safePurchaseProjection(value: unknown): Record<string, unknown> {
   const source =
     typeof value === 'string'
@@ -269,6 +346,22 @@ function safePurchaseCall(value: unknown): unknown {
   };
 }
 
+function safeDynamicFormCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return {};
+  const call = value as Record<string, unknown>;
+  const name = typeof call.name === 'string' ? call.name : null;
+  if (name !== DYNAMIC_FORM_TOOL_NAME) return redactValue(value);
+  return {
+    ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+    name,
+    ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
+    args: safeDynamicFormArguments(
+      call.args ?? call.arguments ?? call.input,
+    ),
+  };
+}
+
 function sanitizeNestedPurchaseCalls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeNestedPurchaseCalls);
   if (typeof value !== 'object' || value === null) return value;
@@ -279,6 +372,20 @@ function sanitizeNestedPurchaseCalls(value: unknown): unknown {
       Array.isArray(entry)
         ? entry.map(safePurchaseCall)
         : sanitizeNestedPurchaseCalls(entry),
+    ]),
+  );
+}
+
+function sanitizeNestedDynamicFormCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedDynamicFormCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map(safeDynamicFormCall)
+        : sanitizeNestedDynamicFormCalls(entry),
     ]),
   );
 }
@@ -556,7 +663,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             : normalizePayload(
                 sanitizeNestedAddressCalls(
                   sanitizeNestedPurchaseCalls(
-                    sanitizeNestedChatCardCalls(event.payload),
+                    sanitizeNestedDynamicFormCalls(
+                      sanitizeNestedChatCardCalls(event.payload),
+                    ),
                   ),
                 ),
               ),
@@ -585,6 +694,8 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         payload: normalizePayload(
           event.toolName === 'display_chat_card'
             ? safeChatCardArguments(event.args)
+            : isDynamicFormTool(event.toolName)
+              ? safeDynamicFormArguments(event.args)
             : isPurchaseTool(event.toolName)
               ? safePurchaseProjection(event.args)
               : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
@@ -602,6 +713,8 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             ? '工具执行失败'
             : event.toolName === 'display_chat_card'
               ? safeChatCardResult(event.content)
+              : isDynamicFormTool(event.toolName)
+                ? JSON.stringify(safeDynamicFormProjection(event.content))
               : isPurchaseTool(event.toolName)
                 ? safePurchaseResult(event.content)
                 : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
@@ -619,6 +732,8 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             : normalizePayload(
                 event.toolName === 'display_chat_card'
                   ? safeChatCardResult(event.payload)
+                  : isDynamicFormTool(event.toolName)
+                    ? safeDynamicFormProjection(event.payload)
                   : isPurchaseTool(event.toolName)
                     ? safePurchaseProjection(event.payload)
                     : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)

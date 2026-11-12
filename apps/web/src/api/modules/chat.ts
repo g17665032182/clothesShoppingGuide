@@ -16,6 +16,11 @@ import type {
   ChatTryOnStatus,
 } from '@/api/types/chat';
 import type { PurchaseReference } from '@/api/types/chat-purchase';
+import { getDynamicForm } from './chat-dynamic-form';
+import type {
+  ChatDynamicForm,
+  ChatDynamicFormResult,
+} from '@/api/types/chat-dynamic-form';
 
 const conversationPageSize = 10;
 const messagePageSize = 100;
@@ -46,35 +51,53 @@ export async function getConversation(
     ...detail,
     messages: {
       ...detail.messages,
-      items: detail.messages.items.map((message) => {
-        const tryOnResult =
-          message.tryOnResult === undefined || message.tryOnResult === null
-            ? null
-            : projectChatTryOnResult(message.tryOnResult);
-        const tryOnStatus =
-          message.tryOnStatus === undefined || message.tryOnStatus === null
-            ? null
-            : projectChatTryOnStatus(message.tryOnStatus);
-        return {
-          ...message,
-          activities: isActivities(message.activities)
-            ? message.activities
-            : [],
-          sources: isSources(message.sources) ? message.sources : [],
-          cards: projectChatCards(message.cards),
-          productResults: isProductResults(message.productResults)
-            ? message.productResults
-            : [],
-          orderCancellationCandidates: isOrderCancellationCandidates(
-            message.orderCancellationCandidates,
-          )
-            ? message.orderCancellationCandidates
-            : [],
-          context: isContext(message.context) ? message.context : null,
-          tryOnResult,
-          tryOnStatus: tryOnResult ? null : tryOnStatus,
-        };
-      }),
+      items: await Promise.all(
+        detail.messages.items.map(async (message) => {
+          const forms: ChatDynamicForm[] = [];
+          for (const reference of message.forms ?? []) {
+            try {
+              forms.push(
+                await getDynamicForm(
+                  token,
+                  message.conversationId,
+                  reference.formId,
+                  signal,
+                ),
+              );
+            } catch {
+              // 历史表单缺失或已越权时不阻断正文读取。
+            }
+          }
+          const tryOnResult =
+            message.tryOnResult === undefined || message.tryOnResult === null
+              ? null
+              : projectChatTryOnResult(message.tryOnResult);
+          const tryOnStatus =
+            message.tryOnStatus === undefined || message.tryOnStatus === null
+              ? null
+              : projectChatTryOnStatus(message.tryOnStatus);
+          return {
+            ...message,
+            forms,
+            activities: isActivities(message.activities)
+              ? message.activities
+              : [],
+            sources: isSources(message.sources) ? message.sources : [],
+            cards: projectChatCards(message.cards),
+            productResults: isProductResults(message.productResults)
+              ? message.productResults
+              : [],
+            orderCancellationCandidates: isOrderCancellationCandidates(
+              message.orderCancellationCandidates,
+            )
+              ? message.orderCancellationCandidates
+              : [],
+            context: isContext(message.context) ? message.context : null,
+            tryOnResult,
+            tryOnStatus: tryOnResult ? null : tryOnStatus,
+          };
+        }),
+      ),
     },
   };
 }
@@ -113,6 +136,8 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'product-results',
       'order-cancellation-candidates',
       'purchase',
+      'form',
+      'form-result',
       'done',
       'error',
     ].includes(eventName)
@@ -184,6 +209,22 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
         ? data
         : (data.purchase as PurchaseReference | null),
     };
+  }
+  if (
+    eventName === 'form' &&
+    isRecord(data) &&
+    hasOnlyKeys(data, ['form']) &&
+    isDynamicForm(data.form)
+  ) {
+    return { type: 'form', form: data.form };
+  }
+  if (
+    eventName === 'form-result' &&
+    isRecord(data) &&
+    hasOnlyKeys(data, ['result']) &&
+    isDynamicFormResult(data.result)
+  ) {
+    return { type: 'form-result', result: data.result };
   }
   if (
     eventName === 'product-results' &&
@@ -329,6 +370,131 @@ export async function* streamChat(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isDynamicForm(value: unknown): value is ChatDynamicForm {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      'formId',
+      'formKind',
+      'revision',
+      'title',
+      'description',
+      'fields',
+      'submitLabel',
+      'status',
+      'expiresAt',
+    ]) ||
+    !isUuid(value.formId) ||
+    typeof value.formKind !== 'string' ||
+    !value.formKind.trim() ||
+    typeof value.revision !== 'number' ||
+    !Number.isSafeInteger(value.revision) ||
+    value.revision <= 0 ||
+    typeof value.title !== 'string' ||
+    !value.title.trim() ||
+    !(value.description === null || typeof value.description === 'string') ||
+    typeof value.submitLabel !== 'string' ||
+    !value.submitLabel.trim() ||
+    !['open', 'submitted', 'expired', 'cancelled'].includes(
+      String(value.status),
+    ) ||
+    typeof value.expiresAt !== 'string' ||
+    !Array.isArray(value.fields) ||
+    value.fields.length < 1 ||
+    value.fields.length > 20
+  )
+    return false;
+  const keys = new Set<string>();
+  return value.fields.every((field) => {
+    if (
+      !isRecord(field) ||
+      !hasOnlyKeys(field, [
+        'key',
+        'label',
+        'type',
+        'required',
+        'placeholder',
+        'options',
+        'value',
+      ]) ||
+      typeof field.key !== 'string' ||
+      !field.key.trim() ||
+      keys.has(field.key) ||
+      typeof field.label !== 'string' ||
+      !field.label.trim() ||
+      !['text', 'textarea', 'tel', 'number', 'select', 'checkbox'].includes(
+        String(field.type),
+      ) ||
+      typeof field.required !== 'boolean' ||
+      !(field.placeholder === null || typeof field.placeholder === 'string')
+    )
+      return false;
+    if (field.type === 'select') {
+      if (
+        !Array.isArray(field.options) ||
+        field.options.length < 1 ||
+        field.options.length > 50 ||
+        !field.options.every(
+          (option) =>
+            isRecord(option) &&
+            hasOnlyKeys(option, ['value', 'label']) &&
+            typeof option.value === 'string' &&
+            option.value.length > 0 &&
+            option.value.length <= 160 &&
+            typeof option.label === 'string' &&
+            option.label.length > 0 &&
+            option.label.length <= 200,
+        )
+      )
+        return false;
+    } else if (field.options !== null) return false;
+    if (
+      field.value !== undefined &&
+      field.value !== null &&
+      !['string', 'number', 'boolean'].includes(typeof field.value)
+    )
+      return false;
+    keys.add(field.key);
+    return true;
+  });
+}
+
+function isDynamicFormResult(value: unknown): value is ChatDynamicFormResult {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ['formId', 'revision', 'status', 'result', 'issues']) ||
+    !isUuid(value.formId) ||
+    typeof value.revision !== 'number' ||
+    !Number.isSafeInteger(value.revision) ||
+    value.revision <= 0 ||
+    !['open', 'submitted', 'expired', 'cancelled'].includes(
+      String(value.status),
+    ) ||
+    !(value.result === null || isRecord(value.result)) ||
+    !Array.isArray(value.issues)
+  )
+    return false;
+  if (value.result !== null) {
+    if (
+      !hasOnlyKeys(value.result, ['kind', 'reference']) ||
+      typeof value.result.kind !== 'string' ||
+      !isRecord(value.result.reference) ||
+      Object.values(value.result.reference).some(
+        (item) => item !== null && !['string', 'number'].includes(typeof item),
+      )
+    )
+      return false;
+  }
+  return value.issues.every(
+    (issue) =>
+      isRecord(issue) &&
+      hasOnlyKeys(issue, ['key', 'code', 'message']) &&
+      (issue.key === undefined || typeof issue.key === 'string') &&
+      typeof issue.code === 'string' &&
+      typeof issue.message === 'string',
+  );
 }
 
 function isPurchaseReference(value: unknown): value is PurchaseReference {

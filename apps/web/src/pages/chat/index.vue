@@ -63,6 +63,10 @@ const {
   updatePurchase,
   selectPurchaseAddress,
   saveDraftAddress,
+  dynamicFormSubmitting,
+  dynamicFormError,
+  submitDynamicForm,
+  cancelDynamicForm,
   retryPurchaseAddresses,
   discardPurchase,
   confirmPurchaseOrder,
@@ -158,6 +162,8 @@ const {
               :has-earlier-messages="hasEarlierMessages"
               :is-loading-earlier-messages="isLoadingEarlierMessages"
               :history-error="historyError"
+              :dynamic-form-submitting="dynamicFormSubmitting"
+              :dynamic-form-error="dynamicFormError"
               @load-earlier="loadEarlierMessages"
               @more-products="loadMoreProducts"
               @buy-product="buyProduct"
@@ -165,6 +171,8 @@ const {
               @open-order="loadOrder"
               @cancel-candidate-order="cancelCandidateOrder"
               @retry-history="loadEarlierMessages"
+              @submit-dynamic-form="submitDynamicForm"
+              @cancel-dynamic-form="cancelDynamicForm"
             />
           </div>
           <div

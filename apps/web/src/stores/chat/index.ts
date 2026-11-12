@@ -34,6 +34,10 @@ import type {
   Conversation,
 } from '@/api/types/chat';
 import type {
+  ChatDynamicForm,
+  ChatDynamicFormResult,
+} from '@/api/types/chat-dynamic-form';
+import type {
   PatchPurchasePayload,
   PurchaseDraftResponse,
   PurchaseSkuOption,
@@ -713,6 +717,24 @@ export const useChatStore = defineStore('chat', () => {
     });
   }
 
+  function applyDynamicFormResult(
+    formId: string,
+    result: ChatDynamicFormResult,
+  ): void {
+    const session = activeSession.value;
+    if (!session) return;
+    updateSession(session.key, {
+      messages: session.messages.map((message) => ({
+        ...message,
+        forms: message.forms.map((form: ChatDynamicForm) =>
+          form.formId === formId
+            ? { ...form, status: result.status, result: result.result }
+            : form,
+        ),
+      })),
+    });
+  }
+
   function flushConversation(id: string | null, keepalive = false) {
     const token = auth.state.token;
     if (!id || !token) return;
@@ -1364,5 +1386,6 @@ export const useChatStore = defineStore('chat', () => {
     discardPurchase,
     confirmPurchaseOrder,
     markOrderCancellationComplete,
+    applyDynamicFormResult,
   };
 });

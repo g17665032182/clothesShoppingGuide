@@ -13,6 +13,16 @@ import {
 import type { UserAddress } from '@/api/types/user-addresses';
 import { ApiError } from '@/api';
 import type { ChatTryOnAction } from '@/api/types/chat';
+import type {
+  ChatDynamicForm,
+  ChatDynamicFormResult,
+  DynamicFormValues,
+} from '@/api/types/chat-dynamic-form';
+import {
+  cancelDynamicForm,
+  getDynamicForm,
+  submitDynamicForm,
+} from '@/api/modules/chat-dynamic-form';
 
 export function useChatPage() {
   const chat = useChatStore();
@@ -37,6 +47,9 @@ export function useChatPage() {
   let pendingAddressSave: { fingerprint: string; requestKey: string } | null =
     null;
   let disposed = false;
+  const dynamicFormSubmitting = ref<Record<string, boolean>>({});
+  const dynamicFormErrors = ref<Record<string, string>>({});
+  const dynamicFormControllers = new Map<string, AbortController>();
   useErrorToast(() => chat.errorMessage);
   useErrorToast(() => chat.purchase.errorMessage);
   useErrorToast(() => chat.conversationListError);
@@ -67,6 +80,11 @@ export function useChatPage() {
       purchaseAddressStatus.value = 'idle';
       addressSaveStatus.value = 'idle';
       pendingAddressSave = null;
+      for (const controller of dynamicFormControllers.values())
+        controller.abort();
+      dynamicFormControllers.clear();
+      dynamicFormSubmitting.value = {};
+      dynamicFormErrors.value = {};
       replacementDialogOpen.value = false;
       replacementProductId.value = null;
       if (candidateCancellationSessionKey.value !== null) {
@@ -149,6 +167,205 @@ export function useChatPage() {
     const content = draft.value.trim();
     draft.value = '';
     void chat.sendMessage(content);
+  }
+
+  function formResult(form: ChatDynamicForm): ChatDynamicFormResult {
+    return {
+      formId: form.formId,
+      revision: form.revision,
+      status: form.status,
+      result: form.result ?? null,
+      issues: [],
+    };
+  }
+
+  function publicIssues(error: unknown): ChatDynamicFormResult['issues'] {
+    if (
+      !(error instanceof ApiError) ||
+      !error.details ||
+      typeof error.details !== 'object'
+    )
+      return [];
+    const issues = (error.details as { issues?: unknown }).issues;
+    if (!Array.isArray(issues)) return [];
+    return issues.flatMap((issue) => {
+      if (!issue || typeof issue !== 'object') return [];
+      const value = issue as Record<string, unknown>;
+      return typeof value.code === 'string' && typeof value.message === 'string'
+        ? [
+            {
+              key: typeof value.key === 'string' ? value.key : '',
+              code: value.code,
+              message: value.message,
+            },
+          ]
+        : [];
+    });
+  }
+
+  function isCurrentFormRequest(
+    sessionKey: string | null,
+    conversationId: string,
+    formId: string,
+    controller: AbortController,
+  ): boolean {
+    return (
+      !disposed &&
+      !controller.signal.aborted &&
+      sessionKey === chat.activeSessionKey &&
+      conversationId === chat.activeConversationId &&
+      dynamicFormControllers.get(formId) === controller &&
+      auth.state.user?.id !== undefined
+    );
+  }
+
+  async function submitDynamicFormFromCard(
+    form: ChatDynamicForm,
+    values: DynamicFormValues,
+  ): Promise<void> {
+    const token = auth.state.token;
+    const conversationId = chat.activeConversationId;
+    const sessionKey = chat.activeSessionKey;
+    if (!token || !conversationId || dynamicFormSubmitting.value[form.formId])
+      return;
+    const controller = new AbortController();
+    dynamicFormControllers.get(form.formId)?.abort();
+    dynamicFormControllers.set(form.formId, controller);
+    dynamicFormSubmitting.value = {
+      ...dynamicFormSubmitting.value,
+      [form.formId]: true,
+    };
+    dynamicFormErrors.value = { ...dynamicFormErrors.value, [form.formId]: '' };
+    try {
+      const response = await submitDynamicForm(
+        token,
+        conversationId,
+        form.formId,
+        { revision: form.revision, values },
+        controller.signal,
+      );
+      if (
+        !isCurrentFormRequest(
+          sessionKey,
+          conversationId,
+          form.formId,
+          controller,
+        )
+      )
+        return;
+      chat.applyDynamicFormResult(form.formId, formResult(response));
+    } catch (error) {
+      if (
+        !isCurrentFormRequest(
+          sessionKey,
+          conversationId,
+          form.formId,
+          controller,
+        )
+      )
+        return;
+      if (error instanceof ApiError && error.status === 422) {
+        chat.applyDynamicFormResult(form.formId, {
+          ...formResult(form),
+          issues: publicIssues(error),
+        });
+      } else if (error instanceof ApiError && error.status === 409) {
+        try {
+          const latest = await getDynamicForm(
+            token,
+            conversationId,
+            form.formId,
+            controller.signal,
+          );
+          if (
+            isCurrentFormRequest(
+              sessionKey,
+              conversationId,
+              form.formId,
+              controller,
+            )
+          )
+            chat.applyDynamicFormResult(form.formId, formResult(latest));
+        } catch {
+          dynamicFormErrors.value = {
+            ...dynamicFormErrors.value,
+            [form.formId]: '表单状态已变化，请刷新后重试',
+          };
+        }
+      } else {
+        dynamicFormErrors.value = {
+          ...dynamicFormErrors.value,
+          [form.formId]:
+            error instanceof Error ? error.message : '提交表单失败',
+        };
+      }
+    } finally {
+      if (dynamicFormControllers.get(form.formId) === controller) {
+        dynamicFormControllers.delete(form.formId);
+        dynamicFormSubmitting.value = {
+          ...dynamicFormSubmitting.value,
+          [form.formId]: false,
+        };
+      }
+    }
+  }
+
+  async function cancelDynamicFormFromCard(
+    form: ChatDynamicForm,
+  ): Promise<void> {
+    const token = auth.state.token;
+    const conversationId = chat.activeConversationId;
+    const sessionKey = chat.activeSessionKey;
+    if (!token || !conversationId || dynamicFormSubmitting.value[form.formId])
+      return;
+    const controller = new AbortController();
+    dynamicFormControllers.get(form.formId)?.abort();
+    dynamicFormControllers.set(form.formId, controller);
+    dynamicFormSubmitting.value = {
+      ...dynamicFormSubmitting.value,
+      [form.formId]: true,
+    };
+    try {
+      const response = await cancelDynamicForm(
+        token,
+        conversationId,
+        form.formId,
+        form.revision,
+        controller.signal,
+      );
+      if (
+        isCurrentFormRequest(
+          sessionKey,
+          conversationId,
+          form.formId,
+          controller,
+        )
+      )
+        chat.applyDynamicFormResult(form.formId, formResult(response));
+    } catch (error) {
+      if (
+        isCurrentFormRequest(
+          sessionKey,
+          conversationId,
+          form.formId,
+          controller,
+        )
+      ) {
+        dynamicFormErrors.value = {
+          ...dynamicFormErrors.value,
+          [form.formId]:
+            error instanceof Error ? error.message : '取消表单失败',
+        };
+      }
+    } finally {
+      if (dynamicFormControllers.get(form.formId) === controller) {
+        dynamicFormControllers.delete(form.formId);
+        dynamicFormSubmitting.value = {
+          ...dynamicFormSubmitting.value,
+          [form.formId]: false,
+        };
+      }
+    }
   }
 
   function sendTryOnAction(request: {
@@ -428,6 +645,11 @@ export function useChatPage() {
     purchaseAddresses,
     purchaseAddressStatus,
     addressSaveStatus,
+    dynamicFormSubmitting: (formId: string) =>
+      Boolean(dynamicFormSubmitting.value[formId]),
+    dynamicFormError: (formId: string) => dynamicFormErrors.value[formId] ?? '',
+    submitDynamicForm: submitDynamicFormFromCard,
+    cancelDynamicForm: cancelDynamicFormFromCard,
     retryPurchaseAddresses: loadPurchaseAddresses,
     canSend,
     handleKeydown,

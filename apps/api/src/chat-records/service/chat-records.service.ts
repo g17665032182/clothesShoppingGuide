@@ -86,6 +86,11 @@ import {
 } from '../../virtual-try-on/port/chat-try-on.port.js';
 import { createChatTryOnTool } from '../try-on/chat-try-on.tool.js';
 import type { BaseMessage } from '@langchain/core/messages';
+import {
+  ChatDynamicFormService,
+  type DynamicFormDefinition,
+} from '../../chat-dynamic-form/index.js';
+import { createRequestDynamicFormTool } from '../../llm/tools/request-dynamic-form.tool.js';
 
 export type Page<T> = {
   items: T[];
@@ -124,6 +129,7 @@ export type PersistedChatOutput = ChatOutput & {
   title: string;
   cards: ChatDisplayData['cards'];
   purchase: ChatDisplayData['purchase'];
+  forms: DynamicFormDefinition[];
   tryOnResult?: ChatTryOnResult;
   tryOnStatus?: ChatTryOnStatus;
 };
@@ -131,6 +137,7 @@ export type PersistedChatOutput = ChatOutput & {
 export type ChatStreamEvent =
   | ChatDisplayEvent
   | { type: 'purchase'; purchase: NonNullable<ChatDisplayData['purchase']> }
+  | { type: 'form'; form: DynamicFormDefinition }
   | {
       type: 'start';
       conversationId: string;
@@ -176,6 +183,7 @@ type PreparedChat = {
   purchaseState: PurchaseRunState;
   purchaseToolUsed: boolean;
   purchaseReferencedDraftId?: string;
+  pendingDynamicForms: DynamicFormDefinition[];
   tryOnAction?: TryOnActionInput;
 };
 
@@ -237,6 +245,8 @@ export class ChatRecordsService {
     @Optional()
     @Inject(CHAT_TRY_ON_PORT)
     private readonly tryOn?: ChatTryOnPort,
+    @Optional()
+    private readonly dynamicForms?: ChatDynamicFormService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -248,6 +258,11 @@ export class ChatRecordsService {
       : undefined;
     this.applyTryOnDisplay(display, tryOn?.outcome);
     const result = await this.runChatModel(prepared, display, tryOn);
+    // 非流式接口没有 SSE 事件通道，模型工具创建的表单在保存前写入公开快照并直接返回。
+    const forms = prepared.pendingDynamicForms.splice(0);
+    for (const form of forms) {
+      this.displayService.stageDynamicForm(display, form);
+    }
     if (
       result.finalTraceSequence === null ||
       result.finalTraceSequence === undefined
@@ -266,6 +281,7 @@ export class ChatRecordsService {
       title: prepared.persistedConversation.title,
       cards: display.cards,
       purchase: display.purchase,
+      forms,
       ...(display.tryOnResult ? { tryOnResult: display.tryOnResult } : {}),
       ...(display.tryOnStatus ? { tryOnStatus: display.tryOnStatus } : {}),
     };
@@ -351,6 +367,10 @@ export class ChatRecordsService {
           if (next.value.type === 'delta') {
             yield next.value;
           } else {
+            for (const form of prepared.pendingDynamicForms.splice(0)) {
+              this.displayService.stageDynamicForm(display, form);
+              yield { type: 'form', form };
+            }
             const event = this.displayService.apply(display, next.value);
             if (event) yield event;
           }
@@ -591,6 +611,7 @@ export class ChatRecordsService {
       contextWindowTokens: this.contextService.getContextWindow(),
       purchaseState,
       purchaseToolUsed: false,
+      pendingDynamicForms: [],
       ...(dto.tryOnAction ? { tryOnAction: dto.tryOnAction } : {}),
     };
   }
@@ -978,6 +999,21 @@ export class ChatRecordsService {
         (draftId) => {
           prepared.purchaseToolUsed = true;
           if (draftId) prepared.purchaseReferencedDraftId = draftId;
+        },
+      ),
+      createRequestDynamicFormTool(
+        async (input) => {
+          if (!this.dynamicForms)
+            throw new ServiceUnavailableException('动态表单暂不可用');
+          return this.dynamicForms.request({
+            userId: prepared.persistedConversation.userId,
+            conversationId: prepared.persistedConversation.id,
+            runId: prepared.runId,
+            input,
+          });
+        },
+        (form) => {
+          prepared.pendingDynamicForms.push(form);
         },
       ),
     ];

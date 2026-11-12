@@ -18,6 +18,7 @@ import type {
   ChatCardSelection,
   ChatTryOnResult,
   ChatTryOnStatus,
+  ChatDynamicFormReference,
 } from './chat-display.types.js';
 
 export const MAX_DISPLAY_BYTES = 16_384;
@@ -50,6 +51,40 @@ const chatTryOnStatusSchema = z.strictObject({
   status: z.enum(['failed', 'timed_out']),
   taskId: z.uuid().optional(),
   code: z.string().regex(/^[A-Z0-9_]{1,80}$/u),
+});
+const dynamicFormReferenceSchema = z.strictObject({
+  formId: z.uuid(),
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  formKind: z.string().trim().min(1).max(80),
+  status: z.enum(['open', 'submitted', 'expired', 'cancelled']),
+});
+const dynamicFormFieldSchema = z.strictObject({
+  key: z.string().trim().min(1).max(80),
+  label: z.string().trim().min(1).max(100),
+  type: z.enum(['text', 'textarea', 'tel', 'number', 'select', 'checkbox']),
+  required: z.boolean(),
+  placeholder: z.string().trim().max(200).nullable().optional(),
+  options: z
+    .array(
+      z.strictObject({
+        value: z.string().trim().min(1).max(160),
+        label: z.string().trim().min(1).max(160),
+      }),
+    )
+    .max(50)
+    .nullable()
+    .optional(),
+});
+const dynamicFormDefinitionSchema = z.strictObject({
+  formId: z.uuid(),
+  formKind: z.string().trim().min(1).max(80),
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(500).nullable(),
+  fields: z.array(dynamicFormFieldSchema).min(1).max(20),
+  submitLabel: z.string().trim().min(1).max(80),
+  status: z.enum(['open', 'submitted', 'expired', 'cancelled']),
+  expiresAt: z.iso.datetime({ offset: true }),
 });
 
 export function restoreChatTryOnResult(value: unknown): ChatTryOnResult | null {
@@ -258,6 +293,7 @@ const envelopeSchema = z.object({
     .max(5)
     .default([]),
   purchase: purchaseReferenceSchema.nullable().default(null),
+  forms: z.array(dynamicFormReferenceSchema).max(5).default([]),
   tryOnResult: chatTryOnResultSchema.optional(),
   tryOnStatus: chatTryOnStatusSchema.optional(),
   context: z
@@ -309,6 +345,7 @@ export function jsonBytes(value: unknown): number {
 }
 
 export function safeToolName(name: string): string {
+  if (name === 'request_dynamic_form') return '动态表单';
   return name === 'local_echo_tool' || name === '本地验证工具'
     ? '本地验证工具'
     : '工具';
@@ -426,6 +463,7 @@ export function displayEnvelope(
     orderCancellationCandidates: data.orderCancellationCandidates,
     context: data.context,
     purchase: data.purchase,
+    ...(data.forms ? { forms: data.forms } : {}),
     ...(data.tryOnResult ? { tryOnResult: data.tryOnResult } : {}),
     ...(data.tryOnStatus ? { tryOnStatus: data.tryOnStatus } : {}),
   };
@@ -448,6 +486,12 @@ export function reservedDisplayBytes(data: ChatDisplayData): number {
       orderCancellationCandidates: ORDER_CANDIDATE_RESERVATION,
       // 预留流末绑定最大合法购买引用所需空间。
       purchase: PURCHASE_REFERENCE_RESERVATION,
+      forms: Array.from({ length: 5 }, () => ({
+        formId: BINDING_ID_RESERVATION,
+        revision: Number.MAX_SAFE_INTEGER,
+        formKind: 'x'.repeat(80),
+        status: 'open' as const,
+      })),
       tryOnResult: {
         taskId: BINDING_ID_RESERVATION,
         product: {
@@ -565,6 +609,7 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
       orderCancellationCandidates,
       context,
       purchase: source.purchase,
+      forms: source.forms ?? [],
       ...(source.tryOnResult
         ? { tryOnResult: source.tryOnResult as ChatTryOnResult }
         : {}),
@@ -574,6 +619,20 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
     },
     source.assistantMessageId,
   );
+}
+
+export function restoreDynamicFormDefinition(value: unknown): DynamicFormDefinition | null {
+  const parsed = dynamicFormDefinitionSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+type DynamicFormDefinition = z.infer<typeof dynamicFormDefinitionSchema>;
+
+export function restoreDynamicFormReference(
+  value: unknown,
+): ChatDynamicFormReference | null {
+  const parsed = dynamicFormReferenceSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 export function restoreChatCard(value: unknown): ChatCard | null {

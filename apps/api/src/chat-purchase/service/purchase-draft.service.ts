@@ -20,6 +20,7 @@ import type {
   PatchPurchaseInput,
   StartPurchaseInput,
 } from '../dto/chat-purchase.schema.js';
+import type { PurchaseDraftResponse } from '../dto/chat-purchase-response.js';
 import {
   PurchaseProjectionService,
   type PurchaseSku,
@@ -34,6 +35,11 @@ export type PurchaseRunState = {
     version: number;
     orderId: string | null;
   } | null;
+};
+
+export type PurchaseDynamicFormState = {
+  draft: PurchaseDraftResponse;
+  skus: PurchaseSku[];
 };
 
 @Injectable()
@@ -176,6 +182,38 @@ export class PurchaseDraftService {
         ? await this.orders.getForUser(userId, draft.orderId)
         : null,
     };
+  }
+
+  /** 为动态表单提供当前草稿及真实 SKU 选项，绝不返回实体或精确库存。 */
+  public async dynamicFormState(
+    userId: string,
+    conversationId: string,
+  ): Promise<PurchaseDynamicFormState> {
+    return this.manager().transactional(async (transaction) => {
+      await this.access.lockOwnedInTransaction(
+        transaction,
+        userId,
+        conversationId,
+      );
+      const draft = await this.latest(transaction, userId, conversationId);
+      if (
+        !draft ||
+        !['collecting', 'ready'].includes(draft.status) ||
+        draft.expiresAt <= (await this.now(transaction))
+      ) {
+        throw new NotFoundException('当前没有可编辑的购买草稿');
+      }
+      const product = await this.catalog.getPurchaseSpecifications(
+        transaction,
+        draft.productExternalId,
+      );
+      if (!product) throw new NotFoundException('商品信息暂不可用');
+      await this.refresh(transaction, draft);
+      return {
+        draft: this.projection.project(draft),
+        skus: product.skus,
+      };
+    });
   }
 
   public async start(

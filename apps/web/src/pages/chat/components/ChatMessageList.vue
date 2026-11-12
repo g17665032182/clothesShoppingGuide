@@ -14,6 +14,10 @@ import {
 } from '@/components/ui/message-scroller';
 import { Spinner } from '@/components/ui/spinner';
 import type { ChatMessage, ChatTryOnAction } from '@/api/types/chat';
+import type {
+  ChatDynamicForm,
+  DynamicFormValues,
+} from '@/api/types/chat-dynamic-form';
 import ChatAssistantMessage from './ChatAssistantMessage.vue';
 
 const props = withDefaults(
@@ -24,11 +28,15 @@ const props = withDefaults(
     hasEarlierMessages?: boolean;
     isLoadingEarlierMessages?: boolean;
     historyError?: string;
+    dynamicFormSubmitting?: (formId: string) => boolean;
+    dynamicFormError?: (formId: string) => string;
   }>(),
   {
     hasEarlierMessages: false,
     isLoadingEarlierMessages: false,
     historyError: '',
+    dynamicFormSubmitting: () => false,
+    dynamicFormError: () => '',
   },
 );
 
@@ -40,6 +48,12 @@ const emit = defineEmits<{
   (event: 'tryOn', request: { content: string; action: ChatTryOnAction }): void;
   (event: 'openOrder', orderId: string): void;
   (event: 'cancelCandidateOrder', orderId: string): void;
+  (
+    event: 'submitDynamicForm',
+    form: ChatDynamicForm,
+    values: DynamicFormValues,
+  ): void;
+  (event: 'cancelDynamicForm', form: ChatDynamicForm): void;
 }>();
 
 const sessionGapMs = 5 * 60 * 1000;
@@ -142,6 +156,8 @@ function formatSessionTime(createdAt: string): string {
             <ChatAssistantMessage
               v-else
               :message="message"
+              :dynamic-form-submitting="dynamicFormSubmitting"
+              :dynamic-form-error="dynamicFormError"
               :stream-duration="
                 isSending && message.id === messages.at(-1)?.id
                   ? streamDuration
@@ -157,6 +173,10 @@ function formatSessionTime(createdAt: string): string {
               @cancel-candidate-order="
                 (orderId) => emit('cancelCandidateOrder', orderId)
               "
+              @submit-dynamic-form="
+                (form, values) => emit('submitDynamicForm', form, values)
+              "
+              @cancel-dynamic-form="(form) => emit('cancelDynamicForm', form)"
             />
           </MessageScrollerItem>
           <MessageScrollerItem

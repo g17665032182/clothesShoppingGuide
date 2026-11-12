@@ -21,6 +21,7 @@ import { ChatConversationAccessModule } from './conversation-access/index.js';
 import { OrdersModule } from '../orders/index.js';
 import { UserAddressesModule } from '../user-addresses/index.js';
 import { VirtualTryOnModule } from '../virtual-try-on/virtual-try-on.module.js';
+import { ChatDynamicFormModule } from '../chat-dynamic-form/index.js';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { VirtualTryOnModule } from '../virtual-try-on/virtual-try-on.module.js';
     OrdersModule,
     UserAddressesModule,
     VirtualTryOnModule,
+    ChatDynamicFormModule,
   ],
   controllers: [
     ChatRecordsController,

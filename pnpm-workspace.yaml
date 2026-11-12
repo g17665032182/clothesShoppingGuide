@@ -4,6 +4,8 @@ packages:
   - 'packages/*'
 
 allowBuilds:
+  '@formily/vue': false
   '@scarf/scarf': false
   '@swc/core': true
   esbuild: true
+  vue-demi: false

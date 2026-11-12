@@ -23,6 +23,7 @@ export function toChatMessage(message: ChatApiMessage): ChatMessage {
     purchase: message.purchase ?? null,
     tryOnResult: message.tryOnResult ?? null,
     tryOnStatus: message.tryOnStatus ?? null,
+    forms: [],
     status: 'saved',
   };
 }
@@ -46,6 +47,7 @@ export function createPendingMessage(
     purchase: null,
     tryOnResult: null,
     tryOnStatus: null,
+    forms: [],
     status: 'submitted',
   };
 }
@@ -66,6 +68,25 @@ export function applyTurnEvent(
   if (event.type === 'sources') message.sources = event.sources;
   if (event.type === 'card') message.cards.push(event.card);
   if (event.type === 'purchase') message.purchase = event.purchase;
+  if (event.type === 'form') {
+    const index = message.forms.findIndex(
+      (form) => form.formId === event.form.formId,
+    );
+    if (index < 0) message.forms.push(event.form);
+    else message.forms[index] = event.form;
+  }
+  if (event.type === 'form-result') {
+    const index = message.forms.findIndex(
+      (form) => form.formId === event.result.formId,
+    );
+    if (index >= 0) {
+      message.forms[index] = {
+        ...message.forms[index],
+        revision: event.result.revision,
+        status: event.result.status,
+      };
+    }
+  }
   if (event.type === 'try-on-status') {
     message.tryOnStatus = { ...event.status };
   }

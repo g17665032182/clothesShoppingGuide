@@ -46,6 +46,7 @@ import {
   safeToolName,
   restoreChatTryOnResult,
   restoreChatTryOnStatus,
+  restoreDynamicFormDefinition,
 } from './chat-display.projection.js';
 import type {
   ChatActivity,
@@ -55,6 +56,7 @@ import type {
   OrderCancellationCandidate,
   PurchaseReference,
   ChatTryOnResult,
+  ChatDynamicFormReference,
 } from './chat-display.types.js';
 
 @Injectable()
@@ -99,6 +101,7 @@ export class ChatDisplayService {
       orderCancellationCandidates: [],
       context: projectContext(contextWindowTokens, null),
       purchase: null,
+      forms: [],
     };
     this.sourceNamespaces.set(data, randomUUID());
     return data;
@@ -119,6 +122,32 @@ export class ChatDisplayService {
     staged.set(key, (staged.get(key) ?? 0) + 1);
     this.stagedCardOutputs.set(data, staged);
     return card;
+  }
+
+  /**
+   * 只把动态表单的安全引用写入公开快照，完整定义仅通过本轮 SSE 发送。
+   */
+  public stageDynamicForm(
+    data: ChatDisplayData,
+    value: unknown,
+  ): ChatDynamicFormReference {
+    const definition = restoreDynamicFormDefinition(value);
+    if (!definition) {
+      throw new ServiceUnavailableException('动态表单数据不符合安全要求');
+    }
+    const reference: ChatDynamicFormReference = {
+      formId: definition.formId,
+      revision: definition.revision,
+      formKind: definition.formKind,
+      status: definition.status,
+    };
+    const currentForms = data.forms ?? [];
+    if (!currentForms.some((item) => item.formId === reference.formId)) {
+      const forms = [...currentForms, reference].slice(-5);
+      this.assertBudget({ ...data, forms });
+      data.forms = forms;
+    }
+    return reference;
   }
 
   public apply(
@@ -461,6 +490,7 @@ export class ChatDisplayService {
         orderCancellationCandidates: restored.orderCancellationCandidates,
         context: restored.context,
         purchase: restored.purchase,
+        forms: restored.forms ?? [],
         ...(restored.tryOnResult ? { tryOnResult: restored.tryOnResult } : {}),
         ...(restored.tryOnStatus ? { tryOnStatus: restored.tryOnStatus } : {}),
       });

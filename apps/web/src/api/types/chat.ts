@@ -1,4 +1,9 @@
 import type { PurchaseReference } from './chat-purchase';
+import type {
+  ChatDynamicForm,
+  ChatDynamicFormReference,
+  ChatDynamicFormResult,
+} from './chat-dynamic-form';
 
 export type MessageRole = 'assistant' | 'user';
 
@@ -178,6 +183,7 @@ export interface ChatMessage {
   purchase: PurchaseReference | null;
   tryOnResult: ChatTryOnResult | null;
   tryOnStatus: ChatTryOnStatus | null;
+  forms: ChatDynamicForm[];
   status: ChatTurnStatus;
 }
 
@@ -207,6 +213,7 @@ export interface ChatApiMessage {
   purchase?: PurchaseReference | null;
   tryOnResult?: ChatTryOnResult | null;
   tryOnStatus?: ChatTryOnStatus | null;
+  forms?: ChatDynamicFormReference[];
 }
 
 export interface ChatApiConversation {
@@ -285,6 +292,8 @@ export type ChatStreamEvent =
       orderCancellationCandidates: OrderCancellationCandidate[];
     }
   | { type: 'purchase'; purchase: PurchaseReference | null }
+  | { type: 'form'; form: ChatDynamicForm }
+  | { type: 'form-result'; result: ChatDynamicFormResult }
   | {
       type: 'error';
       message: string;

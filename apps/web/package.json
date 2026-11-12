@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@crazydos/vue-markdown": "^1.1.4",
+    "@formily/core": "2.3.7",
+    "@formily/vue": "2.3.7",
     "@lucide/vue": "^1.61.0",
     "@vueuse/core": "^15.0.0",
     "axios": "^1.20.0",

@@ -43,9 +43,14 @@ const PURCHASE_TOOL_NAMES = new Set([
   'update_purchase_draft',
   'discard_purchase_draft',
 ]);
+const DYNAMIC_FORM_TOOL_NAMES = new Set(['request_dynamic_form']);
 
 function isPurchaseTool(name: string): boolean {
   return PURCHASE_TOOL_NAMES.has(name);
+}
+
+function isHiddenTool(name: string): boolean {
+  return isPurchaseTool(name) || DYNAMIC_FORM_TOOL_NAMES.has(name);
 }
 
 function payloadToolCalls(payload: unknown): Array<{
@@ -64,7 +69,7 @@ function payloadToolCalls(payload: unknown): Array<{
     const id = asString(call.id);
     const name = asString(call.name);
     const args = asRecord(call.args ?? call.arguments);
-    return id && name && !isPurchaseTool(name) ? [{ id, name, args }] : [];
+    return id && name && !isHiddenTool(name) ? [{ id, name, args }] : [];
   });
 }
 
@@ -97,7 +102,7 @@ export function mapTraceEventsToMessages(
           const call = asRecord(item);
           const id = asString(call.id);
           const name = asString(call.name);
-          if (id && name && isPurchaseTool(name)) purchaseCallIds.add(id);
+          if (id && name && isHiddenTool(name)) purchaseCallIds.add(id);
         }
       }
     }
@@ -108,7 +113,7 @@ export function mapTraceEventsToMessages(
     if (!messageId || !toolCallId || !toolName) {
       continue;
     }
-    if (isPurchaseTool(toolName)) {
+    if (isHiddenTool(toolName)) {
       purchaseCallIds.add(toolCallId);
       continue;
     }
@@ -163,7 +168,7 @@ export function mapTraceEventsToMessages(
       event.eventType === 'tool_result' &&
       event.toolCallId &&
       !purchaseCallIds.has(event.toolCallId) &&
-      !isPurchaseTool(event.toolName ?? '')
+      !isHiddenTool(event.toolName ?? '')
     ) {
       messages.push({
         id,
