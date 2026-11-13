@@ -206,6 +206,7 @@ export const useChatStore = defineStore('chat', () => {
         errorMessage: '',
         requestVersion: 0,
         autoPromptedStartKeys: [],
+        openFormRequested: false,
       },
   );
 
@@ -224,6 +225,10 @@ export const useChatStore = defineStore('chat', () => {
     updateSession(key, {
       purchase: { ...session.purchase, ...patch },
     });
+  }
+
+  function acknowledgePurchaseFormRequest(sessionKey: string): void {
+    updatePurchase(sessionKey, { openFormRequested: false });
   }
 
   function purchaseSession(conversationId: string): ChatSession | undefined {
@@ -1256,6 +1261,9 @@ export const useChatStore = defineStore('chat', () => {
           if (purchaseConversationId)
             void loadPurchaseDraft(purchaseConversationId);
         }
+        if (event.type === 'purchase-form') {
+          updatePurchase(key, { openFormRequested: true });
+        }
         applyTurnEvent(task.assistant, event, true);
         if (event.type === 'done' && task.pendingProductResults.length) {
           task.assistant.productResults.push(...task.pendingProductResults);
@@ -1485,6 +1493,7 @@ export const useChatStore = defineStore('chat', () => {
     selectPurchaseAddressFromCard,
     discardPurchase,
     confirmPurchaseOrder,
+    acknowledgePurchaseFormRequest,
     markOrderCancellationComplete,
     applyDynamicFormResult,
   };

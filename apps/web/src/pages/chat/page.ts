@@ -111,6 +111,44 @@ export function useChatPage() {
     { flush: 'sync' },
   );
 
+  async function openRequestedPurchaseForm(sessionKey: string): Promise<void> {
+    const conversationId = chat.activeConversationId;
+    const userId = auth.state.user?.id;
+    if (
+      disposed ||
+      chat.activeSessionKey !== sessionKey ||
+      !conversationId ||
+      !chat.purchase.openFormRequested
+    )
+      return;
+
+    const result = await chat.loadPurchaseDraft(conversationId);
+    if (
+      disposed ||
+      chat.activeSessionKey !== sessionKey ||
+      chat.activeConversationId !== conversationId ||
+      auth.state.user?.id !== userId ||
+      !chat.purchase.openFormRequested
+    )
+      return;
+
+    chat.acknowledgePurchaseFormRequest(sessionKey);
+    if (
+      result?.draft &&
+      ['collecting', 'ready'].includes(result.draft.status)
+    ) {
+      purchaseDialogOpen.value = true;
+    }
+  }
+
+  watch(
+    () => [chat.activeSessionKey, chat.purchase.openFormRequested] as const,
+    ([sessionKey, requested]) => {
+      if (sessionKey && requested) void openRequestedPurchaseForm(sessionKey);
+    },
+    { immediate: true, flush: 'post' },
+  );
+
   async function loadPurchaseAddresses(): Promise<void> {
     const token = auth.state.token;
     const conversationId = chat.activeConversationId;

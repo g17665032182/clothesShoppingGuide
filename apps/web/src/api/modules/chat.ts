@@ -136,6 +136,7 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'product-results',
       'order-cancellation-candidates',
       'purchase',
+      'purchase-form',
       'form',
       'form-result',
       'done',
@@ -209,6 +210,13 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
         ? data
         : (data.purchase as PurchaseReference | null),
     };
+  }
+  if (
+    eventName === 'purchase-form' &&
+    isRecord(data) &&
+    hasOnlyKeys(data, [])
+  ) {
+    return { type: 'purchase-form' };
   }
   if (
     eventName === 'form' &&

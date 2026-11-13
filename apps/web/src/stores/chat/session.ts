@@ -15,6 +15,7 @@ export interface ChatPurchaseState {
   errorMessage: string;
   requestVersion: number;
   autoPromptedStartKeys: string[];
+  openFormRequested: boolean;
 }
 
 export interface ChatSession {
@@ -61,6 +62,7 @@ export function createChatSession(
       errorMessage: '',
       requestVersion: 0,
       autoPromptedStartKeys: [],
+      openFormRequested: false,
     },
   };
 }

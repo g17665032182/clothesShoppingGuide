@@ -6,6 +6,7 @@ export {
 } from './service/purchase-draft.service.js';
 export type { PurchaseSku } from './service/purchase-projection.service.js';
 export { createPurchaseTools } from './tool/purchase-tools.js';
+export { createRequestPurchaseFormTool } from './tool/request-purchase-form.tool.js';
 export { createSelectShippingAddressTool } from './tool/select-shipping-address.tool.js';
 export type {
   PurchaseReference,

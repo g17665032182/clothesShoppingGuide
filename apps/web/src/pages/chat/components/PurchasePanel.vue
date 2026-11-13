@@ -172,11 +172,10 @@ const isTerminal = computed(() =>
   ),
 );
 const isEditable = computed(
-  () =>
-    Boolean(props.draft) &&
-    !isTerminal.value &&
-    !isBusy.value &&
-    props.status !== 'streaming',
+  () => Boolean(props.draft) && !isTerminal.value && !isBusy.value,
+);
+const canPersist = computed(
+  () => isEditable.value && props.status !== 'streaming',
 );
 const isDirty = computed(() => {
   const draft = props.draft;
@@ -249,7 +248,7 @@ function issueText(issue: PurchaseIssue): string {
 
 function saveChanges(): void {
   const draft = props.draft;
-  if (!draft || !isEditable.value || !isDirty.value) return;
+  if (!draft || !canPersist.value || !isDirty.value) return;
   const payload: {
     skuId?: string | null;
     quantity?: number;
@@ -467,7 +466,7 @@ function updateQuantity(value: string): void {
                 <Button
                   size="sm"
                   variant="outline"
-                  :disabled="!isEditable || status === 'streaming'"
+                  :disabled="!canPersist"
                   @click="emit('selectAddress', savedAddress.id)"
                 >
                   使用此地址
@@ -526,7 +525,7 @@ function updateQuantity(value: string): void {
             <Button
               variant="outline"
               :disabled="
-                !isEditable || isDirty || addressSaveStatus === 'submitting'
+                !canPersist || isDirty || addressSaveStatus === 'submitting'
               "
               @click="emit('saveAddress')"
             >
@@ -553,7 +552,7 @@ function updateQuantity(value: string): void {
           v-if="draft && !isTerminal"
           variant="ghost"
           class="sm:mr-auto"
-          :disabled="!isEditable"
+          :disabled="!canPersist"
           @click="emit('discard')"
         >
           <Trash2 data-icon="inline-start" />放弃本次购买
@@ -572,7 +571,7 @@ function updateQuantity(value: string): void {
           <Button
             v-if="draft && !isTerminal"
             variant="outline"
-            :disabled="!isEditable || !isDirty"
+            :disabled="!canPersist || !isDirty"
             @click="saveChanges"
           >
             <Save data-icon="inline-start" />保存信息

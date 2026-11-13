@@ -316,6 +316,7 @@ export type ChatStreamEvent =
       orderCancellationCandidates: OrderCancellationCandidate[];
     }
   | { type: 'purchase'; purchase: PurchaseReference | null }
+  | { type: 'purchase-form' }
   | { type: 'form'; form: ChatDynamicForm }
   | { type: 'form-result'; result: ChatDynamicFormResult }
   | {

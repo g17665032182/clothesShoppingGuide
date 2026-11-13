@@ -322,3 +322,52 @@ pnpm exec tsx --test src/user-memory/spec/user-memory-task.postgres.spec.ts
 - 弹框正文独立滚动，页脚保留操作；订单状态复用共享中文 Badge，避免显示内部状态码。
 - 原生 Chrome 在现有登录态验证了购买入口、已提交草稿弹框、Escape 关闭、重新打开和订单详情衔接，并检查桌面与 375 × 812 手机视口。未创建或修改购买草稿及订单。
 - `pnpm check` 和 `git diff --check` 通过。浏览器验证仅覆盖上述展示与只读交互，新增购买、表单保存、下单和支付的完整浏览器流程仍未执行。
+
+## 助手请求打开购买弹框（2026-11-13）
+
+### 实现范围
+
+- 新增无参数 `request_purchase_form` 工具，仅注册到 SSE 聊天；服务端按当前用户和会话重新读取草稿，只有 `collecting` 或 `ready` 状态才排入最多一次的空载荷 `purchase-form` 事件。没有可编辑草稿时不发送事件，JSON 聊天不注册该工具。
+- 前端严格解析空事件，按会话暂存一次性请求，并核对当前账号、会话和重新读取的草稿后才打开已有购买弹框。生成期间允许在弹框内本地编辑；保存、选地址、保存地址、放弃和下单仍等待生成结束。
+- 未新增依赖、API 路由、数据库字段或迁移；该信号不进入聊天历史、公开展示元数据或长期记忆。
+
+### 代码与测试文件
+
+- `apps/api/src/chat-purchase/index.ts`
+- `apps/api/src/chat-purchase/tool/request-purchase-form.tool.ts`
+- `apps/api/src/chat-records/service/chat-records.service.ts`
+- `apps/api/src/chat-records/spec/chat-records.service.spec.ts`
+- `apps/web/src/api/modules/chat.ts`
+- `apps/web/src/api/types/chat.ts`
+- `apps/web/src/pages/chat/components/PurchasePanel.vue`
+- `apps/web/src/pages/chat/page.ts`
+- `apps/web/src/stores/chat/index.ts`
+- `apps/web/src/stores/chat/session.ts`
+
+### 更新文档
+
+- `docs/chat-purchase/chat-purchase-design.md`
+- `docs/chat-purchase/chat-purchase-technical.md`
+- `docs/contracts/chat-purchase-crud-contract.md`
+- `docs/contracts/chat-streaming-crud-contract.md`
+- `apps/api/src/llm/context/system-context.md`
+- `apps/api/src/llm/context/shopping-flow.md`
+- `docs/llm/chat-tool-capability-inventory.md`
+- `docs/testing/project-full-validation-plan.md`
+- `README.md`
+- `docs/chat-purchase/chat-purchase-implementation.md`（本记录）
+
+`README.md` 和 `docs/llm/chat-tool-capability-inventory.md` 在本次工作前已有未提交改动；本次在保留原内容的基础上补充相关说明。
+
+### 验证与未完成项
+
+| 检查                                                      | 结果                                                                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| API 全量 `pnpm --filter @clothes-shopping-guide/api test` | 323 项：308 通过、15 项环境门控跳过、0 失败；跳过不记作通过                                      |
+| 本轮 `pnpm format:check`                                  | 未通过：仅未修改的 `docs/chat-purchase/chat-purchase-prd.md` 未通过 Prettier；本记录定向检查通过 |
+| 本轮 `pnpm typecheck` / `pnpm build`                      | 均通过                                                                                           |
+| 本轮 `git diff --check`                                   | 通过                                                                                             |
+| 登录态浏览器交互                                          | 未执行；工具触发表单、切换会话及生成期间编辑/延迟提交尚待验收                                    |
+| 数据库迁移、真实模型及生产服务                            | 本次均未执行；本次没有迁移或生产数据变更                                                         |
+
+本次自动化覆盖可编辑草稿、重复工具调用只发一次、无草稿/终止草稿不发事件，以及 JSON/SSE 注册边界。不得将这些测试描述为登录态浏览器流程已通过。

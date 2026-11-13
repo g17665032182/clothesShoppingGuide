@@ -22,6 +22,9 @@ function createService(
     tools?: boolean;
     userInformation?: boolean;
     cancellationCandidates?: boolean;
+    purchaseForm?: boolean;
+    repeatPurchaseForm?: boolean;
+    purchaseFormStatus?: 'collecting' | 'ready' | 'submitted' | null;
     failedReader?: 'preferences' | 'memory';
     tryOn?: ChatTryOnPort;
     modelFailure?: boolean;
@@ -34,7 +37,20 @@ function createService(
   const bindings: unknown[] = [];
   const traceEvents: unknown[] = [];
   const registeredToolNames: string[][] = [];
+  const purchaseFormReads: Array<[string, string]> = [];
   const contextInputs: Array<{ memoryContext?: string }> = [];
+  const getToolNames = (tools: unknown[]) =>
+    tools.flatMap((item) => {
+      if (
+        typeof item === 'object' &&
+        item !== null &&
+        'name' in item &&
+        typeof item.name === 'string'
+      ) {
+        return [item.name];
+      }
+      return [];
+    });
   let flushCount = 0;
   const manager = {
     persist(value: unknown) {
@@ -83,9 +99,10 @@ function createService(
     chatPrepared: async (
       input: unknown,
       _traceContext: unknown,
-      _tools: unknown,
+      tools: unknown[],
       execution: unknown,
     ) => {
+      registeredToolNames.push(getToolNames(tools));
       modelInputs.push(input);
       modelExecutionOptions.push(execution);
       if (options.modelFailure) throw new Error('controlled model failure');
@@ -102,20 +119,41 @@ function createService(
       _traceContext: unknown,
       extraTools: unknown[] = [],
     ): AsyncGenerator<LlmStreamEvent, LlmEventStreamResult> {
-      registeredToolNames.push(
-        extraTools.flatMap((item) => {
-          if (
+      registeredToolNames.push(getToolNames(extraTools));
+      yield { type: 'delta', content: '第一段' };
+      if (options.purchaseForm) {
+        const requestTool = extraTools.find(
+          (item) =>
             typeof item === 'object' &&
             item !== null &&
             'name' in item &&
-            typeof item.name === 'string'
-          ) {
-            return [item.name];
-          }
-          return [];
-        }),
-      );
-      yield { type: 'delta', content: '第一段' };
+            item.name === 'request_purchase_form',
+        );
+        assert.ok(
+          requestTool &&
+            typeof requestTool === 'object' &&
+            'invoke' in requestTool &&
+            typeof requestTool.invoke === 'function',
+        );
+        const callCount = options.repeatPurchaseForm ? 2 : 1;
+        for (let index = 0; index < callCount; index += 1) {
+          const id = `purchase-form-call-${index}`;
+          yield {
+            type: 'tool-call',
+            id,
+            toolName: 'request_purchase_form',
+            input: {},
+          };
+          const output = await requestTool.invoke({});
+          yield {
+            type: 'tool-result',
+            id,
+            toolName: 'request_purchase_form',
+            status: 'success',
+            output: String(output),
+          };
+        }
+      }
       if (options.tools) {
         yield {
           type: 'tool-call',
@@ -231,6 +269,18 @@ function createService(
     context: '',
     reference: null,
   };
+  const purchaseDrafts = {
+    read: async (userId: string, conversationId: string) => {
+      purchaseFormReads.push([userId, conversationId]);
+      const status = options.purchaseFormStatus ?? null;
+      return {
+        draft: status ? { status } : null,
+        order: null,
+      };
+    },
+    runState: async () => emptyPurchaseState,
+    runStateInTransaction: async () => emptyPurchaseState,
+  };
   const displayService = new ChatDisplayService(
     {} as never,
     {
@@ -256,10 +306,7 @@ function createService(
     displayService,
     preferenceReader as never,
     {} as never,
-    {
-      runState: async () => emptyPurchaseState,
-      runStateInTransaction: async () => emptyPurchaseState,
-    } as never,
+    purchaseDrafts as never,
     { lockOwnedInTransaction: async () => undefined } as never,
     undefined,
     options.tryOn,
@@ -278,6 +325,7 @@ function createService(
     modelInputs,
     modelExecutionOptions,
     registeredToolNames,
+    purchaseFormReads,
     traceEvents,
     bindings,
     contextInputs,
@@ -457,8 +505,79 @@ test('聊天运行时注册统一用户信息和动态表单工具，不再注�
   const names = registeredToolNames.at(-1) ?? [];
   assert.ok(names.includes('get_my_information'));
   assert.ok(names.includes('request_dynamic_form'));
+  assert.ok(names.includes('request_purchase_form'));
   assert.equal(names.includes('list_my_shipping_addresses'), false);
   assert.equal(names.includes('select_my_shipping_address'), false);
+});
+
+test('购买表单请求仅在本人草稿可编辑时发送一次性 SSE 事件', async () => {
+  const { service, purchaseFormReads } = createService({
+    purchaseForm: true,
+    repeatPurchaseForm: true,
+    purchaseFormStatus: 'collecting',
+  });
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '打开本次购买表单' }],
+    } as never,
+  );
+  const received = [];
+  for await (const event of events) received.push(event);
+
+  const start = received.find((event) => event.type === 'start');
+  assert.ok(start?.type === 'start');
+  assert.deepEqual(purchaseFormReads, [
+    ['user-1', start.conversationId],
+    ['user-1', start.conversationId],
+  ]);
+  assert.equal(
+    received.filter((event) => event.type === 'purchase-form').length,
+    1,
+  );
+  assert.deepEqual(
+    received.find((event) => event.type === 'purchase-form'),
+    { type: 'purchase-form' },
+  );
+  assert.equal(JSON.stringify(received).includes('recipient'), false);
+});
+
+test('没有可编辑草稿或草稿已终止时不发送购买表单事件', async () => {
+  for (const purchaseFormStatus of [null, 'submitted'] as const) {
+    const { service } = createService({
+      purchaseForm: true,
+      purchaseFormStatus,
+    });
+    const events = await service.prepareStream(
+      { id: 'user-1' } as never,
+      {
+        messages: [{ role: 'user', content: '打开本次购买表单' }],
+      } as never,
+    );
+    const received = [];
+    for await (const event of events) received.push(event);
+    assert.equal(
+      received.some((event) => event.type === 'purchase-form'),
+      false,
+    );
+  }
+});
+
+test('JSON 聊天不注册仅适用于 SSE 的购买表单请求工具', async () => {
+  const { service, registeredToolNames } = createService({
+    purchaseFormStatus: 'ready',
+  });
+  await service.chat(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '打开购买弹框' }],
+    } as never,
+  );
+
+  assert.equal(
+    registeredToolNames.at(-1)?.includes('request_purchase_form'),
+    false,
+  );
 });
 
 test('待付款候选 SSE 事件与最终 assistant 消息展示绑定一致', async () => {

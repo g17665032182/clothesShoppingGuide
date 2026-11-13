@@ -224,6 +224,7 @@ recipient 的 name trim 1–100、address trim 1–500 且拒绝控制字符；p
 - `get_purchase_draft`：读取当前草稿、完整可选规格、安全状态及缺失字段。
 - `update_purchase_draft`：以 draftId、expectedVersion 和经过同一 schema 的明确字段更新。
 - `discard_purchase_draft`：只放弃未提交草稿，仍要求版本。
+- `request_purchase_form`：仅在 SSE 聊天中注册；无参数调用会通过购买草稿服务重新读取当前本人草稿，只有状态仍为 `collecting` 或 `ready` 才请求打开前端现有购买弹框。工具只返回安全状态，不接收或写入用户填写值。
 
 没有 start、confirm、payment、cancel-order、receipt 工具。start 由卡片按钮直接调用；模型不得从纯文本商品名称创建新购买。工具发现歧义时不修改，继续询问。多个并行工具修改同一版本仅一个成功，其他返回安全 version_conflict 结果，禁止静默重放覆盖。
 
@@ -249,6 +250,8 @@ recipient 的 name trim 1–100、address trim 1–500 且拒绝控制字符；p
 
 消息保存事务内重新核实引用属于本人本会话，并与 assistant 展示绑定同事务提交；若草稿已被替换，旧引用仍只关联原草稿，不得指向新草稿或冒充最新版本。成功保存后发送 SSE `purchase`，再发 `done`；`done` 保持最后业务事件。消息失败或取消不发送正式 purchase，但已提交草稿修改可独立恢复。
 
+`request_purchase_form` 不注册到 JSON 聊天路径，因为该路径没有一次性 UI 事件通道。SSE 工具通过 `PurchaseDraftService.read()` 校验本人会话和草稿状态；每轮最多排入一个空载荷 `purchase-form` 事件。该事件是运行期界面信号，不加入 `PublicDisplayEnvelope`、消息历史或记忆任务。前端解析时严格要求空对象，按会话暂存一次性请求，并在当前会话仍激活时重新读取购买草稿后才打开弹框。
+
 ## 收货信息与长期记忆隔离
 
 当前 `persistChat()` 无条件排队 Markdown 记忆任务，来源读取器直接提供原始 user/assistant 文本，单靠提示词或敏感词不足以保护收货信息。本方案在来源层隔离购买轮次：
@@ -272,6 +275,8 @@ recipient 的 name trim 1–100、address trim 1–500 且拒绝控制字符；p
 start 成功后通过现有聊天发送入口提交可见消息“请帮我继续本次购买”，触发助手询问缺失信息；身份与商品仍以服务端草稿为准。不得在模板里直接调用模型，也不在 start 重试或刷新恢复时反复自动发送。聊天生成失败只重试询问，不再次创建草稿；确认卡始终可通过聊天顶部“本次购买”入口打开 Dialog 恢复。
 
 已有聊天 Pinia session 维护跨路由流式任务，本轮在相同账号/会话作用域保存最小购买请求状态和服务端快照，避免新增无边界单例。购买弹框与替换确认弹窗开关留在 page，输入草稿留在购买组件；关闭弹框不销毁组件，切换会话通过组件 key 隔离输入，同时关闭弹窗；不在 localStorage 保存 recipient。
+
+收到 `purchase-form` 后，Store 只在对应会话保存内存中的打开请求标志；Page 核对活动会话和账号并重读草稿，拒绝过期或已终止状态。草稿字段在生成期间允许本地编辑；保存、地址选择、放弃、保存地址及确认下单保持禁用，直到流式生成结束。请求标志不会写入历史或持久化存储。
 
 不同商品先用 AlertDialog 明确放弃旧草稿，再携带当前版本 start；同商品恢复。SKU Select 的选项直接对应真实组合，数量使用已有数字输入，确认卡使用服务端金额与收货快照。模型 Markdown 永远不能渲染可执行购买按钮。
 

@@ -68,6 +68,7 @@ import { createProductSearchTool } from '../../product-catalog/tool/product-sear
 import {
   PurchaseDraftService,
   createPurchaseTools,
+  createRequestPurchaseFormTool,
   type PurchaseRunState,
 } from '../../chat-purchase/index.js';
 import { ChatConversationAccess } from '../conversation-access/index.js';
@@ -135,6 +136,7 @@ export type PersistedChatOutput = ChatOutput & {
 export type ChatStreamEvent =
   | ChatDisplayEvent
   | { type: 'purchase'; purchase: NonNullable<ChatDisplayData['purchase']> }
+  | { type: 'purchase-form' }
   | { type: 'form'; form: DynamicFormDefinition }
   | {
       type: 'start';
@@ -180,6 +182,8 @@ type PreparedChat = {
   contextWindowTokens: number;
   purchaseState: PurchaseRunState;
   purchaseToolUsed: boolean;
+  pendingPurchaseFormRequest: boolean;
+  purchaseFormEventSent: boolean;
   purchaseReferencedDraftId?: string;
   pendingDynamicForms: DynamicFormDefinition[];
   tryOnAction?: TryOnActionInput;
@@ -327,7 +331,7 @@ export class ChatRecordsService {
           result = await this.llmService.chatPrepared(
             { messages: prepared.plan.messages },
             this.traceContext(prepared, signal),
-            this.tools(prepared, display),
+            this.tools(prepared, display, true),
             this.executionOptions(tryOn),
           );
         } catch (error) {
@@ -342,6 +346,8 @@ export class ChatRecordsService {
         }
         await this.finalizeStream(prepared, display, result);
         persistedMessages = true;
+        const purchaseFormEvent = this.takePurchaseFormRequest(prepared);
+        if (purchaseFormEvent) yield purchaseFormEvent;
         yield { type: 'delta', content: result.content };
         if (display.purchase)
           yield { type: 'purchase', purchase: display.purchase };
@@ -353,7 +359,7 @@ export class ChatRecordsService {
         { messages: prepared.plan.messages },
         signal,
         this.traceContext(prepared, signal),
-        this.tools(prepared, display),
+        this.tools(prepared, display, true),
       );
       let result: LlmEventStreamResult | undefined;
       try {
@@ -365,6 +371,8 @@ export class ChatRecordsService {
           }
           if (next.value.type === 'delta') {
             yield next.value;
+            const purchaseFormEvent = this.takePurchaseFormRequest(prepared);
+            if (purchaseFormEvent) yield purchaseFormEvent;
           } else {
             for (const form of prepared.pendingDynamicForms.splice(0)) {
               this.displayService.stageDynamicForm(display, form);
@@ -372,6 +380,8 @@ export class ChatRecordsService {
             }
             const event = this.displayService.apply(display, next.value);
             if (event) yield event;
+            const purchaseFormEvent = this.takePurchaseFormRequest(prepared);
+            if (purchaseFormEvent) yield purchaseFormEvent;
           }
         }
       } finally {
@@ -610,6 +620,8 @@ export class ChatRecordsService {
       contextWindowTokens: this.contextService.getContextWindow(),
       purchaseState,
       purchaseToolUsed: false,
+      pendingPurchaseFormRequest: false,
+      purchaseFormEventSent: false,
       pendingDynamicForms: [],
       ...(dto.tryOnAction ? { tryOnAction: dto.tryOnAction } : {}),
     };
@@ -963,7 +975,11 @@ export class ChatRecordsService {
     };
   }
 
-  private tools(prepared: PreparedChat, display: ChatDisplayData) {
+  private tools(
+    prepared: PreparedChat,
+    display: ChatDisplayData,
+    includePurchaseForm = false,
+  ) {
     const cardSources = createChatCardSourceRegistry();
     const addressCoordinator = this.userInformation
       ? new PurchaseAddressCoordinator(
@@ -994,6 +1010,26 @@ export class ChatRecordsService {
           if (draftId) prepared.purchaseReferencedDraftId = draftId;
         },
       ),
+      ...(includePurchaseForm
+        ? [
+            createRequestPurchaseFormTool(
+              async () => {
+                const { draft } = await this.purchaseDrafts.read(
+                  prepared.persistedConversation.userId,
+                  prepared.persistedConversation.id,
+                );
+                return Boolean(
+                  draft && ['collecting', 'ready'].includes(draft.status),
+                );
+              },
+              () => {
+                if (!prepared.purchaseFormEventSent) {
+                  prepared.pendingPurchaseFormRequest = true;
+                }
+              },
+            ),
+          ]
+        : []),
       createListUserOrdersTool(
         this.orders!,
         prepared.persistedConversation.userId,
@@ -1024,6 +1060,16 @@ export class ChatRecordsService {
           : undefined,
       ),
     ];
+  }
+
+  private takePurchaseFormRequest(
+    prepared: PreparedChat,
+  ): ChatStreamEvent | null {
+    if (!prepared.pendingPurchaseFormRequest || prepared.purchaseFormEventSent)
+      return null;
+    prepared.pendingPurchaseFormRequest = false;
+    prepared.purchaseFormEventSent = true;
+    return { type: 'purchase-form' };
   }
 
   private traceContext(prepared: PreparedChat, signal?: AbortSignal) {
