@@ -9,12 +9,14 @@ import { JwtAuthGuard } from '../../auth/guard/jwt-auth.guard.js';
 import { ChatPurchaseController } from '../controller/chat-purchase.controller.js';
 import { PurchaseDraftService } from '../service/purchase-draft.service.js';
 import { PurchaseConfirmationService } from '../service/purchase-confirmation.service.js';
+import { UserAddressesService } from '../../user-addresses/index.js';
 
 test('Nest 购买路由：JWT、严格 Body/Query/Param 及首次/重试状态码', async () => {
   let count = 0;
   const userId = randomUUID(),
     conversationId = randomUUID(),
-    draftId = randomUUID();
+    draftId = randomUUID(),
+    addressId = randomUUID();
   const path = `/chat/conversations/${conversationId}/purchase-draft`;
   const drafts = {
     read: async () => ({ draft: null, order: null }),
@@ -29,10 +31,22 @@ test('Nest 购买路由：JWT、严格 Body/Query/Param 及首次/重试状态�
       input: unknown,
     ) => input,
   };
+  const selectedAddresses: string[] = [];
+  const addresses = {
+    getForUser: async (boundUserId: string, id: string) => {
+      selectedAddresses.push(`${boundUserId}:${id}`);
+      return {
+        recipientName: '测试收件人',
+        phone: '13800000000',
+        address: '仅供测试的地址',
+      };
+    },
+  };
   @Module({
     controllers: [ChatPurchaseController],
     providers: [
       { provide: PurchaseDraftService, useValue: drafts },
+      { provide: UserAddressesService, useValue: addresses },
       {
         provide: PurchaseConfirmationService,
         useValue: {
@@ -103,6 +117,31 @@ test('Nest 购买路由：JWT、严格 Body/Query/Param 及首次/重试状态�
       ).status,
       400,
     );
+    assert.equal(
+      (
+        await request(`${path}/${draftId}/select-address`, 'POST', {
+          addressId,
+          expectedVersion: 1,
+          recipient: { address: '模型提交的值' },
+        })
+      ).status,
+      400,
+    );
+    const selection = await request(
+      `${path}/${draftId}/select-address`,
+      'POST',
+      { addressId, expectedVersion: 3 },
+    );
+    assert.equal(selection.status, 200);
+    assert.deepEqual(await selection.json(), {
+      expectedVersion: 3,
+      recipient: {
+        name: '测试收件人',
+        phone: '13800000000',
+        address: '仅供测试的地址',
+      },
+    });
+    assert.deepEqual(selectedAddresses, [`${userId}:${addressId}`]);
     const start = await request(`${path}/start`, 'POST', {
       productExternalId: ' fixture ',
       expectedVersion: null,

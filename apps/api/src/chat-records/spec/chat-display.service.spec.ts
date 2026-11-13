@@ -10,6 +10,7 @@ import {
   MAX_DISPLAY_BYTES,
   publicSourceUrl,
   reservedDisplayBytes,
+  restoreChatCard,
   restoreDisplay,
   restoreProductResults,
 } from '../display/chat-display.projection.js';
@@ -309,6 +310,39 @@ test('展示工具只发布已暂存的白名单卡片并兼容损坏历史卡�
     ],
   });
   assert.deepEqual(damaged?.cards, [card]);
+});
+
+test('地址选择卡仅保存草稿引用并只在安全工具结果后发送', () => {
+  const { display } = createState();
+  const data = display.create(10_000);
+  const draftId = '44444444-4444-4444-8444-444444444444';
+  const card = display.stageAddressSelection(data, draftId, 7);
+
+  assert.deepEqual(card, {
+    type: 'card',
+    name: 'address_selection',
+    data: { draftId, draftVersion: 7 },
+  });
+  assert.equal(
+    restoreChatCard({
+      ...card,
+      data: { ...card.data, addressId: 'private-address-id' },
+    }),
+    null,
+  );
+
+  const event = display.apply(data, {
+    type: 'tool-result',
+    id: 'information-call',
+    toolName: 'get_my_information',
+    status: 'success',
+    output: '{"ok":true}',
+  });
+  assert.deepEqual(event, { type: 'card', card });
+  assert.deepEqual(
+    restoreDisplay(displayEnvelope(data, assistantMessageId))?.cards,
+    [card],
+  );
 });
 
 test('未由当前展示工具暂存的卡片结果不会进入公开展示', () => {

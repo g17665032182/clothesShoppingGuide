@@ -5,6 +5,7 @@ import type {
   PurchaseDraft,
   PurchaseSkuPage,
   PurchaseVersionPayload,
+  SelectPurchaseAddressPayload,
   StartPurchasePayload,
 } from '@/api/types/chat-purchase';
 
@@ -74,6 +75,19 @@ export function confirmPurchase(
 ): Promise<PurchaseDraftResponse> {
   return apiRequest<PurchaseDraftResponse>(
     `${purchasePath(conversationId)}/${encodeURIComponent(draftId)}/confirm`,
+    { method: 'POST', token, signal, data: payload },
+  );
+}
+
+export function selectPurchaseAddress(
+  token: string,
+  conversationId: string,
+  draftId: string,
+  payload: SelectPurchaseAddressPayload,
+  signal?: AbortSignal,
+): Promise<PurchaseDraft> {
+  return apiRequest<PurchaseDraft>(
+    `${purchasePath(conversationId)}/${encodeURIComponent(draftId)}/select-address`,
     { method: 'POST', token, signal, data: payload },
   );
 }

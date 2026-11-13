@@ -75,6 +75,10 @@ export class ChatDisplayService {
     ChatDisplayData,
     Map<string, number>
   >();
+  private readonly pendingAddressSelectionCards = new WeakMap<
+    ChatDisplayData,
+    ChatCard
+  >();
 
   public constructor(
     @InjectRepository(ChatTraceEvent)
@@ -124,6 +128,35 @@ export class ChatDisplayService {
     return card;
   }
 
+  public stageAddressSelection(
+    data: ChatDisplayData,
+    draftId: string,
+    draftVersion: number,
+  ): ChatCard {
+    const card = restoreChatCard({
+      type: 'card',
+      name: 'address_selection',
+      data: { draftId, draftVersion },
+    });
+    if (!card || card.name !== 'address_selection') {
+      throw new ServiceUnavailableException('地址选择引用不符合安全要求');
+    }
+    if (
+      !data.cards.some(
+        (candidate) =>
+          candidate.name === 'address_selection' &&
+          candidate.data.draftId === draftId &&
+          candidate.data.draftVersion === draftVersion,
+      )
+    ) {
+      const cards = [...data.cards, card];
+      this.assertBudget({ ...data, cards });
+      data.cards = cards;
+    }
+    this.pendingAddressSelectionCards.set(data, card);
+    return card;
+  }
+
   /**
    * 只把动态表单的安全引用写入公开快照，完整定义仅通过本轮 SSE 发送。
    */
@@ -155,6 +188,17 @@ export class ChatDisplayService {
     event: LlmStreamEvent,
   ): ChatDisplayEvent | null {
     if (event.type === 'delta') return null;
+    if (
+      event.type === 'tool-result' &&
+      event.status === 'success' &&
+      ['get_my_information', 'request_dynamic_form'].includes(event.toolName)
+    ) {
+      const card = this.pendingAddressSelectionCards.get(data);
+      if (card) {
+        this.pendingAddressSelectionCards.delete(data);
+        return { type: 'card', card };
+      }
+    }
     if (event.type === 'tool-call' && event.toolName === 'display_chat_card') {
       return null;
     }

@@ -15,9 +15,7 @@ export type DynamicFormSafeResult = {
   status: 'open';
 };
 
-export type DynamicFormRequestHandler = (
-  input: DynamicFormRequest,
-) => Promise<{
+export type DynamicFormRequestHandler = (input: DynamicFormRequest) => Promise<{
   definition: DynamicFormDefinition;
   safeResult: DynamicFormSafeResult;
 }>;
@@ -26,6 +24,11 @@ export type DynamicFormEventEmitter = (
   definition: DynamicFormDefinition,
 ) => void | Promise<void>;
 
+export type DynamicFormPreflight = (input: DynamicFormRequest) => Promise<{
+  ok: false;
+  code: 'address_selection_required' | 'information_unavailable';
+} | null>;
+
 /**
  * 该工具只负责申请 UI 表单，不接收用户填写值，也不把表单定义交给模型。
  * 完整定义通过运行时事件发送给前端，工具结果仅保留安全引用。
@@ -33,10 +36,13 @@ export type DynamicFormEventEmitter = (
 export function createRequestDynamicFormTool(
   request: DynamicFormRequestHandler,
   emitForm: DynamicFormEventEmitter,
+  beforeRequest?: DynamicFormPreflight,
 ) {
   return tool(
     async (input) => {
       try {
+        const preflight = await beforeRequest?.(input);
+        if (preflight) return JSON.stringify(preflight);
         const result = await request(input);
         await emitForm(result.definition);
         return JSON.stringify({ ok: true, ...result.safeResult });

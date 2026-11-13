@@ -13,7 +13,12 @@ import {
   MessageScrollerViewport,
 } from '@/components/ui/message-scroller';
 import { Spinner } from '@/components/ui/spinner';
-import type { ChatMessage, ChatTryOnAction } from '@/api/types/chat';
+import type {
+  ChatAddressSelectionActionStatus,
+  ChatAddressSelectionRequest,
+  ChatMessage,
+  ChatTryOnAction,
+} from '@/api/types/chat';
 import type {
   ChatDynamicForm,
   DynamicFormValues,
@@ -23,11 +28,17 @@ import ChatAssistantMessage from './ChatAssistantMessage.vue';
 const props = withDefaults(
   defineProps<{
     isSending: boolean;
+    conversationId: string | null;
     messages: ChatMessage[];
     streamDuration: string | null;
     hasEarlierMessages?: boolean;
     isLoadingEarlierMessages?: boolean;
     historyError?: string;
+    addressSelectionStatus?: (
+      draftId: string,
+      draftVersion: number,
+    ) => ChatAddressSelectionActionStatus;
+    addressSelectionError?: (draftId: string, draftVersion: number) => string;
     dynamicFormSubmitting?: (formId: string) => boolean;
     dynamicFormError?: (formId: string) => string;
   }>(),
@@ -45,6 +56,8 @@ const emit = defineEmits<{
   (event: 'retryHistory'): void;
   (event: 'moreProducts', messageId: string, resultIndex: number): void;
   (event: 'buyProduct', externalId: string): void;
+  (event: 'selectAddress', request: ChatAddressSelectionRequest): void;
+  (event: 'refreshPurchaseDraft', conversationId: string): void;
   (event: 'tryOn', request: { content: string; action: ChatTryOnAction }): void;
   (event: 'openOrder', orderId: string): void;
   (event: 'cancelCandidateOrder', orderId: string): void;
@@ -156,6 +169,10 @@ function formatSessionTime(createdAt: string): string {
             <ChatAssistantMessage
               v-else
               :message="message"
+              :is-sending="isSending"
+              :conversation-id="conversationId"
+              :address-selection-status="addressSelectionStatus"
+              :address-selection-error="addressSelectionError"
               :dynamic-form-submitting="dynamicFormSubmitting"
               :dynamic-form-error="dynamicFormError"
               :stream-duration="
@@ -168,6 +185,10 @@ function formatSessionTime(createdAt: string): string {
                   emit('moreProducts', messageId, resultIndex)
               "
               @buy-product="(externalId) => emit('buyProduct', externalId)"
+              @select-address="(request) => emit('selectAddress', request)"
+              @refresh-purchase-draft="
+                (conversationId) => emit('refreshPurchaseDraft', conversationId)
+              "
               @try-on="(request) => emit('tryOn', request)"
               @open-order="(orderId) => emit('openOrder', orderId)"
               @cancel-candidate-order="

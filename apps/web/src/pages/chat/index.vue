@@ -50,6 +50,8 @@ const {
   purchase,
   purchaseAddresses,
   purchaseAddressStatus,
+  addressSelectionStatus,
+  addressSelectionError,
   addressSaveStatus,
   purchaseDialogOpen,
   buyProduct,
@@ -62,6 +64,8 @@ const {
   replacementProductId,
   updatePurchase,
   selectPurchaseAddress,
+  submitPurchaseAddressSelection,
+  refreshPurchaseDraftForCard,
   saveDraftAddress,
   dynamicFormSubmitting,
   dynamicFormError,
@@ -157,16 +161,21 @@ const {
               v-else
               :key="activeConversationId ?? 'new'"
               :is-sending="isSending"
+              :conversation-id="activeConversationId"
               :messages="messages"
               :stream-duration="streamDuration"
               :has-earlier-messages="hasEarlierMessages"
               :is-loading-earlier-messages="isLoadingEarlierMessages"
               :history-error="historyError"
+              :address-selection-status="addressSelectionStatus"
+              :address-selection-error="addressSelectionError"
               :dynamic-form-submitting="dynamicFormSubmitting"
               :dynamic-form-error="dynamicFormError"
               @load-earlier="loadEarlierMessages"
               @more-products="loadMoreProducts"
               @buy-product="buyProduct"
+              @select-address="submitPurchaseAddressSelection"
+              @refresh-purchase-draft="refreshPurchaseDraftForCard"
               @try-on="sendTryOnAction"
               @open-order="loadOrder"
               @cancel-candidate-order="cancelCandidateOrder"

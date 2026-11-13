@@ -87,6 +87,25 @@ export type ChatOrderCardSummary = {
   items: ChatOrderCardItem[];
 };
 
+export type ChatAddressSelectionCard = {
+  draftId: string;
+  draftVersion: number;
+};
+
+export type ChatAddressSelectionActionStatus =
+  | 'idle'
+  | 'submitting'
+  | 'success'
+  | 'stale'
+  | 'conflict'
+  | 'unknown'
+  | 'error';
+
+export type ChatAddressSelectionRequest = ChatAddressSelectionCard & {
+  addressId: string;
+  conversationId: string;
+};
+
 export type ChatCard =
   | {
       type: 'card';
@@ -97,6 +116,11 @@ export type ChatCard =
       type: 'card';
       name: 'order';
       data: { items: ChatOrderCardSummary[] };
+    }
+  | {
+      type: 'card';
+      name: 'address_selection';
+      data: ChatAddressSelectionCard;
     };
 
 export type ChatProductResults = {

@@ -104,6 +104,11 @@ export type PurchaseVersionPayload = {
   expectedVersion: number;
 };
 
+export type SelectPurchaseAddressPayload = {
+  addressId: string;
+  expectedVersion: number;
+};
+
 export type PurchaseReference = {
   draftId: string;
   version: number;

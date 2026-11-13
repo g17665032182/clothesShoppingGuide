@@ -2,12 +2,12 @@
 
 ## 状态与审批
 
-- 状态：用户已于 2026-11-10 确认；实施已开始。
+- 状态：地址簿原实施已完成；2026-11-13 的统一用户信息查询和购买地址卡联动已完成自动化验证，登录态浏览器验收未执行。
 - 设计文档：[收货地址簿与 LLM 查询设计](./user-addresses-design.md)，已于 2026-11-10 确认。
 - CRUD 契约：[收货地址 CRUD 契约](../contracts/user-address-crud-contract.md)，已于 2026-11-10 确认。
 - 技术文档：[收货地址簿与 LLM 查询技术文档](./user-addresses-technical.md)，已于 2026-11-10 确认。
-- 实现状态：核心实现与自动化验证已完成；2026-11-11 隔离 PostgreSQL Migration 测试通过；登录后浏览器 Smoke Test 尚未执行。
-- 最后更新：2026-11-12（依据 2026-11-11 项目全量验证复测）。
+- 实现状态：核心实现与自动化验证已完成；2026-11-11 隔离 PostgreSQL Migration 测试通过；2026-11-13 地址卡联动自动化验证通过，登录后浏览器 Smoke Test 尚未执行。
+- 最后更新：2026-11-13。
 
 ## 实际完成记录
 
@@ -19,6 +19,14 @@
 - 2026-11-11 跨模块复测：全量验证记录确认 `RUN_USER_ADDRESSES_POSTGRES_TEST=1` 地址簿 Migration 在具名隔离库 `clothes_guide_user_addresses_test_full20261111_migration` 中 1 passed、0 failed。该结果引用自[项目全量验证计划](../testing/project-full-validation-plan.md)，不是本次重新执行。
 - `git diff --check` 通过。没有运行 `migration:fresh`，也没有连接默认开发数据库。
 - 待补验证：使用已认证开发账号执行地址页和购买弹框浏览器 Smoke Test。没有本次新的已登录浏览器证据，故不声称该流程已通过。
+
+## 2026-11-13 地址查询与购买卡片更新
+
+- 聊天运行时的本人地址、订单和已保存图片元数据查询统一为 `get_my_information`；地址 section 只向模型返回安全引用，完整地址仍由本人 API 提供。
+- 下单地址选择由服务端生成 `address_selection` 草稿引用卡。旧 `list_my_shipping_addresses` 和 `select_my_shipping_address` 不再注册为模型工具；旧 trace/history 仅保留安全兼容。
+- 用户从卡片显式选择后调用认证购买 API，服务端按当前用户、地址归属和草稿版本读取并写入草稿。默认地址不预选；地址详情仅存在卡片组件局部内存。
+- 动态表单只在地址查询成功且地址簿为空时自动进入收件字段收集；地址查询失败不会被当成空列表，用户明确选择手动填写后才可继续。SKU/数量字段能力保留。
+- 2026-11-13 自动化验证：API 全量测试 305 通过、15 个数据库门控测试跳过、0 失败；API/Web 类型检查、API/Web build、受影响文件格式检查及 `git diff --check` 通过。`pnpm check` 被两份未修改文档的格式问题阻断；登录态浏览器验收未执行，详情见[用户信息查询实施记录](../chat-user-information/chat-user-information-implementation.md)。
 
 ## 开发流程总览
 

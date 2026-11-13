@@ -30,6 +30,7 @@ const ADDRESS_TOOL_NAMES = new Set([
   'list_my_shipping_addresses',
   'select_my_shipping_address',
 ]);
+const USER_INFORMATION_TOOL_NAME = 'get_my_information';
 const PURCHASE_STATUSES = new Set([
   'collecting',
   'ready',
@@ -181,6 +182,101 @@ function isDynamicFormTool(name: string | null | undefined): boolean {
   return name === DYNAMIC_FORM_TOOL_NAME;
 }
 
+function isUserInformationTool(name: string | null | undefined): boolean {
+  return name === USER_INFORMATION_TOOL_NAME;
+}
+
+function safeInformationArguments(value: unknown): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  const sections = Array.isArray(input.sections)
+    ? input.sections.filter((section) =>
+        ['addresses', 'orders', 'photos'].includes(String(section)),
+      )
+    : [];
+  const statusValues = new Set([
+    'pending_payment',
+    'pending_shipment',
+    'pending_receipt',
+    'completed',
+    'closed',
+  ]);
+  return {
+    sections,
+    ...(typeof input.page === 'number' &&
+    Number.isSafeInteger(input.page) &&
+    input.page > 0
+      ? { page: input.page }
+      : {}),
+    ...(typeof input.orderNo === 'string'
+      ? { orderNo: input.orderNo.slice(0, 100) }
+      : {}),
+    ...(typeof input.status === 'string' && statusValues.has(input.status)
+      ? { status: input.status }
+      : {}),
+  };
+}
+
+function safeInformationProjection(value: unknown): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  const sectionsSource =
+    typeof input.sections === 'object' &&
+    input.sections !== null &&
+    !Array.isArray(input.sections)
+      ? (input.sections as Record<string, unknown>)
+      : {};
+  const sections: Record<string, unknown> = {};
+  for (const name of ['addresses', 'orders', 'photos'] as const) {
+    const section = sectionsSource[name];
+    if (
+      typeof section !== 'object' ||
+      section === null ||
+      Array.isArray(section)
+    )
+      continue;
+    const record = section as Record<string, unknown>;
+    const items = Array.isArray(record.items) ? record.items.length : 0;
+    sections[name] = {
+      itemCount: items,
+      ...(Number.isSafeInteger(record.total) ? { total: record.total } : {}),
+      ...(Number.isSafeInteger(record.page) ? { page: record.page } : {}),
+    };
+  }
+  const errors = Array.isArray(input.errors)
+    ? input.errors.flatMap((error) => {
+        if (typeof error !== 'object' || error === null || Array.isArray(error))
+          return [];
+        const entry = error as Record<string, unknown>;
+        return ['addresses', 'orders', 'photos'].includes(String(entry.section))
+          ? [{ section: entry.section, code: 'unavailable' }]
+          : [];
+      })
+    : [];
+  return {
+    ...(typeof input.ok === 'boolean' ? { ok: input.ok } : {}),
+    sections,
+    errors,
+  };
+}
+
+function safeInformationToolCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return value;
+  const call = value as Record<string, unknown>;
+  if (call.name !== USER_INFORMATION_TOOL_NAME) return value;
+  return {
+    ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+    name: USER_INFORMATION_TOOL_NAME,
+    ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
+    args: safeInformationArguments(call.args ?? call.arguments ?? call.input),
+  };
+}
+
 function safeDynamicFormArguments(value: unknown): Record<string, unknown> {
   const source =
     typeof value === 'string'
@@ -197,11 +293,7 @@ function safeDynamicFormArguments(value: unknown): Record<string, unknown> {
   const input = source as Record<string, unknown>;
   const fields = Array.isArray(input.fields)
     ? input.fields.flatMap((field) => {
-        if (
-          typeof field !== 'object' ||
-          field === null ||
-          Array.isArray(field)
-        )
+        if (typeof field !== 'object' || field === null || Array.isArray(field))
           return [];
         const entry = field as Record<string, unknown>;
         return typeof entry.key === 'string' && typeof entry.type === 'string'
@@ -356,9 +448,7 @@ function safeDynamicFormCall(value: unknown): unknown {
     ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
     name,
     ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
-    args: safeDynamicFormArguments(
-      call.args ?? call.arguments ?? call.input,
-    ),
+    args: safeDynamicFormArguments(call.args ?? call.arguments ?? call.input),
   };
 }
 
@@ -400,6 +490,20 @@ function sanitizeNestedAddressCalls(value: unknown): unknown {
       Array.isArray(entry)
         ? entry.map(safeAddressToolCall)
         : sanitizeNestedAddressCalls(entry),
+    ]),
+  );
+}
+
+function sanitizeNestedInformationCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedInformationCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map(safeInformationToolCall)
+        : sanitizeNestedInformationCalls(entry),
     ]),
   );
 }
@@ -549,10 +653,10 @@ function safeAddressToolProjection(
 
 function safeAddressToolCall(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
-    return {};
+    return value;
   const call = value as Record<string, unknown>;
   const name = typeof call.name === 'string' ? call.name : null;
-  if (!name || !ADDRESS_TOOL_NAMES.has(name)) return redactValue(value);
+  if (!name || !ADDRESS_TOOL_NAMES.has(name)) return value;
   return {
     ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
     name,
@@ -662,9 +766,11 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             ? null
             : normalizePayload(
                 sanitizeNestedAddressCalls(
-                  sanitizeNestedPurchaseCalls(
-                    sanitizeNestedDynamicFormCalls(
-                      sanitizeNestedChatCardCalls(event.payload),
+                  sanitizeNestedInformationCalls(
+                    sanitizeNestedPurchaseCalls(
+                      sanitizeNestedDynamicFormCalls(
+                        sanitizeNestedChatCardCalls(event.payload),
+                      ),
                     ),
                   ),
                 ),
@@ -696,11 +802,13 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             ? safeChatCardArguments(event.args)
             : isDynamicFormTool(event.toolName)
               ? safeDynamicFormArguments(event.args)
-            : isPurchaseTool(event.toolName)
-              ? safePurchaseProjection(event.args)
-              : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                ? safeAddressToolArguments(event.toolName, event.args)
-                : event.args,
+              : isPurchaseTool(event.toolName)
+                ? safePurchaseProjection(event.args)
+                : isUserInformationTool(event.toolName)
+                  ? safeInformationArguments(event.args)
+                  : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                    ? safeAddressToolArguments(event.toolName, event.args)
+                    : event.args,
         ),
       };
     case 'tool_result':
@@ -715,13 +823,18 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
               ? safeChatCardResult(event.content)
               : isDynamicFormTool(event.toolName)
                 ? JSON.stringify(safeDynamicFormProjection(event.content))
-              : isPurchaseTool(event.toolName)
-                ? safePurchaseResult(event.content)
-                : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                  ? JSON.stringify(
-                      safeAddressToolProjection(event.toolName, event.content),
-                    )
-                  : normalizeContent(event.content),
+                : isPurchaseTool(event.toolName)
+                  ? safePurchaseResult(event.content)
+                  : isUserInformationTool(event.toolName)
+                    ? JSON.stringify(safeInformationProjection(event.content))
+                    : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                      ? JSON.stringify(
+                          safeAddressToolProjection(
+                            event.toolName,
+                            event.content,
+                          ),
+                        )
+                      : normalizeContent(event.content),
         status:
           event.status === 'success'
             ? ChatTraceEventStatus.SUCCESS
@@ -734,11 +847,17 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                   ? safeChatCardResult(event.payload)
                   : isDynamicFormTool(event.toolName)
                     ? safeDynamicFormProjection(event.payload)
-                  : isPurchaseTool(event.toolName)
-                    ? safePurchaseProjection(event.payload)
-                    : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                      ? safeAddressToolProjection(event.toolName, event.payload)
-                      : event.payload,
+                    : isPurchaseTool(event.toolName)
+                      ? safePurchaseProjection(event.payload)
+                      : isUserInformationTool(event.toolName)
+                        ? safeInformationProjection(event.payload)
+                        : event.toolName &&
+                            ADDRESS_TOOL_NAMES.has(event.toolName)
+                          ? safeAddressToolProjection(
+                              event.toolName,
+                              event.payload,
+                            )
+                          : event.payload,
               ),
       };
   }

@@ -9,7 +9,8 @@
 | 账号与认证 | 注册、登录、JWT、HttpOnly Refresh Token、资料修改及管理员用户管理；开发环境关闭登录验证码，测试和生产环境启用 |
 | 对话导购   | LangGraph 模型工具调用、商品查询、流式回复、历史会话和内部调用追踪；公开消息与内部 trace 分开管理             |
 | 偏好与记忆 | 结构化穿衣偏好与独立 Markdown 长期记忆，支持用户查看、编辑及后台提取任务                                      |
-| 收货地址   | 本人地址增删改查及默认地址；模型仅查询安全引用，选择后由服务端填入购买草稿                                    |
+| 用户信息   | 模型可查询本人地址、订单和已保存图片的安全摘要；地址详情仅在前端临时读取                                      |
+| 收货地址   | 本人地址增删改查及默认地址；购买时由用户在地址卡显式选择，再由服务端写入草稿                                  |
 | 聊天购买   | 从商品卡创建草稿、选择规格和地址，用户确认后创建本站订单；新地址可显式保存到地址簿                            |
 | 本人订单   | 列表、筛选、详情、模拟支付、取消未过期待付款订单及确认收货；模拟支付不产生真实扣款                            |
 | 聊天取消   | 明确取消意图后查询本人可取消订单并展示卡片；用户选择并确认后提交，模型没有取消写工具                          |
@@ -102,9 +103,9 @@ Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 
 
 在后端配置 `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，其余超时及上下文预算见 [`apps/api/.env.example`](./apps/api/.env.example)。登录后访问 `/chat` 使用导购、购买与订单查询功能；未配置模型时不能完成真实对话生成。
 
-订单和地址工具由服务端绑定当前用户，不接受模型提供的 `userId`。地址工具只返回地址 ID、默认标记及系统显示标签，不向模型返回完整姓名、手机号、地址或用户自定义标签。用户选择后由服务端校验归属并写入本次草稿。
+`get_my_information` 由服务端绑定当前用户，不接受模型提供的 `userId`；地址和订单只返回安全摘要，图片只返回已保存元数据。购买草稿缺少收件信息时会查询本人地址簿：有地址则展示选择卡，由用户显式选择；地址簿为空时才展示动态表单收集草稿缺少的字段。地址查询失败不会按空列表处理，用户明确选择手动填写后才可改用动态表单。完整地址由前端临时读取，不发送给模型。
 
-模型只能准备/修改草稿和执行允许的查询。正式下单、支付、取消及收货均由用户显式操作；新地址仅在点击保存后加入地址簿。用户主动发送的聊天原文仍按聊天历史规则保存，不应将工具脱敏理解为聊天原文不保存。
+模型只能准备/修改草稿和执行允许的查询，不能替用户选择地址或提交动态表单。正式下单、支付、取消及收货均由用户显式操作；新地址仅在点击保存后加入地址簿。用户主动发送的聊天原文仍按聊天历史规则保存，不应将工具脱敏理解为聊天原文不保存。
 
 ### 账号与管理员
 
@@ -176,17 +177,19 @@ pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images
 
 开发规范入口见 [`AGENTS.md`](./AGENTS.md)，其中按任务链接前端、后端、安全和验证专题约定。新增应用位于 `apps/`，共享包位于 `packages/`，内部依赖使用 `workspace:*` 和 `@clothes-shopping-guide/` 命名空间。
 
-| 文档           | 入口                                                                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| API 与资源契约 | [契约索引](./docs/contracts/README.md)                                                                                               |
-| 商品目录       | [技术方案](./docs/product-guide/product-catalog-technical.md)                                                                        |
-| LLM 与上下文   | [模型模块](./docs/llm/llm-module-technical.md)、[系统上下文](./docs/llm/system-context-technical.md)                                 |
-| 偏好与记忆     | [分离方案](./docs/user-memory/user-preference-memory-separation-technical.md)                                                        |
-| 地址簿与工具   | [实施记录](./docs/user-addresses/user-addresses-implementation.md)                                                                   |
-| 订单与聊天购买 | [订单](./docs/orders/order-module-implementation.md)、[购买](./docs/chat-purchase/chat-purchase-implementation.md)                   |
-| 聊天取消订单   | [实施记录](./docs/chat-order-cancellation/chat-order-cancellation-implementation.md)                                                 |
-| 虚拟试穿       | [技术方案](./docs/virtual-try-on/virtual-try-on-technical.md)、[商品配置](./docs/virtual-try-on/product-try-on-setting-technical.md) |
-| 全量验证       | [测试索引](./docs/testing/README.md)、[计划、执行与修复复测](./docs/testing/project-full-validation-plan.md)                         |
-| 进度完善计划   | [文档、数据库、浏览器及供应商后续工作](./docs/testing/project-progress-improvement-plan.md)                                          |
+| 文档           | 入口                                                                                                                                                                                                                                            |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API 与资源契约 | [契约索引](./docs/contracts/README.md)                                                                                                                                                                                                          |
+| 商品目录       | [技术方案](./docs/product-guide/product-catalog-technical.md)                                                                                                                                                                                   |
+| LLM 与上下文   | [模型模块](./docs/llm/llm-module-technical.md)、[系统上下文](./docs/llm/system-context-technical.md)                                                                                                                                            |
+| 偏好与记忆     | [分离方案](./docs/user-memory/user-preference-memory-separation-technical.md)                                                                                                                                                                   |
+| 地址簿与工具   | [实施记录](./docs/user-addresses/user-addresses-implementation.md)                                                                                                                                                                              |
+| 聊天用户信息   | [设计、技术与实施](./docs/chat-user-information/chat-user-information-design.md)、[技术文档](./docs/chat-user-information/chat-user-information-technical.md)、[实施记录](./docs/chat-user-information/chat-user-information-implementation.md) |
+| 动态表单       | [设计、技术与实施](./docs/chat-dynamic-form/chat-dynamic-form-design.md)、[技术文档](./docs/chat-dynamic-form/chat-dynamic-form-technical.md)、[实施记录](./docs/chat-dynamic-form/chat-dynamic-form-implementation.md)                         |
+| 订单与聊天购买 | [订单](./docs/orders/order-module-implementation.md)、[购买](./docs/chat-purchase/chat-purchase-implementation.md)                                                                                                                              |
+| 聊天取消订单   | [实施记录](./docs/chat-order-cancellation/chat-order-cancellation-implementation.md)                                                                                                                                                            |
+| 虚拟试穿       | [技术方案](./docs/virtual-try-on/virtual-try-on-technical.md)、[商品配置](./docs/virtual-try-on/product-try-on-setting-technical.md)                                                                                                            |
+| 全量验证       | [测试索引](./docs/testing/README.md)、[计划、执行与修复复测](./docs/testing/project-full-validation-plan.md)                                                                                                                                    |
+| 进度完善计划   | [文档、数据库、浏览器及供应商后续工作](./docs/testing/project-progress-improvement-plan.md)                                                                                                                                                     |
 
 各模块实施文档保留当时的验证结果与缺口；后续跨模块复测以全量验证记录对应日期的结果为准。

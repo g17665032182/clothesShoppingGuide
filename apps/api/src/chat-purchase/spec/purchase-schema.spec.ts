@@ -7,6 +7,7 @@ import {
   startPurchaseSchema,
   purchaseDraftParamsSchema,
   purchaseVersionSchema,
+  selectPurchaseAddressSchema,
 } from '../dto/chat-purchase.schema.js';
 import { ChatPurchaseDraft } from '../entity/chat-purchase-draft.entity.js';
 import { PurchaseProjectionService } from '../service/purchase-projection.service.js';
@@ -61,6 +62,21 @@ test('购买 schema 拒绝未知字段、数字字符串、空 PATCH，保留省
     purchaseVersionSchema.safeParse({ expectedVersion: 0 }).success,
     false,
   );
+  assert.equal(
+    selectPurchaseAddressSchema.safeParse({
+      addressId: randomUUID(),
+      expectedVersion: 1,
+    }).success,
+    true,
+  );
+  for (const input of [
+    { addressId: 'invalid', expectedVersion: 1 },
+    { addressId: randomUUID(), expectedVersion: 0 },
+    { addressId: randomUUID(), expectedVersion: 1, recipient: {} },
+    { addressId: randomUUID(), expectedVersion: '1' },
+  ]) {
+    assert.equal(selectPurchaseAddressSchema.safeParse(input).success, false);
+  }
   assert.equal(
     purchaseDraftParamsSchema.safeParse({
       conversationId: 'invalid',

@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type {
+  ChatAddressSelectionActionStatus,
+  ChatAddressSelectionRequest,
   ChatMessage,
   ChatProductCard,
   ChatTryOnAction,
@@ -32,6 +34,13 @@ import ChatDynamicFormCard from './dynamic-form/ChatDynamicFormCard.vue';
 const props = defineProps<{
   message: ChatMessage;
   streamDuration: string | null;
+  isSending: boolean;
+  conversationId: string | null;
+  addressSelectionStatus?: (
+    draftId: string,
+    draftVersion: number,
+  ) => ChatAddressSelectionActionStatus;
+  addressSelectionError?: (draftId: string, draftVersion: number) => string;
   dynamicFormSubmitting?: (formId: string) => boolean;
   dynamicFormError?: (formId: string) => string;
 }>();
@@ -41,6 +50,8 @@ const tryOnProduct = ref<ChatProductCard | null>(null);
 const emit = defineEmits<{
   (event: 'moreProducts', messageId: string, resultIndex: number): void;
   (event: 'buyProduct', externalId: string): void;
+  (event: 'selectAddress', request: ChatAddressSelectionRequest): void;
+  (event: 'refreshPurchaseDraft', conversationId: string): void;
   (event: 'tryOn', request: { content: string; action: ChatTryOnAction }): void;
   (event: 'openOrder', orderId: string): void;
   (event: 'cancelCandidateOrder', orderId: string): void;
@@ -139,8 +150,15 @@ function openTryOnTasks() {
         v-if="message.content || message.cards.length"
         :markdown="message.content"
         :cards="message.cards"
-        :disabled="isRunning"
+        :disabled="isSending || isRunning"
+        :conversation-id="conversationId"
+        :address-selection-status="addressSelectionStatus"
+        :address-selection-error="addressSelectionError"
         @buy-product="(externalId) => emit('buyProduct', externalId)"
+        @select-address="(request) => emit('selectAddress', request)"
+        @refresh-purchase-draft="
+          (conversationId) => emit('refreshPurchaseDraft', conversationId)
+        "
         @try-on="openTryOn"
       />
       <p

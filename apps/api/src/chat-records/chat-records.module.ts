@@ -19,9 +19,9 @@ import { ChatDisplayService } from './display/chat-display.service.js';
 import { ChatPurchaseModule } from '../chat-purchase/index.js';
 import { ChatConversationAccessModule } from './conversation-access/index.js';
 import { OrdersModule } from '../orders/index.js';
-import { UserAddressesModule } from '../user-addresses/index.js';
 import { VirtualTryOnModule } from '../virtual-try-on/virtual-try-on.module.js';
 import { ChatDynamicFormModule } from '../chat-dynamic-form/index.js';
+import { ChatUserInformationModule } from '../chat-user-information/index.js';
 
 @Module({
   imports: [
@@ -33,9 +33,9 @@ import { ChatDynamicFormModule } from '../chat-dynamic-form/index.js';
     ChatPurchaseModule,
     ChatConversationAccessModule,
     OrdersModule,
-    UserAddressesModule,
     VirtualTryOnModule,
     ChatDynamicFormModule,
+    ChatUserInformationModule,
   ],
   controllers: [
     ChatRecordsController,

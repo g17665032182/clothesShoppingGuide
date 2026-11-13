@@ -30,6 +30,25 @@ export class TryOnPhotoDto {
 export type TryOnAvailability =
   'disabled' | 'test_images_unconfigured' | 'test_only' | 'available';
 
+// 聊天信息查询只暴露图片元数据，不包含图片内容或对象存储位置。
+export type TryOnSavedPhotoMetadataItemDto = {
+  photoId: string;
+  kind: 'person';
+  mimeType: string;
+  byteSize: number;
+  width: number;
+  height: number;
+  createdAt: string;
+  availability: 'saved';
+};
+
+export type TryOnSavedPhotoMetadataPageDto = {
+  items: TryOnSavedPhotoMetadataItemDto[];
+  page: number;
+  pageSize: 5;
+  total: number;
+};
+
 export class TryOnPhotoPageDto {
   @ApiProperty({ type: [TryOnPhotoDto] })
   public items!: TryOnPhotoDto[];

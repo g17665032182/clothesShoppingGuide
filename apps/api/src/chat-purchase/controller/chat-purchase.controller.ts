@@ -31,12 +31,15 @@ import {
   startPurchaseSchema,
   patchPurchaseSchema,
   purchaseVersionSchema,
+  selectPurchaseAddressSchema,
   type StartPurchaseInput,
   type PatchPurchaseInput,
   type PurchaseVersionInput,
+  type SelectPurchaseAddressInput,
 } from '../dto/chat-purchase.schema.js';
 import { PurchaseDraftService } from '../service/purchase-draft.service.js';
 import { PurchaseConfirmationService } from '../service/purchase-confirmation.service.js';
+import { UserAddressesService } from '../../user-addresses/index.js';
 import {
   PatchPurchaseDto,
   PurchaseVersionDto,
@@ -58,6 +61,8 @@ export class ChatPurchaseController {
     @Inject(PurchaseDraftService) private readonly drafts: PurchaseDraftService,
     @Inject(PurchaseConfirmationService)
     private readonly confirmation: PurchaseConfirmationService,
+    @Inject(UserAddressesService)
+    private readonly addresses: UserAddressesService,
   ) {}
 
   @Get()
@@ -119,6 +124,43 @@ export class ChatPurchaseController {
       input,
     );
   }
+
+  @Post(':draftId/select-address')
+  @HttpCode(200)
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['addressId', 'expectedVersion'],
+      additionalProperties: false,
+      properties: {
+        addressId: { type: 'string', format: 'uuid' },
+        expectedVersion: { type: 'integer', minimum: 1 },
+      },
+    },
+  })
+  @ApiOkResponse({
+    type: PurchaseDraftDto,
+    description: '将本人明确选择的地址写入购买草稿',
+  })
+  public async selectAddress(
+    @CurrentUser() user: User,
+    @Param({ schema: purchaseDraftParamsSchema })
+    params: { conversationId: string; draftId: string },
+    @Query({ schema: purchaseEmptyQuerySchema }) _query: Record<string, never>,
+    @Body({ schema: selectPurchaseAddressSchema })
+    input: SelectPurchaseAddressInput,
+  ) {
+    const address = await this.addresses.getForUser(user.id, input.addressId);
+    return this.drafts.patch(user.id, params.conversationId, params.draftId, {
+      expectedVersion: input.expectedVersion,
+      recipient: {
+        name: address.recipientName,
+        phone: address.phone,
+        address: address.address,
+      },
+    });
+  }
+
   @Post(':draftId/discard')
   @HttpCode(200)
   @ApiBody({ type: PurchaseVersionDto })

@@ -77,6 +77,11 @@ export type ChatCard =
       type: 'card';
       name: 'order';
       data: { items: ChatOrderCardSummary[] };
+    }
+  | {
+      type: 'card';
+      name: 'address_selection';
+      data: { draftId: string; draftVersion: number };
     };
 
 export type ChatCardSelection =

@@ -245,9 +245,18 @@ const orderChatCardSchema = z.strictObject({
     items: z.array(chatOrderCardSummarySchema).min(1).max(5),
   }),
 });
+const addressSelectionChatCardSchema = z.strictObject({
+  type: z.literal('card'),
+  name: z.literal('address_selection'),
+  data: z.strictObject({
+    draftId: z.uuid(),
+    draftVersion: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  }),
+});
 export const chatCardSchema = z.discriminatedUnion('name', [
   productChatCardSchema,
   orderChatCardSchema,
+  addressSelectionChatCardSchema,
 ]);
 
 function uniqueReferences(maxLength: number) {
@@ -621,7 +630,9 @@ export function restoreDisplay(value: unknown): PublicDisplayEnvelope | null {
   );
 }
 
-export function restoreDynamicFormDefinition(value: unknown): DynamicFormDefinition | null {
+export function restoreDynamicFormDefinition(
+  value: unknown,
+): DynamicFormDefinition | null {
   const parsed = dynamicFormDefinitionSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
@@ -655,6 +666,7 @@ export function restoreChatCard(value: unknown): ChatCard | null {
       },
     };
   }
+  if (card.name === 'address_selection') return card;
   return {
     ...card,
     data: {

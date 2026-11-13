@@ -49,6 +49,13 @@ export const patchPurchaseSchema = z
 export const purchaseVersionSchema = z.strictObject({
   expectedVersion: version,
 });
+export const selectPurchaseAddressSchema = z.strictObject({
+  addressId: z.uuid(),
+  expectedVersion: version,
+});
 export type StartPurchaseInput = z.infer<typeof startPurchaseSchema>;
 export type PatchPurchaseInput = z.infer<typeof patchPurchaseSchema>;
 export type PurchaseVersionInput = z.infer<typeof purchaseVersionSchema>;
+export type SelectPurchaseAddressInput = z.infer<
+  typeof selectPurchaseAddressSchema
+>;

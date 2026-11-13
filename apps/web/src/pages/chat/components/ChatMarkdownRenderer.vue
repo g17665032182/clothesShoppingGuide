@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { ChatCard, ChatProductCard } from '@/api/types/chat';
+import type {
+  ChatAddressSelectionActionStatus,
+  ChatAddressSelectionRequest,
+  ChatCard,
+  ChatProductCard,
+} from '@/api/types/chat';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import ChatCardTemplate from './ChatCardTemplate.vue';
 
@@ -7,10 +12,18 @@ const props = defineProps<{
   markdown: string;
   cards: ChatCard[];
   disabled?: boolean;
+  conversationId: string | null;
+  addressSelectionStatus?: (
+    draftId: string,
+    draftVersion: number,
+  ) => ChatAddressSelectionActionStatus;
+  addressSelectionError?: (draftId: string, draftVersion: number) => string;
 }>();
 
 const emit = defineEmits<{
   (event: 'buyProduct', externalId: string): void;
+  (event: 'selectAddress', request: ChatAddressSelectionRequest): void;
+  (event: 'refreshPurchaseDraft', conversationId: string): void;
   (event: 'tryOn', product: ChatProductCard): void;
 }>();
 
@@ -34,7 +47,14 @@ const emit = defineEmits<{
         :key="`${card.name}-${index}`"
         :card="card"
         :disabled="props.disabled"
+        :conversation-id="props.conversationId"
+        :address-selection-status="props.addressSelectionStatus"
+        :address-selection-error="props.addressSelectionError"
         @buy-product="(externalId) => emit('buyProduct', externalId)"
+        @select-address="(request) => emit('selectAddress', request)"
+        @refresh-purchase-draft="
+          (conversationId) => emit('refreshPurchaseDraft', conversationId)
+        "
         @try-on="(product) => emit('tryOn', product)"
       />
     </section>

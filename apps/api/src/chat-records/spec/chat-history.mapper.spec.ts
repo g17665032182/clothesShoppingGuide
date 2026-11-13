@@ -168,3 +168,73 @@ test('购买调用及结果从历史移除，同批普通商品工具闭环保�
   );
   assert.equal(JSON.stringify(messages).includes('private'), false);
 });
+
+test('用户信息查询及旧地址选择调用和结果从模型历史成对隐藏', () => {
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 1,
+      messageId: 'private-tools',
+      content: '',
+      payload: {
+        toolCalls: [
+          {
+            id: 'information-call',
+            name: 'get_my_information',
+            args: { sections: ['addresses'] },
+          },
+          {
+            id: 'legacy-address-call',
+            name: 'select_my_shipping_address',
+            args: { addressId: 'private-address-id' },
+          },
+          {
+            id: 'weather-call',
+            name: 'weather',
+            args: { city: '上海' },
+          },
+        ],
+      },
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 2,
+      messageId: 'information-result',
+      toolCallId: 'information-call',
+      toolName: 'get_my_information',
+      content: '{"sections":{"addresses":{"items":[{"addressId":"private"}]}}}',
+      status: 'success',
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 3,
+      messageId: 'legacy-address-result',
+      toolCallId: 'legacy-address-call',
+      toolName: 'select_my_shipping_address',
+      content: '{"ok":true}',
+      status: 'success',
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 4,
+      messageId: 'weather-result',
+      toolCallId: 'weather-call',
+      toolName: 'weather',
+      content: '{"temperature":24}',
+      status: 'success',
+    },
+  ]);
+
+  assert.equal(messages.length, 2);
+  const calls = (messages[0]?.message as AIMessage).tool_calls ?? [];
+  assert.deepEqual(
+    calls.map((call) => call.name),
+    ['weather'],
+  );
+  assert.equal(
+    (messages[1]?.message as ToolMessage).tool_call_id,
+    'weather-call',
+  );
+  assert.equal(JSON.stringify(messages).includes('private-address-id'), false);
+  assert.equal(JSON.stringify(messages).includes('addressId'), false);
+});

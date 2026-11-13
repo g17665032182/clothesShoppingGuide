@@ -201,6 +201,8 @@ z.strictObject({
 
 工具使用 `@langchain/core/tools` 的 `tool()` 与 Zod strict schema；工具函数工厂放在所属业务模块，并由 `ChatRecordsService` 逐请求组合。
 
+截至 2026-11-13，地址查询已并入 `get_my_information`；下方 `list_my_shipping_addresses` 与 `select_my_shipping_address` 是旧实现说明，不再注册为模型工具。地址卡选择改由本人认证购买 API 执行，当前请求/投影契约见[用户信息查询 CRUD 契约](../contracts/chat-user-information-crud-contract.md)。
+
 ### `list_my_orders`
 
 - Query schema 仅允许可选 `orderNo`、`status`、`page`；`page` 正整数 1–10。
@@ -210,14 +212,14 @@ z.strictObject({
 - 明确剔除 `id`、`userId`、`recipient`、`shipment.trackingNo`、付款凭证及内部字段；如果订单被唯一定位，仍不返回完整订单详情。
 - 普通用户及管理员都只能查询当前登录账号的订单。管理列表不能作为此工具的数据源。
 
-### `list_my_shipping_addresses`
+### `list_my_shipping_addresses`（旧工具，已停用）
 
 - Query schema 为 `z.strictObject({ page: pageSchema })`，默认第 1 页，最多 10 页；每页固定 20 条。
 - 从绑定的 `UserAddressesService.listForUser(userId, query)` 读取。
 - 返回最多 20 条 `{ addressId, isDefault, displayName }`，其中 `displayName` 由服务端生成“默认地址”或“地址 N”，不返回用户自定义标签，避免自由文本意外包含手机号/地址。
 - 地址具体值只在账号 UI 和本人购买确认卡出现。
 
-### `select_my_shipping_address`
+### `select_my_shipping_address`（旧工具，已停用）
 
 - 工具参数严格为 `addressId`、`draftId`、`expectedVersion`；没有用户 ID 和收货字段。
 - 从服务端绑定的 userId、conversationId 读取本人地址与本人当前草稿；二者所有权、会话关联、状态、版本都必须匹配。

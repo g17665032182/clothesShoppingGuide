@@ -533,6 +533,115 @@ test('订单和地址工具的 trace 仅保存专属安全白名单', async () =
   );
 });
 
+test('get_my_information trace 仅保存查询条件和 section 计数', async () => {
+  const { writer, rows } = createWriter();
+  const addressId = '66666666-6666-4666-8666-666666666666';
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'information-model',
+      content: '',
+      model: 'model',
+      usage: null,
+      payload: {
+        tool_calls: [
+          {
+            id: 'information-call',
+            name: 'get_my_information',
+            args: {
+              sections: ['addresses', 'photos'],
+              page: 1,
+              userId: 'private-user',
+            },
+          },
+        ],
+      },
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'information-model',
+      toolCallId: 'information-call',
+      toolName: 'get_my_information',
+      args: {
+        sections: ['addresses', 'photos'],
+        page: 1,
+        userId: 'private-user',
+      },
+    },
+    {
+      sequence: 2,
+      type: 'tool_result',
+      messageId: 'information-result',
+      toolCallId: 'information-call',
+      toolName: 'get_my_information',
+      content: JSON.stringify({
+        ok: true,
+        sections: {
+          addresses: {
+            items: [
+              {
+                addressId,
+                isDefault: true,
+                displayName: '默认地址',
+                recipientName: '测试用户',
+                phone: '13800000000',
+                address: '仅供测试的完整地址',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 5,
+          },
+          photos: {
+            items: [
+              {
+                photoId: '77777777-7777-4777-8777-777777777777',
+                objectKey: 'private/object/key',
+                mimeType: 'image/jpeg',
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 5,
+          },
+        },
+        errors: [],
+      }),
+      status: 'success',
+    },
+  ]);
+
+  const serialized = JSON.stringify(rows);
+  for (const privateValue of [
+    addressId,
+    'private-user',
+    '测试用户',
+    '13800000000',
+    '仅供测试的完整地址',
+    '77777777-7777-4777-8777-777777777777',
+    'private/object/key',
+    'recipientName',
+    'objectKey',
+  ]) {
+    assert.equal(serialized.includes(privateValue), false, privateValue);
+  }
+  const result = rows.find(
+    (row) =>
+      row.eventType === 'tool_result' && row.toolName === 'get_my_information',
+  );
+  assert.ok(result?.content);
+  assert.deepEqual(JSON.parse(result.content), {
+    ok: true,
+    sections: {
+      addresses: { itemCount: 1, total: 1, page: 1 },
+      photos: { itemCount: 1, total: 1, page: 1 },
+    },
+    errors: [],
+  });
+});
+
 test('卡片工具 trace 仅保存引用参数和通过 schema 的公开卡片', async () => {
   const { writer, rows } = createWriter();
   const card = {

@@ -25,6 +25,7 @@ import { TryOnImageProcessingService } from './image-processing.service.js';
 import type {
   TryOnAvailability,
   TryOnPhotoPageDto,
+  TryOnSavedPhotoMetadataPageDto,
 } from '../dto/try-on-photo.dto.js';
 
 @Injectable()
@@ -97,6 +98,43 @@ export class TryOnPhotoService {
     return {
       items: rows.map((photo) => this.toResponse(photo)),
       availability: this.getAvailability(),
+    };
+  }
+
+  public async listSavedMetadataForUser(
+    userId: string,
+    requestedPage: number,
+  ): Promise<TryOnSavedPhotoMetadataPageDto> {
+    const page = Math.min(Math.max(Math.trunc(requestedPage) || 1, 1), 10);
+    const pageSize = 5 as const;
+    const filter = {
+      userId,
+      kind: TryOnPhotoKind.SAVED,
+      status: TryOnPhotoStatus.ACTIVE,
+    };
+    const [rows, total] = await Promise.all([
+      this.photos.find(filter, {
+        orderBy: [{ createdAt: 'DESC' }, { id: 'DESC' }],
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      }),
+      this.photos.count(filter),
+    ]);
+
+    return {
+      items: rows.map((photo) => ({
+        photoId: photo.id,
+        kind: 'person' as const,
+        mimeType: photo.mimeType,
+        byteSize: photo.byteSize,
+        width: photo.width,
+        height: photo.height,
+        createdAt: photo.createdAt.toISOString(),
+        availability: 'saved' as const,
+      })),
+      page,
+      pageSize,
+      total,
     };
   }
 

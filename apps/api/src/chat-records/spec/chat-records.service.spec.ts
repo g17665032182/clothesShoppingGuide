@@ -20,6 +20,7 @@ function createService(
     failBind?: boolean;
     missingTrace?: boolean;
     tools?: boolean;
+    userInformation?: boolean;
     cancellationCandidates?: boolean;
     failedReader?: 'preferences' | 'memory';
     tryOn?: ChatTryOnPort;
@@ -32,6 +33,7 @@ function createService(
   const modelExecutionOptions: unknown[] = [];
   const bindings: unknown[] = [];
   const traceEvents: unknown[] = [];
+  const registeredToolNames: string[][] = [];
   const contextInputs: Array<{ memoryContext?: string }> = [];
   let flushCount = 0;
   const manager = {
@@ -94,10 +96,25 @@ function createService(
         finalTraceSequence: 4,
       };
     },
-    async *streamEventsPrepared(): AsyncGenerator<
-      LlmStreamEvent,
-      LlmEventStreamResult
-    > {
+    async *streamEventsPrepared(
+      _input: unknown,
+      _signal: unknown,
+      _traceContext: unknown,
+      extraTools: unknown[] = [],
+    ): AsyncGenerator<LlmStreamEvent, LlmEventStreamResult> {
+      registeredToolNames.push(
+        extraTools.flatMap((item) => {
+          if (
+            typeof item === 'object' &&
+            item !== null &&
+            'name' in item &&
+            typeof item.name === 'string'
+          ) {
+            return [item.name];
+          }
+          return [];
+        }),
+      );
       yield { type: 'delta', content: '第一段' };
       if (options.tools) {
         yield {
@@ -245,8 +262,13 @@ function createService(
     } as never,
     { lockOwnedInTransaction: async () => undefined } as never,
     undefined,
-    undefined,
     options.tryOn,
+    undefined,
+    options.userInformation
+      ? ({
+          lookup: async () => ({ ok: true, sections: {}, errors: [] }),
+        } as never)
+      : undefined,
   );
 
   return {
@@ -255,6 +277,7 @@ function createService(
     removed,
     modelInputs,
     modelExecutionOptions,
+    registeredToolNames,
     traceEvents,
     bindings,
     contextInputs,
@@ -415,6 +438,27 @@ test('工具展示按稳定 ID 更新，最终模型事件绑定与正文保存�
     8192,
   );
   assert.equal(done?.type === 'done' && done.context?.usedTokens, null);
+});
+
+test('聊天运行时注册统一用户信息和动态表单工具，不再注册旧地址工具', async () => {
+  const { service, registeredToolNames } = createService({
+    userInformation: true,
+  });
+  const events = await service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '查询我的默认地址' }],
+    } as never,
+  );
+  for await (const _event of events) {
+    // 消费流以触发运行时工具组装。
+  }
+
+  const names = registeredToolNames.at(-1) ?? [];
+  assert.ok(names.includes('get_my_information'));
+  assert.ok(names.includes('request_dynamic_form'));
+  assert.equal(names.includes('list_my_shipping_addresses'), false);
+  assert.equal(names.includes('select_my_shipping_address'), false);
 });
 
 test('待付款候选 SSE 事件与最终 assistant 消息展示绑定一致', async () => {

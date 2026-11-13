@@ -68,16 +68,11 @@ import { createProductSearchTool } from '../../product-catalog/tool/product-sear
 import {
   PurchaseDraftService,
   createPurchaseTools,
-  createSelectShippingAddressTool,
   type PurchaseRunState,
 } from '../../chat-purchase/index.js';
 import { ChatConversationAccess } from '../conversation-access/index.js';
 import { eligibleSummaryTraceIds } from './chat-summary-source.js';
 import { OrdersService, createListUserOrdersTool } from '../../orders/index.js';
-import {
-  UserAddressesService,
-  createListShippingAddressesTool,
-} from '../../user-addresses/index.js';
 import {
   CHAT_TRY_ON_PORT,
   type ChatTryOnOutcome,
@@ -91,6 +86,9 @@ import {
   type DynamicFormDefinition,
 } from '../../chat-dynamic-form/index.js';
 import { createRequestDynamicFormTool } from '../../llm/tools/request-dynamic-form.tool.js';
+import { ChatUserInformationService } from '../../chat-user-information/index.js';
+import { PurchaseAddressCoordinator } from '../tools/purchase-address-coordinator.js';
+import { createChatUserInformationTool } from '../tools/chat-user-information.tool.js';
 
 export type Page<T> = {
   items: T[];
@@ -241,12 +239,13 @@ export class ChatRecordsService {
     private readonly purchaseDrafts: PurchaseDraftService,
     private readonly conversationAccess: ChatConversationAccess,
     @Optional() private readonly orders?: OrdersService,
-    @Optional() private readonly addresses?: UserAddressesService,
     @Optional()
     @Inject(CHAT_TRY_ON_PORT)
     private readonly tryOn?: ChatTryOnPort,
     @Optional()
     private readonly dynamicForms?: ChatDynamicFormService,
+    @Optional()
+    private readonly userInformation?: ChatUserInformationService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -966,6 +965,22 @@ export class ChatRecordsService {
 
   private tools(prepared: PreparedChat, display: ChatDisplayData) {
     const cardSources = createChatCardSourceRegistry();
+    const addressCoordinator = this.userInformation
+      ? new PurchaseAddressCoordinator(
+          this.userInformation,
+          this.purchaseDrafts,
+          prepared.persistedConversation.userId,
+          prepared.persistedConversation.id,
+          prepared.purchaseState.active,
+          prepared.currentUserMessage,
+          (draftId, draftVersion) =>
+            this.displayService.stageAddressSelection(
+              display,
+              draftId,
+              draftVersion,
+            ),
+        )
+      : undefined;
     return [
       createProductSearchTool(this.productCatalog, (results) =>
         cardSources.registerProducts(results),
@@ -987,20 +1002,9 @@ export class ChatRecordsService {
       createChatCardDisplayTool(cardSources, (card) =>
         this.displayService.stageCard(display, card),
       ),
-      createListShippingAddressesTool(
-        this.addresses!,
-        prepared.persistedConversation.userId,
-      ),
-      createSelectShippingAddressTool(
-        this.purchaseDrafts,
-        this.addresses!,
-        prepared.persistedConversation.userId,
-        prepared.persistedConversation.id,
-        (draftId) => {
-          prepared.purchaseToolUsed = true;
-          if (draftId) prepared.purchaseReferencedDraftId = draftId;
-        },
-      ),
+      ...(addressCoordinator
+        ? [createChatUserInformationTool(addressCoordinator)]
+        : []),
       createRequestDynamicFormTool(
         async (input) => {
           if (!this.dynamicForms)
@@ -1015,6 +1019,9 @@ export class ChatRecordsService {
         (form) => {
           prepared.pendingDynamicForms.push(form);
         },
+        addressCoordinator
+          ? (input) => addressCoordinator.preflightDynamicForm(input)
+          : undefined,
       ),
     ];
   }

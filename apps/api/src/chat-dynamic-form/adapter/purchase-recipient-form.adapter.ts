@@ -113,6 +113,22 @@ function toPatch(
   return { draftId, input };
 }
 
+function recipientValue(
+  key: string,
+  state: Awaited<ReturnType<PurchaseDraftService['dynamicFormState']>>,
+): string | null {
+  switch (key) {
+    case 'recipient.name':
+      return state.draft.recipient.name;
+    case 'recipient.phone':
+      return state.draft.recipient.phone;
+    case 'recipient.address':
+      return state.draft.recipient.address;
+    default:
+      return null;
+  }
+}
+
 function makeIssue(
   key: string,
   code: string,
@@ -133,12 +149,18 @@ export class PurchaseRecipientFormAdapter implements DynamicFormPurchasePort {
       context.userId,
       context.conversationId,
     );
+    // 收件表单只展示本轮请求且草稿仍缺失的字段，不重复收集已有信息。
     const fields = input.fields.flatMap((requested) => {
       if (!purchaseFieldKeys.has(requested.key)) return [];
+      if (
+        requested.key.startsWith('recipient.') &&
+        recipientValue(requested.key, state)?.trim()
+      )
+        return [];
       const field = fieldFor(requested.key, requested, state);
       return field ? [field] : [];
     });
-    if (!fields.length) throw new Error('没有可收集的购买字段');
+    if (!fields.length) throw new Error('当前购买草稿没有待补充的收件字段');
     return {
       title: input.title,
       description: input.description ?? null,

@@ -44,13 +44,22 @@ const PURCHASE_TOOL_NAMES = new Set([
   'discard_purchase_draft',
 ]);
 const DYNAMIC_FORM_TOOL_NAMES = new Set(['request_dynamic_form']);
+const HIDDEN_USER_INFORMATION_TOOL_NAMES = new Set([
+  'get_my_information',
+  'list_my_shipping_addresses',
+  'select_my_shipping_address',
+]);
 
 function isPurchaseTool(name: string): boolean {
   return PURCHASE_TOOL_NAMES.has(name);
 }
 
 function isHiddenTool(name: string): boolean {
-  return isPurchaseTool(name) || DYNAMIC_FORM_TOOL_NAMES.has(name);
+  return (
+    isPurchaseTool(name) ||
+    DYNAMIC_FORM_TOOL_NAMES.has(name) ||
+    HIDDEN_USER_INFORMATION_TOOL_NAMES.has(name)
+  );
 }
 
 function payloadToolCalls(payload: unknown): Array<{

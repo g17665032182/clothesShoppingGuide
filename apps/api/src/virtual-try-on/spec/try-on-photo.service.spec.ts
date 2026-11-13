@@ -10,14 +10,23 @@ import { TryOnPhotoKind } from '../entity/try-on-photo.entity.js';
 const testBody = Buffer.from('synthetic-public-test-image');
 const testDigest = createHash('sha256').update(testBody).digest('hex');
 
-function createService(configValues: Record<string, string>) {
+function createService(
+  configValues: Record<string, string>,
+  savedPhotos: Record<string, unknown>[] = [],
+) {
   let createdPhoto: Record<string, unknown> | undefined;
   let listFilter: unknown;
+  let metadataQuery: unknown;
   const photoRepository = {
-    find: async (filter: unknown) => {
+    find: async (filter: unknown, options?: unknown) => {
       listFilter = filter;
+      if (options) {
+        metadataQuery = { filter, options };
+        return savedPhotos;
+      }
       return [];
     },
+    count: async () => savedPhotos.length,
     create: (input: Record<string, unknown>) => {
       createdPhoto = Object.assign(
         { id: '00000000-0000-4000-8000-000000000001' },
@@ -56,6 +65,9 @@ function createService(configValues: Record<string, string>) {
     },
     get listFilter() {
       return listFilter;
+    },
+    get metadataQuery() {
+      return metadataQuery;
     },
   };
 }
@@ -138,6 +150,72 @@ test('照片列表提前报告上传准入状态，不暴露白名单且保持�
       status: 'active',
     });
   }
+});
+
+test('已保存图片元数据查询分页有界并排除对象存储字段', async () => {
+  const fixture = createService({}, [
+    {
+      id: '00000000-0000-4000-8000-000000000010',
+      userId: 'current-user',
+      kind: TryOnPhotoKind.SAVED,
+      status: 'active',
+      objectKey: 'private/user/photo.webp',
+      mimeType: 'image/webp',
+      byteSize: 1234,
+      width: 100,
+      height: 200,
+      createdAt: new Date('2026-11-12T00:00:00.000Z'),
+    },
+  ]);
+
+  const result = await fixture.service.listSavedMetadataForUser(
+    'current-user',
+    2,
+  );
+
+  assert.deepEqual(result, {
+    items: [
+      {
+        photoId: '00000000-0000-4000-8000-000000000010',
+        kind: 'person',
+        mimeType: 'image/webp',
+        byteSize: 1234,
+        width: 100,
+        height: 200,
+        createdAt: '2026-11-12T00:00:00.000Z',
+        availability: 'saved',
+      },
+    ],
+    page: 2,
+    pageSize: 5,
+    total: 1,
+  });
+  assert.deepEqual(fixture.metadataQuery, {
+    filter: {
+      userId: 'current-user',
+      kind: TryOnPhotoKind.SAVED,
+      status: 'active',
+    },
+    options: {
+      orderBy: [{ createdAt: 'DESC' }, { id: 'DESC' }],
+      limit: 5,
+      offset: 5,
+    },
+  });
+  assert.equal(JSON.stringify(result).includes('objectKey'), false);
+  assert.equal(JSON.stringify(result).includes('private/user'), false);
+});
+
+test('已保存图片元数据查询将页码限制在允许范围内', async () => {
+  const fixture = createService({});
+
+  const result = await fixture.service.listSavedMetadataForUser(
+    'current-user',
+    999,
+  );
+
+  assert.equal(result.page, 10);
+  assert.equal(result.pageSize, 5);
 });
 
 test('开发测试模式只接受规范化后命中服务端 SHA-256 白名单的图片', async () => {

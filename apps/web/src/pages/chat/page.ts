@@ -12,7 +12,11 @@ import {
 } from '@/api/modules/user-addresses';
 import type { UserAddress } from '@/api/types/user-addresses';
 import { ApiError } from '@/api';
-import type { ChatTryOnAction } from '@/api/types/chat';
+import type {
+  ChatAddressSelectionActionStatus,
+  ChatAddressSelectionRequest,
+  ChatTryOnAction,
+} from '@/api/types/chat';
 import type {
   ChatDynamicForm,
   ChatDynamicFormResult,
@@ -41,6 +45,16 @@ export function useChatPage() {
   const addressSaveStatus = ref<'idle' | 'submitting' | 'unknown' | 'error'>(
     'idle',
   );
+  // 只保存每张卡的操作状态，不保存卡片地址详情。
+  const addressSelectionStates = ref<
+    Record<
+      string,
+      {
+        status: ChatAddressSelectionActionStatus;
+        error: string;
+      }
+    >
+  >({});
   let addressListController: AbortController | null = null;
   let addressSaveController: AbortController | null = null;
   let addressListVersion = 0;
@@ -80,6 +94,7 @@ export function useChatPage() {
       purchaseAddressStatus.value = 'idle';
       addressSaveStatus.value = 'idle';
       pendingAddressSave = null;
+      addressSelectionStates.value = {};
       for (const controller of dynamicFormControllers.values())
         controller.abort();
       dynamicFormControllers.clear();
@@ -159,6 +174,7 @@ export function useChatPage() {
       pendingAddressSave = null;
       addressSaveController?.abort();
       addressSaveStatus.value = 'idle';
+      addressSelectionStates.value = {};
     },
   );
 
@@ -488,20 +504,106 @@ export function useChatPage() {
     );
   }
 
+  function addressSelectionKey(draftId: string, draftVersion: number): string {
+    return `${draftId}:${draftVersion}`;
+  }
+
+  function addressSelectionStatus(
+    draftId: string,
+    draftVersion: number,
+  ): ChatAddressSelectionActionStatus {
+    return (
+      addressSelectionStates.value[addressSelectionKey(draftId, draftVersion)]
+        ?.status ?? 'idle'
+    );
+  }
+
+  function addressSelectionError(
+    draftId: string,
+    draftVersion: number,
+  ): string {
+    return (
+      addressSelectionStates.value[addressSelectionKey(draftId, draftVersion)]
+        ?.error ?? ''
+    );
+  }
+
+  async function submitPurchaseAddressSelection(
+    request: ChatAddressSelectionRequest,
+    showToast = false,
+  ): Promise<void> {
+    const current = chat.purchase.draft;
+    if (
+      !current ||
+      request.conversationId !== chat.activeConversationId ||
+      current.id !== request.draftId ||
+      current.version !== request.draftVersion ||
+      chat.isSending ||
+      !['collecting', 'ready'].includes(current.status)
+    )
+      return;
+    const key = addressSelectionKey(request.draftId, request.draftVersion);
+    if (
+      addressSelectionStatus(request.draftId, request.draftVersion) ===
+      'submitting'
+    )
+      return;
+    const sessionKey = chat.activeSessionKey;
+    const userId = auth.state.user?.id;
+    const { conversationId, draftVersion, ...payload } = request;
+    addressSelectionStates.value = {
+      ...addressSelectionStates.value,
+      [key]: { status: 'submitting', error: '' },
+    };
+    const result = await chat.selectPurchaseAddressFromCard({
+      ...payload,
+      expectedVersion: draftVersion,
+    });
+    if (
+      disposed ||
+      sessionKey !== chat.activeSessionKey ||
+      userId !== auth.state.user?.id ||
+      conversationId !== chat.activeConversationId
+    )
+      return;
+    addressSelectionStates.value = {
+      ...addressSelectionStates.value,
+      [key]: {
+        status: result,
+        error:
+          result === 'error' ? '地址选择失败，请重新检查草稿状态后重试。' : '',
+      },
+    };
+    if (showToast && result === 'success')
+      toast.success('收货地址已用于本次购买');
+    if (showToast && result === 'conflict')
+      toast.error('购买草稿已变化，请检查最新状态后重试');
+    if (showToast && result === 'unknown')
+      toast.error('地址提交结果待核实，已刷新购买草稿');
+    if (result === 'error' || result === 'stale')
+      await chat.loadPurchaseDraft(conversationId);
+  }
+
+  function refreshPurchaseDraftForCard(conversationId: string): void {
+    if (conversationId !== chat.activeConversationId) return;
+    void chat.loadPurchaseDraft(conversationId);
+  }
+
   function selectPurchaseAddress(addressId: string): void {
     const selected = purchaseAddresses.value.find(
       (address) => address.id === addressId,
     );
     const current = chat.purchase.draft;
-    if (
-      !selected ||
-      !current ||
-      chat.isSending ||
-      !['collecting', 'ready'].includes(current.status)
-    )
-      return;
-    void chat.sendMessage(
-      `用户已明确选择收货地址 ${selected.id}，请调用 select_my_shipping_address 将其用于当前购买草稿 ${current.id}，草稿版本为 ${current.version}。`,
+    const conversationId = chat.activeConversationId;
+    if (!selected || !current || !conversationId) return;
+    void submitPurchaseAddressSelection(
+      {
+        draftId: current.id,
+        draftVersion: current.version,
+        addressId: selected.id,
+        conversationId,
+      },
+      true,
     );
   }
 
@@ -644,6 +746,8 @@ export function useChatPage() {
     purchaseDialogOpen,
     purchaseAddresses,
     purchaseAddressStatus,
+    addressSelectionStatus,
+    addressSelectionError,
     addressSaveStatus,
     dynamicFormSubmitting: (formId: string) =>
       Boolean(dynamicFormSubmitting.value[formId]),
@@ -664,6 +768,8 @@ export function useChatPage() {
     confirmOrderAction,
     updatePurchase,
     selectPurchaseAddress,
+    submitPurchaseAddressSelection,
+    refreshPurchaseDraftForCard,
     saveDraftAddress,
     discardPurchase: () =>
       runPurchaseAction(chat.discardPurchase, '已放弃本次购买'),

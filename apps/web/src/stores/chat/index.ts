@@ -20,6 +20,7 @@ import {
   getPurchaseDraft,
   listPurchaseSkus,
   patchPurchaseDraft,
+  selectPurchaseAddress,
   startPurchase,
 } from '@/api/modules/chat-purchase';
 import {
@@ -41,6 +42,7 @@ import type {
   PatchPurchasePayload,
   PurchaseDraftResponse,
   PurchaseSkuOption,
+  SelectPurchaseAddressPayload,
   StartPurchasePayload,
 } from '@/api/types/chat-purchase';
 import { auth } from '@/lib/auth';
@@ -555,6 +557,103 @@ export const useChatStore = defineStore('chat', () => {
     if (conflict && ownsPurchaseSession(identity, session.key, conversationId))
       await loadPurchaseDraft(conversationId);
     return false;
+  }
+
+  async function selectPurchaseAddressFromCard(input: {
+    draftId: string;
+    expectedVersion: number;
+    addressId: string;
+  }): Promise<'success' | 'stale' | 'conflict' | 'unknown' | 'error'> {
+    const token = auth.state.token;
+    const session = activeSession.value;
+    const draft = session?.purchase.draft;
+    if (
+      !token ||
+      !session?.conversationId ||
+      !draft ||
+      session.status === 'streaming' ||
+      session.purchase.status !== 'success' ||
+      !['collecting', 'ready'].includes(draft.status) ||
+      draft.id !== input.draftId ||
+      draft.version !== input.expectedVersion
+    )
+      return 'stale';
+
+    const conversationId = session.conversationId;
+    const requestKey = purchaseRequestKey(conversationId);
+    const controller = beginPurchaseMutation(requestKey);
+    if (!controller) return 'conflict';
+    const identity = { version: identityVersion, userId: auth.state.user?.id };
+    const requestVersion = ++purchaseSequence;
+    updatePurchase(session.key, {
+      status: 'submitting',
+      errorMessage: '',
+      requestVersion,
+    });
+    let resultStatus: 'success' | 'stale' | 'conflict' | 'unknown' | 'error' =
+      'error';
+    let shouldRefresh = false;
+
+    try {
+      const payload: SelectPurchaseAddressPayload = {
+        addressId: input.addressId,
+        expectedVersion: input.expectedVersion,
+      };
+      const result = await selectPurchaseAddress(
+        token,
+        conversationId,
+        input.draftId,
+        payload,
+        controller.signal,
+      );
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return 'error';
+      updatePurchase(session.key, {
+        status: 'success',
+        draft: {
+          ...result,
+          skuOptions: result.skuOptions ?? draft.skuOptions,
+        },
+        errorMessage: '',
+      });
+      resultStatus = 'success';
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        purchaseMutationRequests.get(requestKey) !== controller ||
+        !ownsPurchaseSession(identity, session.key, conversationId)
+      )
+        return 'error';
+      if (error instanceof ApiError && error.status === 409) {
+        resultStatus = 'conflict';
+        shouldRefresh = true;
+      } else if (error instanceof ApiError && error.status === 404) {
+        resultStatus = 'stale';
+        shouldRefresh = true;
+      } else if (error instanceof ApiError && error.status === 0) {
+        resultStatus = 'unknown';
+        shouldRefresh = true;
+      } else {
+        updatePurchase(session.key, {
+          status: 'error',
+          errorMessage: error instanceof Error ? error.message : '地址选择失败',
+        });
+        resultStatus = 'error';
+      }
+    } finally {
+      finishPurchaseMutation(requestKey, controller);
+    }
+
+    if (
+      shouldRefresh &&
+      ownsPurchaseSession(identity, session.key, conversationId)
+    )
+      await loadPurchaseDraft(conversationId);
+    return resultStatus;
   }
 
   async function discardPurchase(): Promise<boolean> {
@@ -1383,6 +1482,7 @@ export const useChatStore = defineStore('chat', () => {
     loadPurchaseDraft,
     startPurchaseForProduct,
     updatePurchaseDraft,
+    selectPurchaseAddressFromCard,
     discardPurchase,
     confirmPurchaseOrder,
     markOrderCancellationComplete,
