@@ -14,7 +14,7 @@ test('系统上下文包含选购和退换货工作流程', () => {
   assert.match(SYSTEM_CONTEXT, /不从旧摘要恢复收货信息/);
   assert.match(
     SYSTEM_CONTEXT,
-    /`get_my_information` 查询本人地址、订单和已保存图片的安全摘要/u,
+    /`get_my_information` 查询本人地址、订单、已保存图片和试穿任务的安全摘要/u,
   );
   assert.match(
     SYSTEM_CONTEXT,
@@ -22,6 +22,15 @@ test('系统上下文包含选购和退换货工作流程', () => {
   );
   assert.match(SYSTEM_CONTEXT, /只有用户明确选择手动填写/u);
   assert.doesNotMatch(SYSTEM_CONTEXT, /调用地址选择工具将该地址写入/u);
+});
+
+test('试穿任务查询限定显式 section 和摘要，不承诺图片或生成时长', () => {
+  assert.match(SYSTEM_CONTEXT, /sections: \["try_on_tasks"\]/u);
+  assert.match(SYSTEM_CONTEXT, /省略 sections 不会查询任务/u);
+  assert.match(SYSTEM_CONTEXT, /最新创建的未删除任务/u);
+  assert.match(SYSTEM_CONTEXT, /查询失败不等于没有任务/u);
+  assert.match(SYSTEM_CONTEXT, /不估算完成时间、不评价未读取的图片/u);
+  assert.match(SYSTEM_CONTEXT, /不保证随后下载成功/u);
 });
 
 test('选购流程遵守本地商品目录、分页和记忆边界', () => {

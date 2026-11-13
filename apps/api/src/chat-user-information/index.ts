@@ -4,6 +4,7 @@ export {
   getMyInformationSchema,
   informationSectionSchema,
   type GetMyInformationInput,
+  type GetMyInformationSchemaInput,
   type InformationSection,
 } from './dto/chat-user-information.schema.js';
 export type {

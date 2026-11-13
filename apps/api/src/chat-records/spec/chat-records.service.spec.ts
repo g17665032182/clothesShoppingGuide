@@ -11,6 +11,8 @@ import { ChatRecordsService } from '../service/chat-records.service.js';
 import { ChatContextService } from '../context/chat-context.service.js';
 import { ChatConversation } from '../entity/chat-conversation.entity.js';
 import { ChatMessage } from '../entity/chat-message.entity.js';
+import { ChatTraceEvent } from '../entity/chat-trace-event.entity.js';
+import type { ChatHistoryMessage } from '../history/chat-history.mapper.js';
 import { PaginationDto } from '../dto/pagination.dto.js';
 import type { ChatTryOnPort } from '../../virtual-try-on/port/chat-try-on.port.js';
 
@@ -21,6 +23,11 @@ function createService(
     missingTrace?: boolean;
     tools?: boolean;
     userInformation?: boolean;
+    informationRequests?: Array<
+      'success' | 'empty' | 'unavailable' | 'photos' | 'none'
+    >;
+    purchaseActive?: boolean;
+    summaryHistory?: { messages: ChatMessage[]; traces: ChatTraceEvent[] };
     cancellationCandidates?: boolean;
     purchaseForm?: boolean;
     repeatPurchaseForm?: boolean;
@@ -35,10 +42,32 @@ function createService(
   const modelInputs: unknown[] = [];
   const modelExecutionOptions: unknown[] = [];
   const bindings: unknown[] = [];
+  const memoryEnqueued: unknown[] = [];
+  const summarySources: unknown[][] = [];
+  let informationOutcome = 'none';
+  const informationRequests = [...(options.informationRequests ?? [])];
+  const invokeInformation = async (tools: unknown[]) => {
+    informationOutcome = informationRequests.shift() ?? 'none';
+    if (informationOutcome === 'none') return;
+    const query = tools.find(
+      (item) => (item as { name?: string }).name === 'get_my_information',
+    ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
+    assert.ok(query);
+    await query.invoke({
+      sections: [informationOutcome === 'photos' ? 'photos' : 'try_on_tasks'],
+    });
+  };
   const traceEvents: unknown[] = [];
   const registeredToolNames: string[][] = [];
   const purchaseFormReads: Array<[string, string]> = [];
   const contextInputs: Array<{ memoryContext?: string }> = [];
+  const existingConversation =
+    options.purchaseActive || options.summaryHistory
+      ? Object.assign(new ChatConversation(), {
+          userId: 'user-1',
+          title: '购买',
+        })
+      : null;
   const getToolNames = (tools: unknown[]) =>
     tools.flatMap((item) => {
       if (
@@ -66,9 +95,12 @@ function createService(
       }
     },
     async findOneOrFail() {
-      return persisted.find(
-        (item) => item instanceof ChatConversation,
-      ) as ChatConversation;
+      return (
+        existingConversation ??
+        (persisted.find(
+          (item) => item instanceof ChatConversation,
+        ) as ChatConversation)
+      );
     },
     async count() {
       return 0;
@@ -85,14 +117,14 @@ function createService(
     },
   };
   const conversationRepository = {
-    findOne: async () => null,
+    findOne: async () => existingConversation,
     getEntityManager: () => manager,
   };
   const messageRepository = {
-    find: async () => [],
+    find: async () => options.summaryHistory?.messages ?? [],
   };
   const traceEventRepository = {
-    find: async () => [],
+    find: async () => options.summaryHistory?.traces ?? [],
   };
   const llmService = {
     assertConfigured: () => 'fake-model',
@@ -106,6 +138,7 @@ function createService(
       modelInputs.push(input);
       modelExecutionOptions.push(execution);
       if (options.modelFailure) throw new Error('controlled model failure');
+      await invokeInformation(tools);
       return {
         content: '回复',
         model: 'fake-model',
@@ -120,6 +153,7 @@ function createService(
       extraTools: unknown[] = [],
     ): AsyncGenerator<LlmStreamEvent, LlmEventStreamResult> {
       registeredToolNames.push(getToolNames(extraTools));
+      await invokeInformation(extraTools);
       yield { type: 'delta', content: '第一段' };
       if (options.purchaseForm) {
         const requestTool = extraTools.find(
@@ -219,21 +253,34 @@ function createService(
     truncateToTokens: (content: string) => content,
     composeLongTermContext: (preferences: string, memory: string) =>
       [preferences, memory].filter(Boolean).join('\n\n'),
-    prepare: (input: { memoryContext?: string }) => {
+    prepare: (input: {
+      memoryContext?: string;
+      messageHistory?: ChatHistoryMessage[];
+    }) => {
       contextInputs.push(input);
       return {
         messages: [
           { role: 'system' as const, content: '服务端上下文' },
           { role: 'user' as const, content: '你好' },
         ],
-        needsSummary: false,
+        needsSummary: Boolean(
+          options.summaryHistory && contextInputs.length === 1,
+        ),
+        messageSummarySource: input.messageHistory ?? [],
         summarySource: [],
-        lastIncludedMessageId: null,
+        lastIncludedMessageId: options.summaryHistory
+          ? 'summary-through'
+          : null,
         hardLimit: 100,
       };
     },
   };
-  const summaryService = { summarize: async () => null };
+  const summaryService = {
+    summarize: async (_previous: unknown, source: unknown[]) => {
+      summarySources.push(source);
+      return 'safe-summary';
+    },
+  };
   const traceWriter = {
     writeEvents: async (_context: unknown, events: unknown[]) => {
       traceEvents.push(...events);
@@ -261,11 +308,16 @@ function createService(
       return options.failedReader ? '可用偏好' : '';
     },
   };
-  const memoryTasks = { enqueueInTransaction: async () => undefined };
+  const memoryTasks = {
+    enqueueInTransaction: async (transaction: unknown, input: unknown) => {
+      assert.equal(transaction, manager);
+      memoryEnqueued.push(input);
+    },
+  };
   const memoryLifecycle = { markConversationDeleted: async () => undefined };
   const emptyPurchaseState = {
     fingerprint: '',
-    active: false,
+    active: options.purchaseActive ?? false,
     context: '',
     reference: null,
   };
@@ -313,7 +365,31 @@ function createService(
     undefined,
     options.userInformation
       ? ({
-          lookup: async () => ({ ok: true, sections: {}, errors: [] }),
+          lookup: async () =>
+            informationOutcome === 'unavailable'
+              ? {
+                  ok: true,
+                  sections: {},
+                  errors: [{ section: 'try_on_tasks', code: 'unavailable' }],
+                }
+              : {
+                  ok: true,
+                  sections:
+                    informationOutcome === 'photos'
+                      ? {}
+                      : {
+                          try_on_tasks: {
+                            items:
+                              informationOutcome === 'empty'
+                                ? []
+                                : [{ taskId: 'safe-reference' }],
+                            page: 1,
+                            pageSize: 5,
+                            total: informationOutcome === 'empty' ? 0 : 1,
+                          },
+                        },
+                  errors: [],
+                },
         } as never)
       : undefined,
   );
@@ -329,8 +405,152 @@ function createService(
     traceEvents,
     bindings,
     contextInputs,
+    memoryEnqueued,
+    summarySources,
   };
 }
+
+test('JSON/SSE 试穿查询成功、空和不可用均隔离整轮，下一普通轮恢复记忆资格', async () => {
+  for (const stream of [false, true]) {
+    for (const outcome of ['success', 'empty', 'unavailable'] as const) {
+      const fixture = createService({
+        userInformation: true,
+        informationRequests: [outcome, 'none'],
+      });
+      const request = {
+        messages: [{ role: 'user', content: '查询上次试穿，同时我喜欢宽松' }],
+      };
+      if (stream) {
+        for await (const _event of await fixture.service.prepareStream(
+          { id: 'user-1' } as never,
+          request as never,
+        )) {
+          // 消费至 done，验证资格保存与公开展示绑定在完成前发生。
+        }
+      } else {
+        await fixture.service.chat({ id: 'user-1' } as never, request as never);
+      }
+      const excluded = fixture.persisted
+        .flat()
+        .filter((value): value is ChatMessage => value instanceof ChatMessage);
+      assert.equal(excluded.length, 2);
+      assert.ok(
+        excluded.every((message) => message.memoryExtractionEligible === false),
+      );
+      assert.equal(fixture.memoryEnqueued.length, 0);
+      assert.equal(fixture.bindings.length, 1);
+      await fixture.service.chat(
+        { id: 'user-1' } as never,
+        { messages: [{ role: 'user', content: '我喜欢宽松外套' }] } as never,
+      );
+      const messages = fixture.persisted
+        .flat()
+        .filter((value): value is ChatMessage => value instanceof ChatMessage);
+      assert.ok(
+        messages.slice(-2).every((message) => message.memoryExtractionEligible),
+      );
+      assert.equal(fixture.memoryEnqueued.length, 1);
+    }
+  }
+});
+
+test('摘要服务实际接线过滤不同模型 ID 的试穿和未绑定运行，仅接收普通轮次', async () => {
+  const history = {
+    messages: [
+      Object.assign(new ChatMessage(), {
+        id: 'db-excluded',
+        memoryExtractionEligible: false,
+      }),
+      Object.assign(new ChatMessage(), {
+        id: 'db-ordinary',
+        memoryExtractionEligible: true,
+      }),
+    ],
+    traces: [
+      Object.assign(new ChatTraceEvent(), {
+        runId: 'try-on',
+        sequence: 0,
+        eventType: 'input',
+        messageId: 'model-human-excluded',
+        content: '查询上次试穿',
+        payload: {},
+      }),
+      Object.assign(new ChatTraceEvent(), {
+        runId: 'try-on',
+        sequence: 1,
+        eventType: 'model_response',
+        messageId: 'model-ai-excluded',
+        content: '任务处理中',
+        payload: { publicDisplay: { assistantMessageId: 'db-excluded' } },
+      }),
+      Object.assign(new ChatTraceEvent(), {
+        runId: 'ordinary',
+        sequence: 0,
+        eventType: 'input',
+        messageId: 'model-human-ordinary',
+        content: '喜欢棉质',
+        payload: {},
+      }),
+      Object.assign(new ChatTraceEvent(), {
+        runId: 'ordinary',
+        sequence: 1,
+        eventType: 'model_response',
+        messageId: 'model-ai-ordinary',
+        content: '棉质舒适',
+        payload: { publicDisplay: { assistantMessageId: 'db-ordinary' } },
+      }),
+      Object.assign(new ChatTraceEvent(), {
+        runId: 'unbound',
+        sequence: 0,
+        eventType: 'input',
+        messageId: 'model-unbound',
+        content: '失败轮次',
+        payload: {},
+      }),
+    ],
+  };
+  const fixture = createService({ summaryHistory: history });
+  await fixture.service.chat(
+    { id: 'user-1' } as never,
+    {
+      conversationId: 'existing-conversation',
+      messages: [{ role: 'user', content: '继续聊天' }],
+    } as never,
+  );
+  assert.equal(fixture.summarySources.length, 1);
+  assert.deepEqual(
+    (fixture.summarySources[0] as ChatHistoryMessage[]).map(
+      (message) => message.id,
+    ),
+    ['model-human-ordinary', 'model-ai-ordinary'],
+  );
+});
+
+test('原图片查询保留记忆资格，已有购买隔离条件继续生效', async () => {
+  for (const purchaseActive of [false, true]) {
+    const fixture = createService({
+      userInformation: true,
+      informationRequests: ['photos'],
+      purchaseActive,
+    });
+    await fixture.service.chat(
+      { id: 'user-1' } as never,
+      {
+        ...(purchaseActive ? { conversationId: 'existing-conversation' } : {}),
+        messages: [{ role: 'user', content: '我的已保存图片' }],
+      } as never,
+    );
+    const messages = fixture.persisted
+      .flat()
+      .filter((value): value is ChatMessage => value instanceof ChatMessage);
+    assert.ok(
+      messages.every(
+        (message) => message.memoryExtractionEligible === !purchaseActive,
+      ),
+    );
+    assert.equal(fixture.memoryEnqueued.length, purchaseActive ? 0 : 1);
+  }
+});
 
 test('持久化聊天仅将系统上下文传给模型，不写入消息或响应', async () => {
   const { service, persisted, modelInputs } = createService();

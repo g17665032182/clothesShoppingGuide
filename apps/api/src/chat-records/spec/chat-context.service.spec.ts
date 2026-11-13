@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-
 import { ConfigService } from '@nestjs/config';
 import {
   AIMessage,
@@ -15,6 +14,43 @@ import {
   ChatMessage,
   ChatRecordMessageRole,
 } from '../entity/chat-message.entity.js';
+import { eligibleSummaryTraceIds } from '../service/chat-summary-source.js';
+
+test('摘要通过真实消息绑定排除试穿轮次，模型 ID 不同及未完成运行也不能回流', () => {
+  const ids = eligibleSummaryTraceIds(
+    [
+      { runId: 'try-on', sequence: 0, messageId: 'model-human', payload: {} },
+      {
+        runId: 'try-on',
+        sequence: 1,
+        messageId: 'model-assistant',
+        payload: { publicDisplay: { assistantMessageId: 'db-excluded' } },
+      },
+      {
+        runId: 'ordinary',
+        sequence: 0,
+        messageId: 'ordinary-human',
+        payload: {},
+      },
+      {
+        runId: 'ordinary',
+        sequence: 1,
+        messageId: 'ordinary-model',
+        payload: { publicDisplay: { assistantMessageId: 'db-eligible' } },
+      },
+      { runId: 'failed', sequence: 0, messageId: 'unbound', payload: {} },
+      { runId: 'cancelled', sequence: 0, messageId: null, payload: {} },
+    ],
+    [
+      { id: 'db-excluded', memoryExtractionEligible: false },
+      { id: 'db-eligible', memoryExtractionEligible: true },
+    ],
+  );
+  assert.deepEqual(
+    [...ids],
+    ['ordinary:ordinary-human', 'ordinary:ordinary-model'],
+  );
+});
 
 function createService(window = 100): ChatContextService {
   return new ChatContextService(

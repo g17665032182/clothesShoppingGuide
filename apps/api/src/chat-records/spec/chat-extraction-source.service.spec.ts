@@ -141,3 +141,23 @@ test('批量来源过滤不合格轮次但保留合法 ID，区分空批次和�
   f.setOwnsConversation(false);
   assert.equal(await f.source.readTurns(input), null);
 });
+
+test('旧候选重试反复读取试穿轮次仍被排除，混合批次只保留普通轮次', async () => {
+  const f = fixture();
+  const tryOn = f.addTurn(1, false);
+  const ordinary = f.addTurn(2);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    assert.equal(
+      await f.source.readTurn({ userId, conversationId, ...tryOn }),
+      null,
+    );
+    assert.deepEqual(
+      await f.source.readTurns({
+        userId,
+        conversationId,
+        turns: [tryOn, ordinary],
+      }),
+      [{ ...ordinary, userMessage: '用户 2', assistantMessage: '助手 2' }],
+    );
+  }
+});

@@ -184,3 +184,14 @@
 ## 审批门槛
 
 设计、CRUD 契约、技术与实施文档均已获用户确认。实现和自动化验证见[实施记录](../chat-user-information/chat-user-information-implementation.md)；登录态浏览器验收尚未执行。
+
+## 2026-11-13 增量：本人试穿任务查询
+
+- 状态：增量设计、业务契约、技术及实施文档均已确认，第四类 section 已接入；省略 sections 仍只查询上文原三类。验证与缺口见[实施记录](../llm/chat-tool-expansion-implementation.md)。
+- 依据：[扩展设计](../llm/chat-tool-expansion-design.md)、[增量契约](./chat-tool-expansion-crud-contract.md)、[首期技术方案](../llm/chat-tool-expansion-technical.md)。
+- `get_my_information` 增加显式请求的 `try_on_tasks`；省略 sections 仍只读取 addresses/orders/photos。显式可选四类中的 1–4 项，不重复。
+- `tryOnStatus` 仅配合 try_on_tasks 使用，允许 queued/processing/succeeded/failed；订单 status 不变。页码为实际整数 1–10，每页固定 5 条，不接收 taskId、unread 或动作参数。
+- `sections.try_on_tasks` 为 `{ items, page, pageSize: 5, total }`。任务项目只含 taskId、四种状态、商品 externalId/name/category/color 快照、createdAt、可空 completedAt 和 resultAvailable。
+- resultAvailable 来自当前本人未删除任务和结果记录，不返回照片引用、图片 URL、结果 ID、对象键、供应商信息或原始失败原因。查询不下载图片、不生成任务、不标记已读。
+- 失败单独返回 `{ section: "try_on_tasks", code: "unavailable" }`，无记录是成功空列表。trace 只记枚举、数量、分页和固定错误；原始工具结果不写公开展示或历史。
+- 首期不新增 HTTP 路由、SSE 事件、数据库字段、卡片或前端页面。记忆/摘要整轮隔离细化见技术方案，实施状态不得以本条确认代替。

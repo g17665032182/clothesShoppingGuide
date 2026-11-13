@@ -238,3 +238,64 @@ test('用户信息查询及旧地址选择调用和结果从模型历史成对�
   assert.equal(JSON.stringify(messages).includes('private-address-id'), false);
   assert.equal(JSON.stringify(messages).includes('addressId'), false);
 });
+
+test('试穿任务查询在混合工具历史中成对隐藏，最终正文继续保留', () => {
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 1,
+      messageId: 'model-invocation',
+      content: '',
+      payload: {
+        toolCalls: [
+          {
+            id: 'try-on-query',
+            name: 'get_my_information',
+            args: { sections: ['try_on_tasks'] },
+          },
+          {
+            id: 'catalog',
+            name: 'search_local_clothing_products',
+            args: { category: 'tops' },
+          },
+        ],
+      },
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 2,
+      messageId: 'try-on-result',
+      toolCallId: 'try-on-query',
+      toolName: 'get_my_information',
+      content:
+        '{"sections":{"try_on_tasks":{"items":[{"taskId":"hidden-task"}]}}}',
+      status: 'success',
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 3,
+      messageId: 'catalog-result',
+      toolCallId: 'catalog',
+      toolName: 'search_local_clothing_products',
+      content: '{"items":[]}',
+      status: 'success',
+    },
+    {
+      eventType: 'model_response',
+      sequence: 4,
+      messageId: 'final',
+      content: '最近任务已完成，请到我的试穿查看。',
+    },
+  ]);
+  assert.equal(messages.length, 3);
+  assert.deepEqual(
+    (messages[0]?.message as AIMessage).tool_calls?.map((call) => call.id),
+    ['catalog'],
+  );
+  assert.equal((messages[1]?.message as ToolMessage).tool_call_id, 'catalog');
+  assert.equal(
+    messages[2]?.message.content,
+    '最近任务已完成，请到我的试穿查看。',
+  );
+  assert.equal(JSON.stringify(messages).includes('hidden-task'), false);
+});

@@ -31,6 +31,18 @@ const ADDRESS_TOOL_NAMES = new Set([
   'select_my_shipping_address',
 ]);
 const USER_INFORMATION_TOOL_NAME = 'get_my_information';
+const INFORMATION_SECTIONS = new Set([
+  'addresses',
+  'orders',
+  'photos',
+  'try_on_tasks',
+]);
+const TRY_ON_TASK_STATUSES = new Set([
+  'queued',
+  'processing',
+  'succeeded',
+  'failed',
+]);
 const PURCHASE_STATUSES = new Set([
   'collecting',
   'ready',
@@ -192,9 +204,14 @@ function safeInformationArguments(value: unknown): Record<string, unknown> {
     return {};
   const input = source as Record<string, unknown>;
   const sections = Array.isArray(input.sections)
-    ? input.sections.filter((section) =>
-        ['addresses', 'orders', 'photos'].includes(String(section)),
-      )
+    ? [
+        ...new Set(
+          input.sections.filter(
+            (section) =>
+              typeof section === 'string' && INFORMATION_SECTIONS.has(section),
+          ),
+        ),
+      ]
     : [];
   const statusValues = new Set([
     'pending_payment',
@@ -207,7 +224,8 @@ function safeInformationArguments(value: unknown): Record<string, unknown> {
     sections,
     ...(typeof input.page === 'number' &&
     Number.isSafeInteger(input.page) &&
-    input.page > 0
+    input.page > 0 &&
+    input.page <= 10
       ? { page: input.page }
       : {}),
     ...(typeof input.orderNo === 'string'
@@ -215,6 +233,10 @@ function safeInformationArguments(value: unknown): Record<string, unknown> {
       : {}),
     ...(typeof input.status === 'string' && statusValues.has(input.status)
       ? { status: input.status }
+      : {}),
+    ...(typeof input.tryOnStatus === 'string' &&
+    TRY_ON_TASK_STATUSES.has(input.tryOnStatus)
+      ? { tryOnStatus: input.tryOnStatus }
       : {}),
   };
 }
@@ -231,7 +253,7 @@ function safeInformationProjection(value: unknown): Record<string, unknown> {
       ? (input.sections as Record<string, unknown>)
       : {};
   const sections: Record<string, unknown> = {};
-  for (const name of ['addresses', 'orders', 'photos'] as const) {
+  for (const name of INFORMATION_SECTIONS) {
     const section = sectionsSource[name];
     if (
       typeof section !== 'object' ||
@@ -243,8 +265,17 @@ function safeInformationProjection(value: unknown): Record<string, unknown> {
     const items = Array.isArray(record.items) ? record.items.length : 0;
     sections[name] = {
       itemCount: items,
-      ...(Number.isSafeInteger(record.total) ? { total: record.total } : {}),
-      ...(Number.isSafeInteger(record.page) ? { page: record.page } : {}),
+      ...(typeof record.total === 'number' &&
+      Number.isSafeInteger(record.total) &&
+      record.total >= 0
+        ? { total: record.total }
+        : {}),
+      ...(typeof record.page === 'number' &&
+      Number.isSafeInteger(record.page) &&
+      record.page >= 1 &&
+      record.page <= 10
+        ? { page: record.page }
+        : {}),
     };
   }
   const errors = Array.isArray(input.errors)
@@ -252,7 +283,9 @@ function safeInformationProjection(value: unknown): Record<string, unknown> {
         if (typeof error !== 'object' || error === null || Array.isArray(error))
           return [];
         const entry = error as Record<string, unknown>;
-        return ['addresses', 'orders', 'photos'].includes(String(entry.section))
+        return typeof entry.section === 'string' &&
+          INFORMATION_SECTIONS.has(entry.section) &&
+          entry.code === 'unavailable'
           ? [{ section: entry.section, code: 'unavailable' }]
           : [];
       })

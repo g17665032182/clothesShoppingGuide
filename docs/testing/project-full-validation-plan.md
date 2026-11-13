@@ -121,6 +121,15 @@ git diff --check
 
 覆盖新增字段的空值兼容、旧商品设置保留、商品和任务历史数据不丢失，以及新商品默认状态。
 
+### 2.6 聊天试穿任务只读查询
+
+- `RUN_CHAT_TRY_ON_INFORMATION_POSTGRES_TEST=1` + `CHAT_TRY_ON_INFORMATION_TEST_DB`：
+  - `apps/api/src/chat-records/spec/chat-try-on-information.postgres.spec.ts`
+- 库名必须匹配 `clothes_guide_chat_try_on_information_test_*`，且不同于默认库。由调用方先核实并创建全新可销毁库，测试显式注入 ORM `dbName`，仅应用既有增量迁移。
+- 测试只清理本次 UUID fixture 并关闭应用/ORM，不接管或删除已有库；执行者负责记录新建库来源和最终清理。与所有数据库、迁移和端口任务串行。
+
+覆盖真实只读 REPEATABLE READ 快照、当页批量结果读取、本人/删除/状态分页、JWT + 实际 ToolNode + fake 模型的 JSON/SSE 往返、trace/activity/历史边界、整轮记忆及摘要排除和同会话普通轮恢复。测试不注册 Worker、存储或真实供应商；不代替浏览器和真实模型验收。实际结果见[实施记录](../llm/chat-tool-expansion-implementation.md)。
+
 ### 数据库测试退出条件
 
 - 每项均记录命令、门控变量、隔离库名、测试数量、通过/失败/跳过数量及清理结果。

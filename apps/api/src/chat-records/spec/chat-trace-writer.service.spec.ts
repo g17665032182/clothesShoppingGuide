@@ -642,6 +642,202 @@ test('get_my_information trace 仅保存查询条件和 section 计数', async (
   });
 });
 
+test('试穿查询独立与嵌套非法调用仅保留枚举，结果与 payload 不持久化任务条目', async () => {
+  const { writer, rows } = createWriter();
+  const taskId = '88888888-8888-4888-8888-888888888888';
+  const args = {
+    sections: ['try_on_tasks', 'unknown', 'try_on_tasks'],
+    tryOnStatus: 'processing',
+    page: 10,
+    taskId,
+    photoId: 'private-photo',
+    imageUrl: 'https://private.example/result',
+    objectKey: 'private/object',
+    provider: 'private-provider',
+  };
+  const nested = {
+    nested: {
+      toolCalls: [{ name: 'get_my_information', id: 'nested-call', args }],
+      invalid_tool_calls: [
+        {
+          name: 'get_my_information',
+          id: 'invalid-call',
+          args: JSON.stringify({ ...args, page: 11, tryOnStatus: 'deleted' }),
+          error: 'private parse error',
+        },
+      ],
+      tool_calls: [
+        {
+          name: 'get_my_information',
+          arguments: JSON.stringify(args),
+        },
+      ],
+    },
+  };
+  const result = {
+    ok: true,
+    sections: {
+      try_on_tasks: {
+        items: [
+          {
+            taskId,
+            product: { name: 'private-product' },
+            objectKey: 'private/object',
+          },
+        ],
+        total: 6,
+        page: 2,
+        privateField: 'private-section',
+      },
+      unknown: { items: [{ private: 'private-unknown' }] },
+    },
+    errors: [
+      {
+        section: 'try_on_tasks',
+        code: 'unavailable',
+        message: 'private database error',
+      },
+      { section: 'unknown', code: 'unavailable' },
+      { section: 'photos', code: 'private-error' },
+    ],
+  };
+  const original = structuredClone({ nested, args, result });
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'model',
+      content: '',
+      model: 'model',
+      usage: null,
+      payload: nested,
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'model',
+      toolCallId: 'task-call',
+      toolName: 'get_my_information',
+      args,
+    },
+    {
+      sequence: 2,
+      type: 'tool_result',
+      messageId: 'tool',
+      toolCallId: 'task-call',
+      toolName: 'get_my_information',
+      content: JSON.stringify(result),
+      payload: result,
+      status: 'success',
+    },
+  ]);
+  assert.deepEqual({ nested, args, result }, original);
+  assert.deepEqual(rows[1]?.payload, {
+    sections: ['try_on_tasks'],
+    page: 10,
+    tryOnStatus: 'processing',
+  });
+  const safeResult = {
+    ok: true,
+    sections: { try_on_tasks: { itemCount: 1, total: 6, page: 2 } },
+    errors: [{ section: 'try_on_tasks', code: 'unavailable' }],
+  };
+  assert.deepEqual(JSON.parse(rows[2]?.content ?? '{}'), safeResult);
+  assert.deepEqual(rows[2]?.payload, safeResult);
+  assert.deepEqual(rows[0]?.payload, {
+    nested: {
+      toolCalls: [
+        {
+          name: 'get_my_information',
+          id: 'nested-call',
+          args: {
+            sections: ['try_on_tasks'],
+            page: 10,
+            tryOnStatus: 'processing',
+          },
+        },
+      ],
+      invalid_tool_calls: [
+        {
+          name: 'get_my_information',
+          id: 'invalid-call',
+          args: { sections: ['try_on_tasks'] },
+        },
+      ],
+      tool_calls: [
+        {
+          name: 'get_my_information',
+          args: {
+            sections: ['try_on_tasks'],
+            page: 10,
+            tryOnStatus: 'processing',
+          },
+        },
+      ],
+    },
+  });
+  const serialized = JSON.stringify(rows);
+  for (const forbidden of [
+    taskId,
+    'private',
+    'objectKey',
+    'imageUrl',
+    'photoId',
+    'provider',
+    'taskId',
+  ]) {
+    assert.equal(serialized.includes(forbidden), false, forbidden);
+  }
+});
+
+test('信息 trace 不保留非法分页、未知状态、错误枚举和原始失败内容', async () => {
+  const { writer, rows } = createWriter();
+  for (const [index, page] of [0, 11, 1.5, '1'].entries()) {
+    await writer.writeEvents(context, [
+      {
+        sequence: index,
+        type: 'tool_call',
+        messageId: 'model',
+        toolCallId: `invalid-${index}`,
+        toolName: 'get_my_information',
+        args: {
+          sections: ['try_on_tasks'],
+          page,
+          tryOnStatus: 'private-invalid',
+        },
+      },
+    ]);
+    assert.deepEqual(rows[index]?.payload, { sections: ['try_on_tasks'] });
+  }
+  await writer.writeEvents(context, [
+    {
+      sequence: 4,
+      type: 'tool_result',
+      messageId: 'tool',
+      toolCallId: 'invalid-result',
+      toolName: 'get_my_information',
+      content: 'private failure',
+      status: 'failed',
+      payload: {
+        sections: { try_on_tasks: { items: [], total: -1, page: 11 } },
+        errors: [
+          {
+            section: 'try_on_tasks',
+            code: 'unavailable',
+            raw: 'private failure',
+          },
+        ],
+      },
+    },
+  ]);
+  assert.equal(rows[4]?.content, '工具执行失败');
+  assert.deepEqual(rows[4]?.payload, {
+    sections: { try_on_tasks: { itemCount: 0 } },
+    errors: [{ section: 'try_on_tasks', code: 'unavailable' }],
+  });
+  assert.equal(JSON.stringify(rows).includes('private'), false);
+});
+
 test('卡片工具 trace 仅保存引用参数和通过 schema 的公开卡片', async () => {
   const { writer, rows } = createWriter();
   const card = {

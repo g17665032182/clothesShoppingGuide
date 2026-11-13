@@ -3,7 +3,7 @@
 - 盘点日期：2026-11-13
 - 范围：普通用户聊天中由模型发起的工具调用，以及与工具相邻的前端操作。
 - 依据：当前源码和已确认业务契约。此文档记录能力现状与扩展候选，不代表候选能力已获准实施。
-- 扩展方案：[对话工具能力扩展设计草案](./chat-tool-expansion-design.md)、[增量契约草案](../contracts/chat-tool-expansion-crud-contract.md)；均待用户确认，不改变下述现有能力状态。
+- 扩展方案：[扩展设计](./chat-tool-expansion-design.md)、[增量契约](../contracts/chat-tool-expansion-crud-contract.md)、[首期技术方案](./chat-tool-expansion-technical.md)及[实施文档](./chat-tool-expansion-implementation.md)均已确认；首期试穿任务查询已接入，实际验证与缺口见实施记录。其他候选仍未实施。
 
 ## 工具调用原则
 
@@ -17,17 +17,17 @@
 
 以下工具由 [`ChatRecordsService`](../../apps/api/src/chat-records/service/chat-records.service.ts) 在每轮聊天中组装。
 
-| 工具                             | 当前能力                                                                              | 边界                                                             |
-| -------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `search_local_clothing_products` | 按明确需求查询本地有效服装和鞋类，返回商品、尺码/颜色摘要、价格、有货状态和匹配理由。 | 每轮最多查询一次，最多返回 3 件；商品事实只能来自工具结果。      |
-| `get_purchase_draft`             | 读取本人当前购买草稿、规格和缺失字段。                                                | 不向模型返回收件字段值。                                         |
-| `update_purchase_draft`          | 按用户本轮明确提供的值更新本人未提交草稿。                                            | 受字段、草稿版本和资源归属校验；信息有歧义时须先询问。           |
-| `discard_purchase_draft`         | 放弃本人未提交的购买草稿。                                                            | 不取消正式订单。                                                 |
-| `request_purchase_form`          | 请求前端打开本人当前仍可编辑的购买草稿弹框。                                          | 无参数、只用于 SSE；服务端重读并校验草稿，不创建或修改购买。     |
-| `list_my_orders`                 | 查询最多 5 笔本人订单摘要；待付款筛选可返回服务端确认的取消候选。                     | 只读；不提供收件信息，不执行取消、支付或收货。                   |
-| `get_my_information`             | 查询本人地址引用、订单摘要或已保存图片元数据；下单缺地址时用于启动地址选择流程。      | 地址不返回姓名、手机号或详细地址；图片不返回内容、URL 或存储键。 |
-| `request_dynamic_form`           | 请求前端渲染服务端注册的动态表单；目前购买收件信息使用 `purchase_recipient`。         | 工具只发出表单定义和安全引用；不能读取或提交用户填写值。         |
-| `display_chat_card`              | 展示本轮已查询并登记的商品卡或只读订单卡。                                            | 只接受可信查询结果的引用，不接受模型编写的商品、订单事实。       |
+| 工具                             | 当前能力                                                                                               | 边界                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `search_local_clothing_products` | 按明确需求查询本地有效服装和鞋类，返回商品、尺码/颜色摘要、价格、有货状态和匹配理由。                  | 每轮最多查询一次，最多返回 3 件；商品事实只能来自工具结果。                                                         |
+| `get_purchase_draft`             | 读取本人当前购买草稿、规格和缺失字段。                                                                 | 不向模型返回收件字段值。                                                                                            |
+| `update_purchase_draft`          | 按用户本轮明确提供的值更新本人未提交草稿。                                                             | 受字段、草稿版本和资源归属校验；信息有歧义时须先询问。                                                              |
+| `discard_purchase_draft`         | 放弃本人未提交的购买草稿。                                                                             | 不取消正式订单。                                                                                                    |
+| `request_purchase_form`          | 请求前端打开本人当前仍可编辑的购买草稿弹框。                                                           | 无参数、只用于 SSE；服务端重读并校验草稿，不创建或修改购买。                                                        |
+| `list_my_orders`                 | 查询最多 5 笔本人订单摘要；待付款筛选可返回服务端确认的取消候选。                                      | 只读；不提供收件信息，不执行取消、支付或收货。                                                                      |
+| `get_my_information`             | 查询本人地址引用、订单摘要、已保存图片元数据，或显式请求的试穿任务摘要；下单缺地址时启动地址选择流程。 | 省略 sections 仍为原三类；试穿只返回本人未删除任务，每页5条、最多10页，不返回图片/结果ID/存储键，不触发生成或下载。 |
+| `request_dynamic_form`           | 请求前端渲染服务端注册的动态表单；目前购买收件信息使用 `purchase_recipient`。                          | 工具只发出表单定义和安全引用；不能读取或提交用户填写值。                                                            |
+| `display_chat_card`              | 展示本轮已查询并登记的商品卡或只读订单卡。                                                             | 只接受可信查询结果的引用，不接受模型编写的商品、订单事实。                                                          |
 
 商品搜索和订单查询的工具实现分别位于 [`product-search.tool.ts`](../../apps/api/src/product-catalog/tool/product-search.tool.ts) 与 [`list-user-orders.tool.ts`](../../apps/api/src/orders/tool/list-user-orders.tool.ts)。购买草稿工具、购买弹框请求工具、用户信息工具、动态表单工具和卡片工具分别位于 [`purchase-tools.ts`](../../apps/api/src/chat-purchase/tool/purchase-tools.ts)、[`request-purchase-form.tool.ts`](../../apps/api/src/chat-purchase/tool/request-purchase-form.tool.ts)、[`chat-user-information.tool.ts`](../../apps/api/src/chat-records/tools/chat-user-information.tool.ts)、[`request-dynamic-form.tool.ts`](../../apps/api/src/llm/tools/request-dynamic-form.tool.ts) 和 [`chat-card-display.tool.ts`](../../apps/api/src/chat-records/display/chat-card-display.tool.ts)。
 
@@ -43,10 +43,6 @@
 ## 可补充或扩展的工具
 
 按用户收益、现有数据源和安全边界排序。以下均为候选，实施前仍需按项目流程确认范围并更新相应契约。
-
-### 高优先级
-
-- **查询本人试穿任务**：可作为 `get_my_information` 的 `try_on_tasks` section，适用于“我上次试穿完成了吗”“最近的试穿任务是什么状态”。本人任务列表/详情 API 已存在。只返回有界的任务状态、商品摘要、时间和安全引用；图片由前端经本人结果 API 加载，不把图片字节、签名 URL 或对象键给模型。
 
 ### 中优先级
 

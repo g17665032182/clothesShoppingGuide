@@ -182,6 +182,7 @@ type PreparedChat = {
   contextWindowTokens: number;
   purchaseState: PurchaseRunState;
   purchaseToolUsed: boolean;
+  tryOnTasksRequested: boolean;
   pendingPurchaseFormRequest: boolean;
   purchaseFormEventSent: boolean;
   purchaseReferencedDraftId?: string;
@@ -620,6 +621,7 @@ export class ChatRecordsService {
       contextWindowTokens: this.contextService.getContextWindow(),
       purchaseState,
       purchaseToolUsed: false,
+      tryOnTasksRequested: false,
       pendingPurchaseFormRequest: false,
       purchaseFormEventSent: false,
       pendingDynamicForms: [],
@@ -1039,7 +1041,11 @@ export class ChatRecordsService {
         this.displayService.stageCard(display, card),
       ),
       ...(addressCoordinator
-        ? [createChatUserInformationTool(addressCoordinator)]
+        ? [
+            createChatUserInformationTool(addressCoordinator, () => {
+              prepared.tryOnTasksRequested = true;
+            }),
+          ]
         : []),
       createRequestDynamicFormTool(
         async (input) => {
@@ -1157,6 +1163,7 @@ export class ChatRecordsService {
       const eligible =
         !prepared.purchaseState.active &&
         !prepared.purchaseToolUsed &&
+        !prepared.tryOnTasksRequested &&
         prepared.purchaseState.fingerprint === currentPurchase.fingerprint;
       userMessage.memoryExtractionEligible = eligible;
       assistantMessage.memoryExtractionEligible = eligible;

@@ -161,3 +161,63 @@ test('用户明确要求手动填写时不与并行信息查询产生地址卡�
   assert.equal(preflight, null);
   assert.equal(fixture.staged.length, 0);
 });
+
+test('试穿筛选独立转发，不读地址或草稿；混合查询仍只为地址生成卡片', async () => {
+  const received: unknown[] = [];
+  let draftReads = 0;
+  const staged: unknown[] = [];
+  const coordinator = new PurchaseAddressCoordinator(
+    {
+      lookup: async (userId: string, input: { sections: string[] }) => {
+        assert.equal(userId, 'authenticated-user');
+        received.push(input);
+        return input.sections.includes('addresses')
+          ? {
+              ok: true,
+              sections: {
+                addresses: { items: [], total: 1, page: 1, pageSize: 5 },
+              },
+              errors: [],
+            }
+          : {
+              ok: true,
+              sections: {
+                try_on_tasks: { items: [], total: 0, page: 2, pageSize: 5 },
+              },
+              errors: [],
+            };
+      },
+    } as never,
+    {
+      dynamicFormState: async () => {
+        draftReads += 1;
+        return { draft: { id: 'draft', version: 1, recipient: {} } };
+      },
+    } as never,
+    'authenticated-user',
+    'conversation',
+    true,
+    '查询试穿',
+    (...reference) => staged.push(reference),
+  );
+  const input = getMyInformationSchema.parse({
+    sections: ['try_on_tasks'],
+    tryOnStatus: 'processing',
+    page: 2,
+  });
+  const response = await coordinator.lookup(input);
+  assert.equal(response.sections.try_on_tasks?.total, 0);
+  assert.deepEqual(received, [input]);
+  assert.equal(draftReads, 0);
+  assert.deepEqual(staged, []);
+  await coordinator.lookup({
+    ...input,
+    sections: ['addresses', 'try_on_tasks'],
+  });
+  assert.equal(draftReads, 1);
+  assert.deepEqual(staged, [['draft', 1]]);
+  assert.deepEqual(received.slice(1), [
+    { sections: ['addresses'], page: 2 },
+    input,
+  ]);
+});

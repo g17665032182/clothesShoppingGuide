@@ -61,6 +61,19 @@ const photo = {
   createdAt: '2026-11-12T00:00:00.000Z',
   availability: 'saved',
 };
+const tryOnTask = {
+  taskId: '11111111-1111-4111-8111-111111111111',
+  status: 'succeeded',
+  product: {
+    externalId: 'example-product',
+    name: '示例外套',
+    category: 'outerwear',
+    color: '黑色',
+  },
+  createdAt: '2026-11-13T00:00:00.000Z',
+  completedAt: '2026-11-13T00:01:00.000Z',
+  resultAvailable: true,
+};
 
 function createService(
   overrides: {
@@ -74,16 +87,21 @@ function createService(
     photos?: {
       listSavedMetadataForUser: (...args: unknown[]) => Promise<unknown>;
     };
+    tryOnTasks?: {
+      listMetadataForUser: (...args: unknown[]) => Promise<unknown>;
+    };
   } = {},
 ) {
   const calls: {
     addresses: unknown[][];
     orders: unknown[][];
     photos: unknown[][];
+    tryOnTasks: unknown[][];
   } = {
     addresses: [],
     orders: [],
     photos: [],
+    tryOnTasks: [],
   };
   const addresses = overrides.addresses ?? {
     listForUser: async (...args: unknown[]) => {
@@ -107,12 +125,19 @@ function createService(
       return { items: [photo], total: 1, page: 1, pageSize: 5 };
     },
   };
+  const tryOnTasks = overrides.tryOnTasks ?? {
+    listMetadataForUser: async (...args: unknown[]) => {
+      calls.tryOnTasks.push(args);
+      return { items: [tryOnTask], total: 1, page: 1, pageSize: 5 };
+    },
+  };
 
   return {
     service: new ChatUserInformationService(
       addresses as never,
       orders as never,
       photos as never,
+      tryOnTasks as never,
     ),
     calls,
   };
@@ -189,6 +214,136 @@ test('信息查询立即白名单投影本人地址、订单和图片数据', as
     { page: 1, pageSize: 5 },
   ]);
   assert.deepEqual(fixture.calls.photos[0], ['bound-user-id', 1]);
+  assert.deepEqual(fixture.calls.tryOnTasks, []);
+});
+
+test('试穿任务显式查询绑定本人并二次投影，不读取其他 section', async () => {
+  const calls: unknown[][] = [];
+  const fixture = createService({
+    tryOnTasks: {
+      listMetadataForUser: async (...args: unknown[]) => {
+        calls.push(args);
+        return {
+          items: [
+            {
+              ...tryOnTask,
+              photoId: 'private-photo',
+              resultId: 'private-result',
+              imageUrl: 'https://private.example/image',
+              objectKey: 'private/object',
+              providerResponse: 'private-provider',
+              product: {
+                ...tryOnTask.product,
+                imageUrl: 'https://private.example/product',
+              },
+            },
+          ],
+          total: 8,
+          page: 2,
+          pageSize: 5,
+          privateField: 'private-page',
+        };
+      },
+    },
+  });
+  const result = await fixture.service.lookup(
+    'bound-user-id',
+    getMyInformationSchema.parse({
+      sections: ['try_on_tasks'],
+      tryOnStatus: 'succeeded',
+      page: 2,
+    }),
+  );
+  assert.deepEqual(calls, [
+    ['bound-user-id', { page: 2, status: 'succeeded' }],
+  ]);
+  assert.deepEqual(result, {
+    ok: true,
+    sections: {
+      try_on_tasks: { items: [tryOnTask], page: 2, pageSize: 5, total: 8 },
+    },
+    errors: [],
+  });
+  assert.deepEqual(fixture.calls.addresses, []);
+  assert.deepEqual(fixture.calls.orders, []);
+  assert.deepEqual(fixture.calls.photos, []);
+  assert.equal(JSON.stringify(result).includes('private'), false);
+});
+
+test('试穿空页正常成功，故障和损坏投影分别返回固定 unavailable', async () => {
+  const empty = createService({
+    tryOnTasks: {
+      listMetadataForUser: async () => ({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 5,
+      }),
+    },
+  });
+  assert.deepEqual(
+    await empty.service.lookup(
+      'bound-user-id',
+      getMyInformationSchema.parse({ sections: ['try_on_tasks'] }),
+    ),
+    {
+      ok: true,
+      sections: { try_on_tasks: { items: [], total: 0, page: 1, pageSize: 5 } },
+      errors: [],
+    },
+  );
+  for (const read of [
+    async () => {
+      throw new Error('private database error');
+    },
+    async () => ({
+      items: [
+        {
+          ...tryOnTask,
+          product: { ...tryOnTask.product, name: 'private\u0000invalid' },
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 5,
+    }),
+  ]) {
+    const fixture = createService({
+      tryOnTasks: { listMetadataForUser: read },
+    });
+    const result = await fixture.service.lookup(
+      'bound-user-id',
+      getMyInformationSchema.parse({ sections: ['try_on_tasks', 'photos'] }),
+    );
+    assert.deepEqual(result.errors, [
+      { section: 'try_on_tasks', code: 'unavailable' },
+    ]);
+    assert.equal(result.sections.try_on_tasks, undefined);
+    assert.deepEqual(result.sections.photos?.items, [photo]);
+    assert.equal(JSON.stringify(result).includes('private'), false);
+  }
+});
+
+test('所有 section 故障仍保持既有 ok 外层并分别返回错误', async () => {
+  const fail = async () => {
+    throw new Error('private failure');
+  };
+  const fixture = createService({
+    addresses: { listForUser: fail },
+    orders: { listForUser: fail, getForUser: fail },
+    photos: { listSavedMetadataForUser: fail },
+    tryOnTasks: { listMetadataForUser: fail },
+  });
+  const sections = ['addresses', 'orders', 'photos', 'try_on_tasks'];
+  const result = await fixture.service.lookup(
+    'bound-user-id',
+    getMyInformationSchema.parse({ sections }),
+  );
+  assert.deepEqual(result, {
+    ok: true,
+    sections: {},
+    errors: sections.map((section) => ({ section, code: 'unavailable' })),
+  });
 });
 
 test('单个 section 故障时保留其他成功结果并返回固定错误码', async () => {

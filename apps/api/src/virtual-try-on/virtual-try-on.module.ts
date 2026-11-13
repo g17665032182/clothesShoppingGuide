@@ -20,6 +20,7 @@ import { TryOnNotificationService } from './service/try-on-notification.service.
 import { TryOnPhotoService } from './service/try-on-photo.service.js';
 import { TryOnQuotaService } from './service/try-on-quota.service.js';
 import { TryOnTaskService } from './service/try-on-task.service.js';
+import { TryOnTaskReaderService } from './service/try-on-task-reader.service.js';
 import { TryOnWorkerService } from './service/try-on-worker.service.js';
 import { TryOnObjectCleanupService } from './service/try-on-object-cleanup.service.js';
 import { TRY_ON_IMAGE_PROVIDER } from './port/try-on-image-provider.port.js';
@@ -46,6 +47,7 @@ import { ChatTryOnService } from './service/chat-try-on.service.js';
   providers: [
     TryOnPhotoService,
     TryOnTaskService,
+    TryOnTaskReaderService,
     ChatTryOnService,
     TryOnQuotaService,
     TryOnNotificationService,
@@ -91,6 +93,7 @@ import { ChatTryOnService } from './service/chat-try-on.service.js';
   exports: [
     TryOnPhotoService,
     TryOnTaskService,
+    TryOnTaskReaderService,
     TRY_ON_IMAGE_PROVIDER,
     TRY_ON_OBJECT_STORE,
     CHAT_TRY_ON_PORT,

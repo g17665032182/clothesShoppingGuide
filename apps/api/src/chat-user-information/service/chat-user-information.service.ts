@@ -10,7 +10,12 @@ import type {
   OrderInformationItem,
   SavedPhotoInformationItem,
 } from '../dto/chat-user-information-response.js';
-import { TryOnPhotoService } from '../../virtual-try-on/index.js';
+import {
+  TryOnPhotoService,
+  TryOnTaskReaderService,
+  tryOnTaskMetadataPageSchema,
+  type TryOnTaskMetadataPage,
+} from '../../virtual-try-on/index.js';
 
 const INFORMATION_PAGE_SIZE = 5 as const;
 
@@ -20,6 +25,7 @@ export class ChatUserInformationService {
     private readonly addresses: UserAddressesService,
     private readonly orders: OrdersService,
     private readonly photos: TryOnPhotoService,
+    private readonly tryOnTasks: TryOnTaskReaderService,
   ) {}
 
   public async lookup(
@@ -43,10 +49,19 @@ export class ChatUserInformationService {
               result: await this.readOrders(boundUserId, input),
             };
           }
-          return {
-            section,
-            result: await this.readPhotos(boundUserId, input.page),
-          };
+          if (section === 'photos') {
+            return {
+              section,
+              result: await this.readPhotos(boundUserId, input.page),
+            };
+          }
+          if (section === 'try_on_tasks') {
+            return {
+              section,
+              result: await this.readTryOnTasks(boundUserId, input),
+            };
+          }
+          throw new Error('不支持的信息查询 section');
         } catch {
           return { section, result: null };
         }
@@ -60,10 +75,12 @@ export class ChatUserInformationService {
       } else if (section === 'orders') {
         if (result === null) errors.push({ section, code: 'unavailable' });
         else sections.orders = result;
-      } else if (result === null) {
-        errors.push({ section, code: 'unavailable' });
-      } else {
-        sections.photos = result;
+      } else if (section === 'photos') {
+        if (result === null) errors.push({ section, code: 'unavailable' });
+        else sections.photos = result;
+      } else if (section === 'try_on_tasks') {
+        if (result === null) errors.push({ section, code: 'unavailable' });
+        else sections.try_on_tasks = result;
       }
     }
 
@@ -154,5 +171,34 @@ export class ChatUserInformationService {
       pageSize: INFORMATION_PAGE_SIZE,
       total: page.total,
     };
+  }
+
+  private async readTryOnTasks(
+    userId: string,
+    input: GetMyInformationInput,
+  ): Promise<TryOnTaskMetadataPage> {
+    const page = await this.tryOnTasks.listMetadataForUser(userId, {
+      page: input.page,
+      ...(input.tryOnStatus === undefined ? {} : { status: input.tryOnStatus }),
+    });
+    // 再次显式投影，防止领域接口日后扩展时把图片或供应商字段带入模型。
+    return tryOnTaskMetadataPageSchema.parse({
+      items: page.items.map((task) => ({
+        taskId: task.taskId,
+        status: task.status,
+        product: {
+          externalId: task.product.externalId,
+          name: task.product.name,
+          category: task.product.category,
+          color: task.product.color,
+        },
+        createdAt: task.createdAt,
+        completedAt: task.completedAt,
+        resultAvailable: task.resultAvailable,
+      })),
+      page: page.page,
+      pageSize: INFORMATION_PAGE_SIZE,
+      total: page.total,
+    });
   }
 }

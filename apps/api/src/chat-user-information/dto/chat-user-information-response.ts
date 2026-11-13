@@ -1,4 +1,6 @@
 import type { OrderCloseReason, OrderStatus } from '../../orders/index.js';
+import type { TryOnTaskMetadataPage } from '../../virtual-try-on/index.js';
+import type { InformationSection } from './chat-user-information.schema.js';
 
 export type InformationPage<TItem> = {
   items: TItem[];
@@ -47,13 +49,14 @@ export type GetMyInformationSections = {
   addresses?: InformationPage<AddressInformationItem>;
   orders?: InformationPage<OrderInformationItem>;
   photos?: InformationPage<SavedPhotoInformationItem>;
+  try_on_tasks?: TryOnTaskMetadataPage;
 };
 
 export type GetMyInformationResponse = {
   ok: true;
   sections: GetMyInformationSections;
   errors: {
-    section: 'addresses' | 'orders' | 'photos';
+    section: InformationSection;
     code: 'unavailable';
   }[];
 };
