@@ -35,6 +35,7 @@ packages/
   shared/              共享包骨架
   typescript-config/   共享 TypeScript 配置
 docs/
+  README.md            文档总览与业务阶段索引
   contracts/           API、字段、权限和迁移契约
   development/         按领域读取的前端、后端、安全和验证约定
   testing/             全量验证计划、执行及修复记录
@@ -191,20 +192,13 @@ pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images
 
 开发规范入口见 [`AGENTS.md`](./AGENTS.md)，其中按任务链接前端、后端、安全和验证专题约定。新增应用位于 `apps/`，共享包位于 `packages/`，内部依赖使用 `workspace:*` 和 `@clothes-shopping-guide/` 命名空间。
 
-| 文档           | 入口                                                                                                                                                                                                                                            |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API 与资源契约 | [契约索引](./docs/contracts/README.md)                                                                                                                                                                                                          |
-| 商品目录       | [技术方案](./docs/product-guide/product-catalog-technical.md)                                                                                                                                                                                   |
-| LLM 与上下文   | [模型模块](./docs/llm/llm-module-technical.md)、[系统上下文](./docs/llm/system-context-technical.md)                                                                                                                                            |
-| 对话工具扩展   | [能力清单](./docs/llm/chat-tool-capability-inventory.md)、[第二阶段设计](./docs/llm/chat-tool-phase-two-design.md)、[技术方案](./docs/llm/chat-tool-phase-two-technical.md)、[实施与验收](./docs/llm/chat-tool-phase-two-implementation.md)     |
-| 偏好与记忆     | [分离方案](./docs/user-memory/user-preference-memory-separation-technical.md)                                                                                                                                                                   |
-| 地址簿与工具   | [实施记录](./docs/user-addresses/user-addresses-implementation.md)                                                                                                                                                                              |
-| 聊天用户信息   | [设计、技术与实施](./docs/chat-user-information/chat-user-information-design.md)、[技术文档](./docs/chat-user-information/chat-user-information-technical.md)、[实施记录](./docs/chat-user-information/chat-user-information-implementation.md) |
-| 动态表单       | [设计、技术与实施](./docs/chat-dynamic-form/chat-dynamic-form-design.md)、[技术文档](./docs/chat-dynamic-form/chat-dynamic-form-technical.md)、[实施记录](./docs/chat-dynamic-form/chat-dynamic-form-implementation.md)                         |
-| 订单与聊天购买 | [订单](./docs/orders/order-module-implementation.md)、[购买](./docs/chat-purchase/chat-purchase-implementation.md)                                                                                                                              |
-| 聊天取消订单   | [实施记录](./docs/chat-order-cancellation/chat-order-cancellation-implementation.md)                                                                                                                                                            |
-| 虚拟试穿       | [技术方案](./docs/virtual-try-on/virtual-try-on-technical.md)、[商品配置](./docs/virtual-try-on/product-try-on-setting-technical.md)                                                                                                            |
-| 全量验证       | [测试索引](./docs/testing/README.md)、[计划、执行与修复复测](./docs/testing/project-full-validation-plan.md)                                                                                                                                    |
-| 进度完善计划   | [文档、数据库、浏览器及供应商后续工作](./docs/testing/project-progress-improvement-plan.md)                                                                                                                                                     |
+| 文档                  | 入口                                         |
+| --------------------- | -------------------------------------------- |
+| 全部业务与文档阶段    | [文档总览](./docs/README.md)                 |
+| 开发规范              | [开发文档索引](./docs/development/README.md) |
+| API 与资源契约        | [契约索引](./docs/contracts/README.md)       |
+| LLM、上下文与对话工具 | [LLM 文档索引](./docs/llm/README.md)         |
+| 偏好与记忆            | [专题索引](./docs/user-memory/README.md)     |
+| 验证计划与执行证据    | [测试索引](./docs/testing/README.md)         |
 
 各模块实施文档保留当时的验证结果与缺口；后续跨模块复测以全量验证记录对应日期的结果为准。

@@ -2,6 +2,8 @@
 
 适用于 `apps/web`。实现前检查本地依赖和现有页面模式；不自行安装当前尚未批准的测试框架或添加替代测试脚本。
 
+操作结果、错误提示和表单保留的详细规则见[前端操作反馈](./frontend-feedback.md)。
+
 ## 页面与模块
 
 - 新页面放在 `src/pages/<kebab-case>/`，至少包含 `index.vue`、`page.ts` 和页面私有 `components/`。主文件负责结构、组件组合和基础交互绑定；请求、复杂转换、定时器和页面逻辑放在 `page.ts`、composable 或业务模块。

@@ -1,15 +1,51 @@
-# CRUD 契约
+# 业务契约
 
-- [用户与认证业务契约](./user-crud-contract.md)：用户注册、登录、JWT 鉴权和管理员用户管理。
-- [商品目录 CRUD 契约](./product-catalog-crud-contract.md)：商品/SKU、导入、推荐及订单库存协作增量。
-- [订单 CRUD 契约](./order-crud-contract.md)：已确认并实现的下单、模拟支付、库存、履约和查询。
-- [管理员运营 CRUD 契约](./admin-management-crud-contract.md)：管理员只读商品查询、精确库存、订单查询与整单发货页面。
-- [聊天卡片展示 CRUD 契约](./chat-card-display-crud-contract.md)：设计、技术和实施方案已确认，功能实施中；涵盖通用 `type: card` 协议、模板分发、数据来源和历史兼容边界。
-- [聊天购买 CRUD 契约](./chat-purchase-crud-contract.md)：已实现商品卡购买、聊天草稿、确认卡与本人订单入口；审批已完成，验证证据及浏览器验收缺口见[实施文档](../chat-purchase/chat-purchase-implementation.md)。
-- [聊天试穿工具契约](./chat-try-on-tool-contract.md)：已确认商品卡触发工具、本人照片选择与明确同意、生图结果交给聊天模型并由前端安全渲染的调用链；技术方案和实施计划已确认，功能实施中。
-- [聊天地址管理界面请求契约](./chat-tool-address-form-crud-contract.md)：设计、契约与技术方案已确认并进入实施的 `request_address_form` 受限导航工具；仅请求打开本人地址管理页，不拥有地址读取或写入权限，实施记录见[实施文档](../llm/chat-tool-address-form-implementation.md)。
-- [聊天本人订单履约摘要契约](./chat-tool-order-fulfillment-crud-contract.md)：按精确订单号读取本人本地订单状态和时间，固定说明无实时物流；不返回承运商、单号或收件信息，进度见[实施文档](../llm/chat-tool-order-fulfillment-implementation.md)。
-- [聊天本站购物规则查询契约](./chat-tool-shopping-rules-crud-contract.md)：按五类主题返回既有系统规则、固定来源和版本；不读取个人信息或发布未经确认的商家政策，进度见[实施文档](../llm/chat-tool-shopping-rules-implementation.md)。
-- [AI 虚拟试穿 CRUD 契约](./virtual-try-on-crud-contract.md)：已确认并进入实现，涵盖商品卡试穿、照片资产、后台任务和本人结果资源；生产真实人像仍受供应商隐私审查阻塞。
+[返回文档总览](../README.md)
 
-新增业务资源前，请参考 `.agents/skills/nestjs-mikroorm-crud/references/crud-contract.md` 在本目录创建契约，完成字段、权限、分页、删除行为和迁移兼容性确认后再实现。
+本目录集中维护资源、字段、校验、权限、响应、迁移和兼容边界。实现与验证状态请结合契约正文、[业务实施记录](../README.md)和[分日期测试证据](../testing/README.md)核对。
+
+## 账号与个人资源
+
+| 契约                                            | 范围                                       |
+| ----------------------------------------------- | ------------------------------------------ |
+| [用户与认证](./user-crud-contract.md)           | 注册、登录、鉴权、个人资料和管理员用户管理 |
+| [收货地址](./user-address-crud-contract.md)     | 本人地址簿、默认地址和删除行为             |
+| [用户偏好](./user-preferences-crud-contract.md) | 结构化穿衣偏好、独立开关和用户维护         |
+| [用户记忆](./user-memory-crud-contract.md)      | Markdown 长期记忆、批量提取和聊天来源隔离  |
+
+## 商品、订单与运营
+
+| 契约                                                      | 范围                                   |
+| --------------------------------------------------------- | -------------------------------------- |
+| [商品目录](./product-catalog-crud-contract.md)            | 商品/SKU、导入、推荐及订单库存协作     |
+| [订单](./order-crud-contract.md)                          | 下单、模拟支付、库存、履约和查询       |
+| [管理员运营](./admin-management-crud-contract.md)         | 管理员商品、库存、订单查询和整单发货   |
+| [虚拟试穿](./virtual-try-on-crud-contract.md)             | 照片资产、后台任务、本人结果与隐私边界 |
+| [商品试穿配置](./product-try-on-setting-crud-contract.md) | 商品试穿开关、资格和图片配置           |
+
+## 聊天与交互
+
+| 契约                                                       | 范围                                       |
+| ---------------------------------------------------------- | ------------------------------------------ |
+| [聊天记录](./chat-records-crud-contract.md)                | 会话、公开消息及访问权限                   |
+| [流式聊天](./chat-streaming-crud-contract.md)              | SSE、生成状态、停止及持久化边界            |
+| [聊天卡片展示](./chat-card-display-crud-contract.md)       | 通用卡片协议、模板分发、数据来源和历史兼容 |
+| [用户信息查询](./chat-user-information-crud-contract.md)   | 本人信息查询、安全摘要与前端临时读取       |
+| [动态表单](./chat-dynamic-form-crud-contract.md)           | 表单请求、字段约束及用户提交边界           |
+| [聊天购买](./chat-purchase-crud-contract.md)               | 商品卡购买、草稿、地址选择及确认下单       |
+| [聊天取消订单](./chat-order-cancellation-crud-contract.md) | 可取消订单查询、用户选择和二次确认         |
+| [聊天试穿工具](./chat-try-on-tool-contract.md)             | 商品触发、本人照片同意、生图及安全展示     |
+
+## 对话工具增量
+
+| 契约                                                               | 范围                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------ |
+| [工具扩展](./chat-tool-expansion-crud-contract.md)                 | 首期试穿任务查询及第二阶段精确规格、本人偏好查询 |
+| [偏好管理界面请求](./chat-tool-preference-form-crud-contract.md)   | 请求打开固定偏好管理视图                         |
+| [地址管理界面请求](./chat-tool-address-form-crud-contract.md)      | 请求打开固定本人地址管理页                       |
+| [本人订单履约摘要](./chat-tool-order-fulfillment-crud-contract.md) | 本地订单状态和时间，无实时物流                   |
+| [本站购物规则查询](./chat-tool-shopping-rules-crud-contract.md)    | 既有系统规则、固定来源和版本                     |
+
+对应设计、技术与实施记录见 [LLM 文档索引](../llm/README.md)。
+
+新增业务资源前，请参考 [CRUD 契约模板](../../.agents/skills/nestjs-mikroorm-crud/references/crud-contract.md)在本目录创建契约，完成字段、权限、分页、删除行为和迁移兼容性确认后再实现，并更新本索引。

@@ -1,5 +1,7 @@
 # 前端操作反馈
 
+[前端开发约定](./frontend.md) · [开发文档索引](./README.md)
+
 ## 组件与入口
 
 - 全局仅在 `apps/web/src/App.vue` 挂载一个 shadcn-vue Sonner Toaster；通过 `vue-sonner` 的 `toast.success()` 显示接口确认后的成功结果。
