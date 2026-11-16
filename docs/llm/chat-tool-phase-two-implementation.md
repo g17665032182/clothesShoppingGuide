@@ -2,7 +2,7 @@
 
 ## 状态与前置确认
 
-- 状态：2026-11-16 用户回复“确认”批准实施文档；第二阶段已实现并完成自动化及隔离数据库验收，登录态浏览器未执行。全仓格式检查有一处既有文档阻塞，详见执行记录。
+- 状态：2026-11-16 用户回复“确认”批准实施文档；第二阶段已实现并完成自动化及隔离数据库验收，登录态浏览器未执行。后续质量收口已通过全仓格式、类型、构建和 API 回归检查。
 - 日期：2026-11-16。
 - 已确认：[第二阶段设计](./chat-tool-phase-two-design.md)、[扩展增量契约](../contracts/chat-tool-expansion-crud-contract.md)，用户回复“可以”；随后分别回复“确认”批准[第二阶段技术方案](./chat-tool-phase-two-technical.md)及本文。
 - 关联契约：[商品目录](../contracts/product-catalog-crud-contract.md)、[用户偏好](../contracts/user-preferences-crud-contract.md)、[长期记忆](../contracts/user-memory-crud-contract.md)。
@@ -222,13 +222,21 @@ API 默认测试的门控 skips 与另行开启的数据库结果分别记录，
 - 用户已确认本文，A/B/C 按独占文件完成领域及工具实现；主代理完成两工具注册、每轮资格、构造夹具和服务端实际提示词接线。未新增依赖、HTTP 路由、数据结构、迁移或写权限。
 - 所有权调整：A 交付商品领域六文件并停止写入后，主代理将新增 `chat-tool-phase-two.postgres.spec.ts` 的独占编写权移交 A；主代理仍独占数据库创建、迁移测试执行、端口及清理。B 完成类型修复后对全部生产差异做只读交叉审阅；C 完成八文件并停止写入。
 - 子代理定向结果：A 14 项、B 15 项、C 35 项全部通过；主代理聊天编排/提示词首轮 26 项通过。API 类型检查首次发现 B DTO 的联合 schema 方法签名冲突，修正后通过。各代理报告越界修改均为无；新增数据库测试最终已移交主代理并停止并行写入。
-- API 全量首轮为 393 项，376 通过、1 失败、16 门控跳过；失败为主代理调整提示词后未同步的旧正则断言，已修正。最终全量为 **394 项，377 通过、0 失败、17 门控跳过**，其中本阶段和首期两个套件另行开启并通过，其他15项旧门控本轮未开启。
+- API 全量首轮为 399 项，382 通过、1 失败、16 门控跳过；失败为主代理调整提示词后未同步的旧正则断言，已修正。最终全量为 **400 项，383 通过、0 失败、17 门控跳过**，其中本阶段和首期两个套件另行开启并通过，其他15项旧门控本轮未开启。
 - 环境：默认 5432 PostgreSQL 未运行，Docker daemon 未运行；本机安装 PostgreSQL 16.14。主代理用 `initdb` 在 `/tmp/clothes-guide-phase-two-pg-1q9atx/data` 新建本轮专属 cluster，仅监听 `127.0.0.1:55436`，未启动默认开发库。`pg_database` 查询确认计划库不存在后，创建 `clothes_guide_chat_tool_phase_two_test_20261116`；测试进程显式覆盖连接变量，不写环境文件。PostgreSQL 17 的版本一致性仍需单列说明。
 - 第二阶段真实 PostgreSQL 最终源码复测 **11 项通过、0 失败、0 跳过**（父测试加10个子测试）。两传输各9种结果、并行工具、换账号和同会话后续普通轮均通过；真实读到 done 后立即从另一 EM 查到已提交的两条不可提取消息。
 - 首期试穿查询数据库回归 **7 项通过、0 失败、0 跳过**。在同一临时 cluster 中，先查询确认不存在后新建独立库 `clothes_guide_chat_try_on_information_test_phase2_20261116`，与第二阶段测试串行运行。
 - `pnpm --filter @clothes-shopping-guide/api typecheck`、API `build`、仓库 `pnpm typecheck`、`pnpm build` 均通过，涵盖 API/Web/Shared。全仓 `pnpm format:check` 及 `pnpm check` 被本轮未修改的 `docs/chat-purchase/chat-purchase-prd.md` 格式问题阻塞，未改动该文件；全部变更 Markdown/TypeScript 定向格式检查及 `git diff --check` 通过。
 - 清理：最终测试后查询确认本阶段 fixture 的 users/products/orders/preferences/messages/traces/memory_tasks 均为0，两个专用库均无活动连接；逐一 drop 本轮新建的两个库，再查 `pg_database` 确认两库及默认 `clothes_guide` 均不存在。临时 cluster 已停止，端口释放，临时数据目录已移入系统废纸篓；未启动、迁移或写入默认开发库，未改动环境文件。
 - 未执行：V13 登录态桌面/窄屏没有受控全站 fake 模型 harness，未用真实供应商补验收；真实 LLM/图像供应商和 PostgreSQL17 版本一致性本轮未验证。其余旧数据库门控仍保留缺口，单测/构建通过不替代这些证据。
+
+### 质量收口记录（2026-11-16）
+
+- 单独格式化既有阻塞文档 `docs/chat-purchase/chat-purchase-prd.md`，未修改其需求内容；`pnpm format:check` 通过。
+- `pnpm check` 通过，包含全仓格式检查、API/Web/Shared 类型检查及构建。
+- `pnpm --filter @clothes-shopping-guide/api test` 复测通过：400 项，383 通过、0 失败、17 门控跳过。
+- `git diff --check` 通过；工作区保留上述 PRD 的格式化差异及本次两份验证记录更新。
+- 未执行项保持不变：V13 认证浏览器 Smoke、PostgreSQL 17 一致性、其他历史数据库门控及真实 LLM/图像供应商。
 - Git 状态：本阶段代码、测试和文档保留为未提交修改；包含原先已批准但未提交的设计/契约文件。未提交、推送或部署，未修改根配置、锁文件、私有图片和环境文件。
 
 最终命令（连接参数仅作用于测试进程，端口55436为本轮专属临时实例）：

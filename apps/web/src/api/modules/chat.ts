@@ -16,6 +16,7 @@ import type {
   ChatTryOnStatus,
 } from '@/api/types/chat';
 import type { PurchaseReference } from '@/api/types/chat-purchase';
+import type { PreferenceCategory } from '@/api/types/preferences';
 import { getDynamicForm } from './chat-dynamic-form';
 import type {
   ChatDynamicForm,
@@ -137,6 +138,7 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'order-cancellation-candidates',
       'purchase',
       'purchase-form',
+      'preference-form',
       'form',
       'form-result',
       'done',
@@ -217,6 +219,17 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
     hasOnlyKeys(data, [])
   ) {
     return { type: 'purchase-form' };
+  }
+  if (
+    eventName === 'preference-form' &&
+    isRecord(data) &&
+    hasOnlyKeys(data, ['category']) &&
+    (data.category === undefined || isPreferenceCategory(data.category))
+  ) {
+    return {
+      type: 'preference-form',
+      ...(data.category === undefined ? {} : { category: data.category }),
+    };
   }
   if (
     eventName === 'form' &&
@@ -378,6 +391,20 @@ export async function* streamChat(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isPreferenceCategory(value: unknown): value is PreferenceCategory {
+  return (
+    value === 'size' ||
+    value === 'shoe_size' ||
+    value === 'fit' ||
+    value === 'style' ||
+    value === 'color' ||
+    value === 'occasion' ||
+    value === 'budget' ||
+    value === 'avoidance' ||
+    value === 'purchase_preference'
+  );
 }
 
 function isDynamicForm(value: unknown): value is ChatDynamicForm {

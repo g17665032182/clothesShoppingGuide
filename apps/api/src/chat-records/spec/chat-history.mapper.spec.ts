@@ -459,3 +459,89 @@ test('非法调用与并存兼容调用键中的隐藏 ID 仍阻止无工具名�
   ]);
   assert.deepEqual(messages, []);
 });
+
+test('偏好表单调用和结果从模型历史成对隐藏，包括非法调用与孤立结果', () => {
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 0,
+      messageId: 'mixed',
+      content: '',
+      payload: {
+        toolCalls: [
+          {
+            id: 'preference-form-call',
+            name: 'request_preference_form',
+            args: { category: 'size' },
+          },
+          {
+            id: 'ordinary-call',
+            name: 'search_local_clothing_products',
+            args: { keyword: 'coat' },
+          },
+        ],
+        invalid_tool_calls: [
+          {
+            id: 'invalid-preference-form-call',
+            name: 'request_preference_form',
+            args: 'private-arguments',
+          },
+        ],
+      },
+    },
+    {
+      eventType: 'tool_call',
+      sequence: 1,
+      messageId: 'mixed',
+      toolCallId: 'preference-form-call',
+      toolName: 'request_preference_form',
+      payload: { args: { category: 'size' } },
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 2,
+      toolCallId: 'preference-form-call',
+      toolName: 'request_preference_form',
+      content: 'private-preference-result',
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 3,
+      toolCallId: 'invalid-preference-form-call',
+      content: 'private-invalid-result',
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 4,
+      toolCallId: 'orphan-preference-form-call',
+      toolName: 'request_preference_form',
+      content: 'private-orphan-result',
+    },
+    {
+      eventType: 'tool_call',
+      sequence: 5,
+      messageId: 'mixed',
+      toolCallId: 'ordinary-call',
+      toolName: 'search_local_clothing_products',
+      payload: { args: { keyword: 'coat' } },
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 6,
+      toolCallId: 'ordinary-call',
+      toolName: 'search_local_clothing_products',
+      content: '{"items":[]}',
+    },
+  ]);
+
+  assert.equal(messages.length, 2);
+  assert.deepEqual(
+    (messages[0]?.message as AIMessage).tool_calls?.map((call) => call.id),
+    ['ordinary-call'],
+  );
+  assert.equal(
+    (messages[1]?.message as ToolMessage).tool_call_id,
+    'ordinary-call',
+  );
+  assert.equal(JSON.stringify(messages).includes('private'), false);
+});

@@ -1,5 +1,6 @@
 import { storeToRefs } from 'pinia';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { isNavigationFailure, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import { useErrorToast } from '@/composables/use-error-toast';
 import { auth } from '@/lib/auth';
@@ -30,6 +31,7 @@ import {
 
 export function useChatPage() {
   const chat = useChatStore();
+  const router = useRouter();
   const orderActions = useChatOrder();
   const draft = ref('');
   const replacementProductId = ref<string | null>(null);
@@ -64,6 +66,7 @@ export function useChatPage() {
   const dynamicFormSubmitting = ref<Record<string, boolean>>({});
   const dynamicFormErrors = ref<Record<string, string>>({});
   const dynamicFormControllers = new Map<string, AbortController>();
+  const preferenceFormRequestsInFlight = new Set<string>();
   useErrorToast(() => chat.errorMessage);
   useErrorToast(() => chat.purchase.errorMessage);
   useErrorToast(() => chat.conversationListError);
@@ -80,6 +83,57 @@ export function useChatPage() {
       draft.value.trim().length > 0 &&
       draft.value.length <= 2000 &&
       chat.canSubmit,
+  );
+
+  watch(
+    () => {
+      const sessionKey = chat.activeSessionKey;
+      const request = sessionKey
+        ? chat.sessions[sessionKey]?.preferenceFormRequest
+        : null;
+      return sessionKey && request ? { sessionKey, request } : null;
+    },
+    async (pending) => {
+      if (!pending) return;
+      const { sessionKey, request } = pending;
+      if (preferenceFormRequestsInFlight.has(request.requestId)) return;
+      preferenceFormRequestsInFlight.add(request.requestId);
+
+      if (
+        disposed ||
+        chat.activeSessionKey !== sessionKey ||
+        !chat.isPreferenceFormRequestCurrent(sessionKey, request.requestId)
+      ) {
+        chat.consumePreferenceFormRequest(sessionKey, request.requestId);
+        preferenceFormRequestsInFlight.delete(request.requestId);
+        return;
+      }
+
+      try {
+        const result = await router.push({
+          name: 'account-memories',
+          query: {
+            view: 'preferences',
+            ...(request.category ? { category: request.category } : {}),
+          },
+        });
+        if (isNavigationFailure(result)) throw new Error('navigation failed');
+        // 路由守卫可能将未认证用户重定向到登录页；只有实际落在目标视图才算成功。
+        const currentRoute = router.currentRoute.value;
+        if (
+          currentRoute.name !== 'account-memories' ||
+          currentRoute.query.view !== 'preferences'
+        )
+          throw new Error('navigation redirected');
+        toast.success('已打开偏好管理页面');
+      } catch {
+        toast.error('无法打开偏好管理页面，请稍后重试');
+      } finally {
+        chat.consumePreferenceFormRequest(sessionKey, request.requestId);
+        preferenceFormRequestsInFlight.delete(request.requestId);
+      }
+    },
+    { flush: 'post' },
   );
 
   // 草稿是页面局部状态；切换会话时清理，不随生成任务进入应用级 Store。

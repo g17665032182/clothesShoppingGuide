@@ -44,6 +44,11 @@ function createService(
     purchaseForm?: boolean;
     repeatPurchaseForm?: boolean;
     purchaseFormStatus?: 'collecting' | 'ready' | 'submitted' | null;
+    preferenceForm?: boolean;
+    repeatPreferenceForm?: boolean;
+    preferenceFormCategory?: string;
+    preferenceFormCategories?: string[];
+    overlapPreferenceForm?: boolean;
     failedReader?: 'preferences' | 'memory';
     tryOn?: ChatTryOnPort;
     modelFailure?: boolean;
@@ -211,6 +216,73 @@ function createService(
             status: 'success',
             output: String(output),
           };
+        }
+      }
+      if (options.preferenceForm) {
+        const requestTool = extraTools.find(
+          (item) =>
+            typeof item === 'object' &&
+            item !== null &&
+            'name' in item &&
+            item.name === 'request_preference_form',
+        );
+        assert.ok(
+          requestTool &&
+            typeof requestTool === 'object' &&
+            'invoke' in requestTool &&
+            typeof requestTool.invoke === 'function',
+        );
+        const invokeRequestPreferenceForm = requestTool.invoke.bind(
+          requestTool,
+        ) as (input: unknown) => Promise<unknown>;
+        const categories =
+          options.preferenceFormCategories ??
+          Array.from(
+            { length: options.repeatPreferenceForm ? 2 : 1 },
+            () => options.preferenceFormCategory,
+          );
+        if (options.overlapPreferenceForm) {
+          const outputs = await Promise.all(
+            categories.map((category) =>
+              invokeRequestPreferenceForm(category ? { category } : {}),
+            ),
+          );
+          for (const [index, output] of outputs.entries()) {
+            const id = `preference-form-call-${index}`;
+            yield {
+              type: 'tool-call',
+              id,
+              toolName: 'request_preference_form',
+              input: categories[index] ? { category: categories[index] } : {},
+            };
+            yield {
+              type: 'tool-result',
+              id,
+              toolName: 'request_preference_form',
+              status: 'success',
+              output: String(output),
+            };
+          }
+        } else {
+          for (const [index, category] of categories.entries()) {
+            const id = `preference-form-call-${index}`;
+            yield {
+              type: 'tool-call',
+              id,
+              toolName: 'request_preference_form',
+              input: category ? { category } : {},
+            };
+            const output = await invokeRequestPreferenceForm(
+              category ? { category } : {},
+            );
+            yield {
+              type: 'tool-result',
+              id,
+              toolName: 'request_preference_form',
+              status: 'success',
+              output: String(output),
+            };
+          }
         }
       }
       if (options.tools) {
@@ -892,6 +964,64 @@ test('购买表单请求仅在本人草稿可编辑时发送一次性 SSE 事件
     { type: 'purchase-form' },
   );
   assert.equal(JSON.stringify(received).includes('recipient'), false);
+});
+
+test('偏好页面请求仅在 SSE 工具集中注册并按类别发送一次性事件', async () => {
+  const fixture = createService({
+    preferenceForm: true,
+    repeatPreferenceForm: true,
+    preferenceFormCategory: 'shoe_size',
+  });
+  const events = await fixture.service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '打开我的鞋码偏好管理页' }],
+    } as never,
+  );
+  const received = [];
+  for await (const event of events) received.push(event);
+
+  assert.equal(
+    received.filter((event) => event.type === 'preference-form').length,
+    1,
+  );
+  assert.deepEqual(
+    received.find((event) => event.type === 'preference-form'),
+    { type: 'preference-form', category: 'shoe_size' },
+  );
+  assert.ok(
+    fixture.registeredToolNames.at(-1)?.includes('request_preference_form'),
+  );
+
+  await fixture.service.chat(
+    { id: 'user-1' } as never,
+    { messages: [{ role: 'user', content: '打开偏好管理页' }] } as never,
+  );
+  assert.equal(
+    fixture.registeredToolNames.at(-1)?.includes('request_preference_form'),
+    false,
+  );
+});
+
+test('同轮并发请求偏好页面时首次类别胜出', async () => {
+  const fixture = createService({
+    preferenceForm: true,
+    overlapPreferenceForm: true,
+    preferenceFormCategories: ['style', 'color'],
+  });
+  const events = await fixture.service.prepareStream(
+    { id: 'user-1' } as never,
+    {
+      messages: [{ role: 'user', content: '打开我的偏好管理页' }],
+    } as never,
+  );
+  const received = [];
+  for await (const event of events) received.push(event);
+
+  assert.deepEqual(
+    received.filter((event) => event.type === 'preference-form'),
+    [{ type: 'preference-form', category: 'style' }],
+  );
 });
 
 test('没有可编辑草稿或草稿已终止时不发送购买表单事件', async () => {

@@ -192,15 +192,15 @@ git diff --check
 
 | 项目                                          | 实际结果                                                                                                                       |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| API 全量默认门控                              | 394项：377通过、0失败、17跳过；两个跳过套件另行开启通过，其他15项旧数据库门控未开启                                            |
+| API 全量默认门控                              | 400项：383通过、0失败、17跳过；两个跳过套件另行开启通过，其他15项旧数据库门控未开启                                            |
 | 第二阶段真实 PostgreSQL/JWT/ToolNode/JSON/SSE | 11通过、0失败、0跳过                                                                                                           |
 | 首期试穿任务查询 PostgreSQL 回归              | 7通过、0失败、0跳过                                                                                                            |
 | API/Web/Shared 类型与构建                     | API独立typecheck/build及仓库pnpm typecheck/build通过                                                                           |
-| 格式与仓库组合门禁                            | 既有未改文件docs/chat-purchase/chat-purchase-prd.md使format:check/check失败；本轮文件定向格式和diff检查通过                    |
+| 格式与仓库组合门禁                            | 已单独格式化既有 `docs/chat-purchase/chat-purchase-prd.md`；`pnpm format:check` 与 `pnpm check` 通过                           |
 | 数据库与清理                                  | 本轮临时PostgreSQL16.14，127.0.0.1:55436；两个新建专用库已删除并查不存在，进程停止，数据目录移入废纸篓，默认开发库未启用或写入 |
 | 未执行                                        | 登录态桌面/窄屏、其他旧数据库门控、PostgreSQL17版本一致性及真实LLM/图像供应商                                                  |
 
-数据库分别为 `clothes_guide_chat_tool_phase_two_test_20261116` 和 `clothes_guide_chat_try_on_information_test_phase2_20261116`，均在创建前查询确认不存在，测试和清理串行执行；没有修改环境文件或生成迁移快照。API全量首次的旧提示词正则断言失败已修复，最终复测无失败；格式阻塞仍保留，不计通过。
+数据库分别为 `clothes_guide_chat_tool_phase_two_test_20261116` 和 `clothes_guide_chat_try_on_information_test_phase2_20261116`，均在创建前查询确认不存在，测试和清理串行执行；没有修改环境文件或生成迁移快照。API 全量首次的旧提示词正则断言失败已修复，最终复测无失败；随后单独格式化既有购买 PRD，`pnpm format:check` 与 `pnpm check` 均通过。
 
 ## 执行记录（2026-11-11）
 

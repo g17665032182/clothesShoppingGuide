@@ -1238,3 +1238,142 @@ test('第二阶段查询拒绝越界计数和筛选枚举，失败只留固定�
   assert.deepEqual(rows.at(-1)?.payload, {});
   assert.equal(JSON.stringify(rows).includes('private'), false);
 });
+
+test('偏好表单 trace 仅保存合法类别和固定结果状态', async () => {
+  const { writer, rows } = createWriter();
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'tool_call',
+      messageId: 'preference-form',
+      toolCallId: 'preference-form-call',
+      toolName: 'request_preference_form',
+      args: {
+        category: 'size',
+        userId: 'private-user',
+        url: 'https://private.example/path',
+        note: 'private-free-text',
+      },
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'preference-form',
+      toolCallId: 'invalid-preference-form-call',
+      toolName: 'request_preference_form',
+      args: {
+        category: 'private-category',
+        userId: 'private-user',
+        note: 'private-free-text',
+      },
+    },
+    {
+      sequence: 2,
+      type: 'tool_result',
+      messageId: 'preference-form-result',
+      toolCallId: 'preference-form-call',
+      toolName: 'request_preference_form',
+      content: JSON.stringify({
+        ok: true,
+        code: 'requested',
+        category: 'size',
+        url: 'https://private.example/path',
+        userId: 'private-user',
+        value: 'private-preference',
+        message: 'private-free-text',
+      }),
+      payload: {
+        ok: true,
+        code: 'requested',
+        category: 'size',
+        url: 'https://private.example/path',
+        userId: 'private-user',
+      },
+      status: 'success',
+    },
+    {
+      sequence: 3,
+      type: 'tool_result',
+      messageId: 'preference-form-unavailable',
+      toolCallId: 'unavailable-call',
+      toolName: 'request_preference_form',
+      content: JSON.stringify({
+        ok: false,
+        code: 'unavailable',
+        category: 'budget',
+        error: 'private-error',
+        userId: 'private-user',
+      }),
+      payload: {
+        ok: false,
+        code: 'unavailable',
+        category: 'budget',
+        error: 'private-error',
+      },
+      status: 'success',
+    },
+    {
+      sequence: 4,
+      type: 'model_response',
+      messageId: 'nested-response',
+      content: '',
+      model: null,
+      usage: null,
+      payload: {
+        tool_calls: [
+          {
+            id: 'nested-preference-call',
+            name: 'request_preference_form',
+            args: {
+              category: 'color',
+              userId: 'private-user',
+              note: 'private-free-text',
+            },
+          },
+        ],
+        invalid_tool_calls: [
+          {
+            id: 'invalid-nested-preference-call',
+            name: 'request_preference_form',
+            args: '{"category":"private-category","value":"private-value"}',
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.deepEqual(rows[0]?.payload, { category: 'size' });
+  assert.deepEqual(rows[1]?.payload, {});
+  assert.deepEqual(JSON.parse(rows[2]?.content ?? '{}'), {
+    ok: true,
+    code: 'requested',
+    category: 'size',
+  });
+  assert.deepEqual(rows[2]?.payload, {
+    ok: true,
+    code: 'requested',
+    category: 'size',
+  });
+  assert.deepEqual(JSON.parse(rows[3]?.content ?? '{}'), {
+    ok: false,
+    code: 'unavailable',
+    category: 'budget',
+  });
+  assert.deepEqual(rows[4]?.payload, {
+    tool_calls: [
+      {
+        id: 'nested-preference-call',
+        name: 'request_preference_form',
+        args: { category: 'color' },
+      },
+    ],
+    invalid_tool_calls: [
+      {
+        id: 'invalid-nested-preference-call',
+        name: 'request_preference_form',
+        args: {},
+      },
+    ],
+  });
+  assert.equal(JSON.stringify(rows).includes('private'), false);
+});

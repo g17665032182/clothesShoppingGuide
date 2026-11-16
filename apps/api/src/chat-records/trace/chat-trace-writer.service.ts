@@ -25,6 +25,7 @@ const PURCHASE_TOOL_NAMES = new Set([
   'discard_purchase_draft',
 ]);
 const DYNAMIC_FORM_TOOL_NAME = 'request_dynamic_form';
+const PREFERENCE_FORM_TOOL_NAME = 'request_preference_form';
 const ADDRESS_TOOL_NAMES = new Set([
   'list_my_orders',
   'list_my_shipping_addresses',
@@ -207,6 +208,10 @@ function isPurchaseTool(name: string | null | undefined): boolean {
 
 function isDynamicFormTool(name: string | null | undefined): boolean {
   return name === DYNAMIC_FORM_TOOL_NAME;
+}
+
+function isPreferenceFormTool(name: string | null | undefined): boolean {
+  return name === PREFERENCE_FORM_TOOL_NAME;
 }
 
 function isUserInformationTool(name: string | null | undefined): boolean {
@@ -501,6 +506,41 @@ function safeDynamicFormProjection(value: unknown): Record<string, unknown> {
   };
 }
 
+function safePreferenceFormArguments(value: unknown): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  return typeof input.category === 'string' &&
+    PREFERENCE_CATEGORIES.has(input.category)
+    ? { category: input.category }
+    : {};
+}
+
+function safePreferenceFormProjection(value: unknown): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  const result =
+    typeof input.result === 'object' &&
+    input.result !== null &&
+    !Array.isArray(input.result)
+      ? (input.result as Record<string, unknown>)
+      : input;
+  return {
+    ...(input.ok === true || input.ok === false ? { ok: input.ok } : {}),
+    ...(typeof input.code === 'string' &&
+    ['requested', 'unavailable'].includes(input.code)
+      ? { code: input.code }
+      : {}),
+    ...(typeof result.category === 'string' &&
+    PREFERENCE_CATEGORIES.has(result.category)
+      ? { category: result.category }
+      : {}),
+  };
+}
+
 function safePurchaseProjection(value: unknown): Record<string, unknown> {
   const source =
     typeof value === 'string'
@@ -608,6 +648,22 @@ function safeDynamicFormCall(value: unknown): unknown {
   };
 }
 
+function safePreferenceFormCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return {};
+  const call = value as Record<string, unknown>;
+  const name = typeof call.name === 'string' ? call.name : null;
+  if (name !== PREFERENCE_FORM_TOOL_NAME) return redactValue(value);
+  return {
+    ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+    name,
+    ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
+    args: safePreferenceFormArguments(
+      call.args ?? call.arguments ?? call.input,
+    ),
+  };
+}
+
 function sanitizeNestedPurchaseCalls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeNestedPurchaseCalls);
   if (typeof value !== 'object' || value === null) return value;
@@ -632,6 +688,20 @@ function sanitizeNestedDynamicFormCalls(value: unknown): unknown {
       Array.isArray(entry)
         ? entry.map(safeDynamicFormCall)
         : sanitizeNestedDynamicFormCalls(entry),
+    ]),
+  );
+}
+
+function sanitizeNestedPreferenceFormCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedPreferenceFormCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map(safePreferenceFormCall)
+        : sanitizeNestedPreferenceFormCalls(entry),
     ]),
   );
 }
@@ -913,17 +983,15 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
   switch (event.type) {
     case 'input':
       return { ...base, content: event.content };
-    case 'model_response':
-      return {
-        ...base,
-        content: event.content,
-        payload:
-          event.payload === undefined
-            ? null
-            : normalizePayload(
-                sanitizeNestedAddressCalls(
-                  sanitizeNestedInformationCalls(
-                    sanitizeNestedPurchaseCalls(
+    case 'model_response': {
+      const sanitizedPayload =
+        event.payload === undefined
+          ? null
+          : normalizePayload(
+              sanitizeNestedAddressCalls(
+                sanitizeNestedInformationCalls(
+                  sanitizeNestedPurchaseCalls(
+                    sanitizeNestedPreferenceFormCalls(
                       sanitizeNestedDynamicFormCalls(
                         sanitizeNestedChatCardCalls(
                           sanitizeNestedDetailCalls(event.payload),
@@ -933,6 +1001,11 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                   ),
                 ),
               ),
+            );
+      return {
+        ...base,
+        content: event.content,
+        payload: sanitizedPayload,
         model: event.model,
         status:
           event.status === 'success'
@@ -950,6 +1023,7 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             }
           : null,
       };
+    }
     case 'tool_call':
       return {
         ...base,
@@ -960,15 +1034,17 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             ? safeChatCardArguments(event.args)
             : isDynamicFormTool(event.toolName)
               ? safeDynamicFormArguments(event.args)
-              : isPurchaseTool(event.toolName)
-                ? safePurchaseProjection(event.args)
-                : isUserInformationTool(event.toolName)
-                  ? safeInformationArguments(event.args)
-                  : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                    ? safeAddressToolArguments(event.toolName, event.args)
-                    : event.toolName && isDetailQueryTool(event.toolName)
-                      ? safeDetailArguments(event.toolName, event.args)
-                      : event.args,
+              : isPreferenceFormTool(event.toolName)
+                ? safePreferenceFormArguments(event.args)
+                : isPurchaseTool(event.toolName)
+                  ? safePurchaseProjection(event.args)
+                  : isUserInformationTool(event.toolName)
+                    ? safeInformationArguments(event.args)
+                    : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                      ? safeAddressToolArguments(event.toolName, event.args)
+                      : event.toolName && isDetailQueryTool(event.toolName)
+                        ? safeDetailArguments(event.toolName, event.args)
+                        : event.args,
         ),
       };
     case 'tool_result':
@@ -983,22 +1059,27 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
               ? safeChatCardResult(event.content)
               : isDynamicFormTool(event.toolName)
                 ? JSON.stringify(safeDynamicFormProjection(event.content))
-                : isPurchaseTool(event.toolName)
-                  ? safePurchaseResult(event.content)
-                  : isUserInformationTool(event.toolName)
-                    ? JSON.stringify(safeInformationProjection(event.content))
-                    : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                      ? JSON.stringify(
-                          safeAddressToolProjection(
-                            event.toolName,
-                            event.content,
-                          ),
-                        )
-                      : event.toolName && isDetailQueryTool(event.toolName)
+                : isPreferenceFormTool(event.toolName)
+                  ? JSON.stringify(safePreferenceFormProjection(event.content))
+                  : isPurchaseTool(event.toolName)
+                    ? safePurchaseResult(event.content)
+                    : isUserInformationTool(event.toolName)
+                      ? JSON.stringify(safeInformationProjection(event.content))
+                      : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
                         ? JSON.stringify(
-                            safeDetailProjection(event.toolName, event.content),
+                            safeAddressToolProjection(
+                              event.toolName,
+                              event.content,
+                            ),
                           )
-                        : normalizeContent(event.content),
+                        : event.toolName && isDetailQueryTool(event.toolName)
+                          ? JSON.stringify(
+                              safeDetailProjection(
+                                event.toolName,
+                                event.content,
+                              ),
+                            )
+                          : normalizeContent(event.content),
         status:
           event.status === 'success'
             ? ChatTraceEventStatus.SUCCESS
@@ -1011,22 +1092,25 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                   ? safeChatCardResult(event.payload)
                   : isDynamicFormTool(event.toolName)
                     ? safeDynamicFormProjection(event.payload)
-                    : isPurchaseTool(event.toolName)
-                      ? safePurchaseProjection(event.payload)
-                      : isUserInformationTool(event.toolName)
-                        ? safeInformationProjection(event.payload)
-                        : event.toolName &&
-                            ADDRESS_TOOL_NAMES.has(event.toolName)
-                          ? safeAddressToolProjection(
-                              event.toolName,
-                              event.payload,
-                            )
-                          : event.toolName && isDetailQueryTool(event.toolName)
-                            ? safeDetailProjection(
+                    : isPreferenceFormTool(event.toolName)
+                      ? safePreferenceFormProjection(event.payload)
+                      : isPurchaseTool(event.toolName)
+                        ? safePurchaseProjection(event.payload)
+                        : isUserInformationTool(event.toolName)
+                          ? safeInformationProjection(event.payload)
+                          : event.toolName &&
+                              ADDRESS_TOOL_NAMES.has(event.toolName)
+                            ? safeAddressToolProjection(
                                 event.toolName,
                                 event.payload,
                               )
-                            : event.payload,
+                            : event.toolName &&
+                                isDetailQueryTool(event.toolName)
+                              ? safeDetailProjection(
+                                  event.toolName,
+                                  event.payload,
+                                )
+                              : event.payload,
               ),
       };
   }

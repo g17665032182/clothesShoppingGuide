@@ -95,6 +95,13 @@ import { PurchaseAddressCoordinator } from '../tools/purchase-address-coordinato
 import { createChatUserInformationTool } from '../tools/chat-user-information.tool.js';
 import { createChatProductSkusTool } from '../tools/chat-product-skus.tool.js';
 import { createChatPreferencesTool } from '../tools/chat-preferences.tool.js';
+import {
+  createRequestPreferenceFormTool,
+  preferenceFormCategorySchema,
+} from '../tools/request-preference-form.tool.js';
+import type { z } from 'zod';
+
+type PreferenceFormCategory = z.infer<typeof preferenceFormCategorySchema>;
 
 export type Page<T> = {
   items: T[];
@@ -142,6 +149,7 @@ export type ChatStreamEvent =
   | ChatDisplayEvent
   | { type: 'purchase'; purchase: NonNullable<ChatDisplayData['purchase']> }
   | { type: 'purchase-form' }
+  | { type: 'preference-form'; category?: PreferenceFormCategory }
   | { type: 'form'; form: DynamicFormDefinition }
   | {
       type: 'start';
@@ -191,6 +199,9 @@ type PreparedChat = {
   detailQueryRequested: boolean;
   pendingPurchaseFormRequest: boolean;
   purchaseFormEventSent: boolean;
+  pendingPreferenceFormRequest: boolean;
+  pendingPreferenceFormCategory: PreferenceFormCategory | undefined;
+  preferenceFormEventSent: boolean;
   purchaseReferencedDraftId?: string;
   pendingDynamicForms: DynamicFormDefinition[];
   tryOnAction?: TryOnActionInput;
@@ -357,6 +368,8 @@ export class ChatRecordsService {
         persistedMessages = true;
         const purchaseFormEvent = this.takePurchaseFormRequest(prepared);
         if (purchaseFormEvent) yield purchaseFormEvent;
+        const preferenceFormEvent = this.takePreferenceFormRequest(prepared);
+        if (preferenceFormEvent) yield preferenceFormEvent;
         yield { type: 'delta', content: result.content };
         if (display.purchase)
           yield { type: 'purchase', purchase: display.purchase };
@@ -382,6 +395,9 @@ export class ChatRecordsService {
             yield next.value;
             const purchaseFormEvent = this.takePurchaseFormRequest(prepared);
             if (purchaseFormEvent) yield purchaseFormEvent;
+            const preferenceFormEvent =
+              this.takePreferenceFormRequest(prepared);
+            if (preferenceFormEvent) yield preferenceFormEvent;
           } else {
             for (const form of prepared.pendingDynamicForms.splice(0)) {
               this.displayService.stageDynamicForm(display, form);
@@ -391,6 +407,9 @@ export class ChatRecordsService {
             if (event) yield event;
             const purchaseFormEvent = this.takePurchaseFormRequest(prepared);
             if (purchaseFormEvent) yield purchaseFormEvent;
+            const preferenceFormEvent =
+              this.takePreferenceFormRequest(prepared);
+            if (preferenceFormEvent) yield preferenceFormEvent;
           }
         }
       } finally {
@@ -633,6 +652,9 @@ export class ChatRecordsService {
       detailQueryRequested: false,
       pendingPurchaseFormRequest: false,
       purchaseFormEventSent: false,
+      pendingPreferenceFormRequest: false,
+      pendingPreferenceFormCategory: undefined,
+      preferenceFormEventSent: false,
       pendingDynamicForms: [],
       ...(dto.tryOnAction ? { tryOnAction: dto.tryOnAction } : {}),
     };
@@ -1051,6 +1073,19 @@ export class ChatRecordsService {
             ),
           ]
         : []),
+      ...(includePurchaseForm
+        ? [
+            createRequestPreferenceFormTool((category) => {
+              if (
+                prepared.pendingPreferenceFormRequest ||
+                prepared.preferenceFormEventSent
+              )
+                return;
+              prepared.pendingPreferenceFormRequest = true;
+              prepared.pendingPreferenceFormCategory = category;
+            }),
+          ]
+        : []),
       createListUserOrdersTool(
         this.orders!,
         prepared.persistedConversation.userId,
@@ -1095,6 +1130,23 @@ export class ChatRecordsService {
     prepared.pendingPurchaseFormRequest = false;
     prepared.purchaseFormEventSent = true;
     return { type: 'purchase-form' };
+  }
+
+  private takePreferenceFormRequest(
+    prepared: PreparedChat,
+  ): ChatStreamEvent | null {
+    if (
+      !prepared.pendingPreferenceFormRequest ||
+      prepared.preferenceFormEventSent
+    )
+      return null;
+    prepared.pendingPreferenceFormRequest = false;
+    prepared.preferenceFormEventSent = true;
+    const category = prepared.pendingPreferenceFormCategory;
+    prepared.pendingPreferenceFormCategory = undefined;
+    return category
+      ? { type: 'preference-form', category }
+      : { type: 'preference-form' };
   }
 
   private traceContext(prepared: PreparedChat, signal?: AbortSignal) {

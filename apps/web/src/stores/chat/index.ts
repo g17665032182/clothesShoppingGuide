@@ -69,6 +69,7 @@ interface GenerationTask extends PendingTurn {
   timer?: ReturnType<typeof setInterval>;
   receivedDone: boolean;
   pendingProductResults: ChatProductResults[];
+  preferenceFormRequestEmitted: boolean;
 }
 
 function toConversation(item: ChatApiConversation): Conversation {
@@ -229,6 +230,35 @@ export const useChatStore = defineStore('chat', () => {
 
   function acknowledgePurchaseFormRequest(sessionKey: string): void {
     updatePurchase(sessionKey, { openFormRequested: false });
+  }
+
+  function consumePreferenceFormRequest(
+    sessionKey: string,
+    requestId: string,
+  ): void {
+    const session = sessions.value[sessionKey];
+    if (session?.preferenceFormRequest?.requestId === requestId)
+      updateSession(sessionKey, { preferenceFormRequest: null });
+  }
+
+  function isPreferenceFormRequestCurrent(
+    sessionKey: string,
+    requestId: string,
+  ): boolean {
+    const request = sessions.value[sessionKey]?.preferenceFormRequest;
+    return Boolean(
+      request &&
+      request.requestId === requestId &&
+      request.identityVersion === identityVersion &&
+      request.userId === auth.state.user?.id,
+    );
+  }
+
+  function discardPreferenceFormRequest(sessionKey: string | null): void {
+    if (!sessionKey) return;
+    const session = sessions.value[sessionKey];
+    if (session?.preferenceFormRequest)
+      updateSession(sessionKey, { preferenceFormRequest: null });
   }
 
   function purchaseSession(conversationId: string): ChatSession | undefined {
@@ -855,7 +885,11 @@ export const useChatStore = defineStore('chat', () => {
 
   function setChatPageVisible(visible: boolean) {
     chatPageVisible = visible;
-    if (!visible) flushActiveConversation();
+    if (!visible) {
+      for (const session of Object.values(sessions.value))
+        discardPreferenceFormRequest(session.key);
+      flushActiveConversation();
+    }
   }
 
   function upsertConversation(conversation: Conversation) {
@@ -930,6 +964,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function startNewConversation() {
+    discardPreferenceFormRequest(activeSessionKey.value);
     flushActiveConversation();
     activeSessionKey.value = null;
   }
@@ -1006,7 +1041,10 @@ export const useChatStore = defineStore('chat', () => {
     const token = auth.state.token;
     if (!token) return;
     let session = findSession(id);
-    if (activeSessionKey.value !== session?.key) flushActiveConversation();
+    if (activeSessionKey.value !== session?.key) {
+      discardPreferenceFormRequest(activeSessionKey.value);
+      flushActiveConversation();
+    }
     if (!session) {
       session = createChatSession(
         `conversation-${++sessionSequence}`,
@@ -1204,6 +1242,7 @@ export const useChatStore = defineStore('chat', () => {
       startedAt: Date.now(),
       receivedDone: false,
       pendingProductResults: [],
+      preferenceFormRequestEmitted: false,
       user: createPendingMessage(
         `pending-user-${sequence}`,
         'user',
@@ -1263,6 +1302,29 @@ export const useChatStore = defineStore('chat', () => {
         }
         if (event.type === 'purchase-form') {
           updatePurchase(key, { openFormRequested: true });
+        }
+        if (event.type === 'preference-form') {
+          if (!task.preferenceFormRequestEmitted) {
+            task.preferenceFormRequestEmitted = true;
+            const userId = auth.state.user?.id;
+            if (
+              userId &&
+              chatPageVisible &&
+              activeSessionKey.value === key &&
+              sessions.value[key]
+            ) {
+              updateSession(key, {
+                preferenceFormRequest: {
+                  requestId: `${key}:${sequence}`,
+                  ...(event.category ? { category: event.category } : {}),
+                  identityVersion,
+                  userId,
+                },
+              });
+            }
+          }
+          publishTurn(key, task);
+          continue;
         }
         applyTurnEvent(task.assistant, event, true);
         if (event.type === 'done' && task.pendingProductResults.length) {
@@ -1494,6 +1556,8 @@ export const useChatStore = defineStore('chat', () => {
     discardPurchase,
     confirmPurchaseOrder,
     acknowledgePurchaseFormRequest,
+    consumePreferenceFormRequest,
+    isPreferenceFormRequestCurrent,
     markOrderCancellationComplete,
     applyDynamicFormResult,
   };

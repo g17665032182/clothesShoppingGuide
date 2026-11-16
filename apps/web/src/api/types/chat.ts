@@ -4,6 +4,7 @@ import type {
   ChatDynamicFormReference,
   ChatDynamicFormResult,
 } from './chat-dynamic-form';
+import type { PreferenceCategory } from './preferences';
 
 export type MessageRole = 'assistant' | 'user';
 
@@ -317,6 +318,7 @@ export type ChatStreamEvent =
     }
   | { type: 'purchase'; purchase: PurchaseReference | null }
   | { type: 'purchase-form' }
+  | { type: 'preference-form'; category?: PreferenceCategory }
   | { type: 'form'; form: ChatDynamicForm }
   | { type: 'form-result'; result: ChatDynamicFormResult }
   | {

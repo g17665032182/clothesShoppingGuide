@@ -284,7 +284,11 @@ export function editorFromPreference(
   return editor;
 }
 
-export function usePreferences(active: Readonly<Ref<boolean>>) {
+export function usePreferences(
+  active: Readonly<Ref<boolean>>,
+  selectedCategory: Readonly<Ref<PreferenceCategory | ''>>,
+  updateCategoryQuery: (category: PreferenceCategory | '') => void,
+) {
   const records = ref<PreferenceRecord[]>([]);
   const status = ref<PreferencePageStatus>('idle');
   const error = ref('');
@@ -293,7 +297,6 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
   const page = ref(1);
   const total = ref(0);
   const totalPages = ref(0);
-  const selectedCategory = ref<PreferenceCategory | ''>('');
   const enabled = ref<boolean | null>(null);
   const settingsStatus = ref<PreferencePageStatus>('idle');
   const settingError = ref('');
@@ -584,9 +587,7 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
   }
 
   function changeCategory(category: PreferenceCategory | '') {
-    selectedCategory.value = category;
-    page.value = 1;
-    void loadPreferences(1);
+    updateCategoryQuery(category);
   }
 
   function changePage(nextPage: number) {
@@ -626,6 +627,15 @@ export function usePreferences(active: Readonly<Ref<boolean>>) {
     if (settingsStatus.value === 'loading') settingsStatus.value = 'idle';
   }
 
+  watch(
+    selectedCategory,
+    (category, previousCategory) => {
+      page.value = 1;
+      if (category !== previousCategory && active.value && activeNow)
+        void loadPreferences(1);
+    },
+    { immediate: true, flush: 'sync' },
+  );
   watch(active, (value) => (value ? activate() : pause()));
   onMounted(() => {
     mounted = true;
