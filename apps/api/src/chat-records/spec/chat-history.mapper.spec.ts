@@ -299,3 +299,163 @@ test('试穿任务查询在混合工具历史中成对隐藏，最终正文继�
   );
   assert.equal(JSON.stringify(messages).includes('hidden-task'), false);
 });
+
+test('规格和偏好查询在两种嵌套格式中成对隐藏，普通工具及最终正文保留', () => {
+  for (const key of ['toolCalls', 'tool_calls']) {
+    const messages = mapTraceEventsToMessages([
+      {
+        eventType: 'model_response',
+        sequence: 0,
+        messageId: 'mixed-detail-query',
+        content: '',
+        payload: {
+          [key]: [
+            {
+              id: 'sku-call',
+              name: 'get_product_skus',
+              args: { productExternalId: 'private-product' },
+            },
+            {
+              id: 'preference-call',
+              name: 'get_my_preferences',
+              args: { category: 'style' },
+            },
+            {
+              id: 'catalog-call',
+              name: 'search_local_clothing_products',
+              args: { keyword: '大衣' },
+            },
+          ],
+        },
+      },
+      {
+        eventType: 'tool_result',
+        sequence: 1,
+        messageId: 'sku-result',
+        toolCallId: 'sku-call',
+        content: '{"items":[{"size":"private-size"}]}',
+        status: 'success',
+      },
+      {
+        eventType: 'tool_result',
+        sequence: 2,
+        messageId: 'preference-result',
+        toolCallId: 'preference-call',
+        content: '{"items":[{"value":"private-preference"}]}',
+        status: 'success',
+      },
+      {
+        eventType: 'tool_result',
+        sequence: 3,
+        messageId: 'catalog-result',
+        toolCallId: 'catalog-call',
+        toolName: 'search_local_clothing_products',
+        content: '{"items":[]}',
+        status: 'success',
+      },
+      {
+        eventType: 'model_response',
+        sequence: 4,
+        messageId: 'final',
+        content: '已查到可选尺码和你的偏好。',
+      },
+    ]);
+    assert.equal(messages.length, 3);
+    assert.deepEqual(
+      (messages[0]?.message as AIMessage).tool_calls?.map((call) => call.id),
+      ['catalog-call'],
+    );
+    assert.equal(
+      (messages[1]?.message as ToolMessage).tool_call_id,
+      'catalog-call',
+    );
+    assert.equal(messages[2]?.message.content, '已查到可选尺码和你的偏好。');
+    assert.equal(JSON.stringify(messages).includes('private'), false);
+  }
+});
+
+test('独立规格与偏好调用及无调用的命名结果仍被隐藏，旧聊天正文兼容', () => {
+  const finalText = '已完成查询。';
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 0,
+      messageId: 'standalone',
+      content: '',
+    },
+    ...['get_product_skus', 'get_my_preferences'].flatMap((toolName, index) => [
+      {
+        eventType: 'tool_call' as const,
+        sequence: 1 + index * 2,
+        toolCallId: `detail-${index}`,
+        toolName,
+        payload: { private: 'private-arguments' },
+      },
+      {
+        eventType: 'tool_result' as const,
+        sequence: 2 + index * 2,
+        toolCallId: `detail-${index}`,
+        content: 'private-result',
+      },
+    ]),
+    {
+      eventType: 'tool_result',
+      sequence: 5,
+      toolCallId: 'orphaned',
+      toolName: 'get_my_preferences',
+      content: 'private-orphaned-result',
+    },
+    {
+      eventType: 'model_response',
+      sequence: 6,
+      messageId: 'final',
+      content: finalText,
+    },
+  ]);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.message.content, finalText);
+  const legacy = mapLegacyMessagesToLangChain([
+    { id: 'legacy-final', role: 'assistant', content: finalText },
+  ]);
+  assert.equal(legacy[0]?.message.content, finalText);
+});
+
+test('非法调用与并存兼容调用键中的隐藏 ID 仍阻止无工具名结果回流', () => {
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 0,
+      content: '',
+      payload: {
+        toolCalls: [],
+        tool_calls: [
+          {
+            id: 'sku-call',
+            name: 'get_product_skus',
+            args: { productExternalId: 'private-product' },
+          },
+        ],
+        invalid_tool_calls: [
+          {
+            id: 'invalid-preference-call',
+            name: 'get_my_preferences',
+            args: 'private-invalid-json',
+          },
+        ],
+      },
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 1,
+      toolCallId: 'sku-call',
+      content: 'private-sku-result',
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 2,
+      toolCallId: 'invalid-preference-call',
+      content: 'private-preference-result',
+    },
+  ]);
+  assert.deepEqual(messages, []);
+});

@@ -63,7 +63,10 @@ import type {
 import { createChatCardDisplayTool } from '../display/chat-card-display.tool.js';
 import { createChatCardSourceRegistry } from '../display/chat-card-source-registry.js';
 import type { LlmEventStreamResult } from '../../llm/stream/llm-stream.types.js';
-import { ProductCatalogService } from '../../product-catalog/index.js';
+import {
+  ProductCatalogService,
+  ProductSkuReaderService,
+} from '../../product-catalog/index.js';
 import { createProductSearchTool } from '../../product-catalog/tool/product-search.tool.js';
 import {
   PurchaseDraftService,
@@ -90,6 +93,8 @@ import { createRequestDynamicFormTool } from '../../llm/tools/request-dynamic-fo
 import { ChatUserInformationService } from '../../chat-user-information/index.js';
 import { PurchaseAddressCoordinator } from '../tools/purchase-address-coordinator.js';
 import { createChatUserInformationTool } from '../tools/chat-user-information.tool.js';
+import { createChatProductSkusTool } from '../tools/chat-product-skus.tool.js';
+import { createChatPreferencesTool } from '../tools/chat-preferences.tool.js';
 
 export type Page<T> = {
   items: T[];
@@ -183,6 +188,7 @@ type PreparedChat = {
   purchaseState: PurchaseRunState;
   purchaseToolUsed: boolean;
   tryOnTasksRequested: boolean;
+  detailQueryRequested: boolean;
   pendingPurchaseFormRequest: boolean;
   purchaseFormEventSent: boolean;
   purchaseReferencedDraftId?: string;
@@ -243,6 +249,8 @@ export class ChatRecordsService {
     private readonly productCatalog: ProductCatalogService,
     private readonly purchaseDrafts: PurchaseDraftService,
     private readonly conversationAccess: ChatConversationAccess,
+    @Inject(ProductSkuReaderService)
+    private readonly productSkuReader: ProductSkuReaderService,
     @Optional() private readonly orders?: OrdersService,
     @Optional()
     @Inject(CHAT_TRY_ON_PORT)
@@ -622,6 +630,7 @@ export class ChatRecordsService {
       purchaseState,
       purchaseToolUsed: false,
       tryOnTasksRequested: false,
+      detailQueryRequested: false,
       pendingPurchaseFormRequest: false,
       purchaseFormEventSent: false,
       pendingDynamicForms: [],
@@ -1003,6 +1012,16 @@ export class ChatRecordsService {
       createProductSearchTool(this.productCatalog, (results) =>
         cardSources.registerProducts(results),
       ),
+      createChatProductSkusTool(this.productSkuReader, () => {
+        prepared.detailQueryRequested = true;
+      }),
+      createChatPreferencesTool(
+        this.preferenceReader,
+        prepared.persistedConversation.userId,
+        () => {
+          prepared.detailQueryRequested = true;
+        },
+      ),
       ...createPurchaseTools(
         this.purchaseDrafts,
         prepared.persistedConversation.userId,
@@ -1164,6 +1183,7 @@ export class ChatRecordsService {
         !prepared.purchaseState.active &&
         !prepared.purchaseToolUsed &&
         !prepared.tryOnTasksRequested &&
+        !prepared.detailQueryRequested &&
         prepared.purchaseState.fingerprint === currentPurchase.fingerprint;
       userMessage.memoryExtractionEligible = eligible;
       assistantMessage.memoryExtractionEligible = eligible;

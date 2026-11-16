@@ -186,7 +186,12 @@ test(
         } as never,
         { markConversationDeleted: async () => undefined } as never,
         display,
-        { readContext: async () => '' },
+        {
+          readContext: async () => '',
+          listForChat: async () => {
+            throw new Error('原流式测试不应读取偏好明细');
+          },
+        },
         {} as never,
         {
           runState: async () => ({
@@ -203,6 +208,7 @@ test(
           }),
         } as never,
         { lockOwnedInTransaction: async () => undefined } as never,
+        {} as never,
       );
 
       // tsx 不生成参数类型元数据；仅在测试内补 Nest 构造注入，不改业务接口。

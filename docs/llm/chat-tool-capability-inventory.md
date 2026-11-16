@@ -1,9 +1,9 @@
 # 对话工具能力清单
 
-- 盘点日期：2026-11-13
+- 盘点日期：2026-11-16
 - 范围：普通用户聊天中由模型发起的工具调用，以及与工具相邻的前端操作。
 - 依据：当前源码和已确认业务契约。此文档记录能力现状与扩展候选，不代表候选能力已获准实施。
-- 扩展方案：[扩展设计](./chat-tool-expansion-design.md)、[增量契约](../contracts/chat-tool-expansion-crud-contract.md)、[首期技术方案](./chat-tool-expansion-technical.md)及[实施文档](./chat-tool-expansion-implementation.md)均已确认；首期试穿任务查询已接入，实际验证与缺口见实施记录。其他候选仍未实施。
+- 扩展方案：[扩展设计](./chat-tool-expansion-design.md)、[增量契约](../contracts/chat-tool-expansion-crud-contract.md)、[首期技术方案](./chat-tool-expansion-technical.md)及[实施记录](./chat-tool-expansion-implementation.md)均已确认；首期试穿任务查询已接入。第二阶段[设计](./chat-tool-phase-two-design.md)、[技术](./chat-tool-phase-two-technical.md)及[实施记录](./chat-tool-phase-two-implementation.md)也已确认，精确规格和本人偏好工具已注册；各阶段实际验证及缺口见对应记录。其他候选仍未实施。
 
 ## 工具调用原则
 
@@ -20,6 +20,8 @@
 | 工具                             | 当前能力                                                                                               | 边界                                                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `search_local_clothing_products` | 按明确需求查询本地有效服装和鞋类，返回商品、尺码/颜色摘要、价格、有货状态和匹配理由。                  | 每轮最多查询一次，最多返回 3 件；商品事实只能来自工具结果。                                                         |
+| `get_product_skus`               | 用可信商品外部标识及可选颜色、尺码精确查询当前有效 CNY 规格、单价和预占后有货状态。                    | 完整过滤后分页，每页5条、页码1–10；不返回 SKU ID、图片或库存数量，不选择规格或授权购买。                            |
+| `get_my_preferences`             | 用户明确查询时读取本人有效且未删除的已保存偏好，可筛选九类之一。                                       | 每页5条、页码1–10；关闭返回 preferences_disabled，缺设置不补建；不写偏好或改开关。                                  |
 | `get_purchase_draft`             | 读取本人当前购买草稿、规格和缺失字段。                                                                 | 不向模型返回收件字段值。                                                                                            |
 | `update_purchase_draft`          | 按用户本轮明确提供的值更新本人未提交草稿。                                                             | 受字段、草稿版本和资源归属校验；信息有歧义时须先询问。                                                              |
 | `discard_purchase_draft`         | 放弃本人未提交的购买草稿。                                                                             | 不取消正式订单。                                                                                                    |
@@ -30,6 +32,8 @@
 | `display_chat_card`              | 展示本轮已查询并登记的商品卡或只读订单卡。                                                             | 只接受可信查询结果的引用，不接受模型编写的商品、订单事实。                                                          |
 
 商品搜索和订单查询的工具实现分别位于 [`product-search.tool.ts`](../../apps/api/src/product-catalog/tool/product-search.tool.ts) 与 [`list-user-orders.tool.ts`](../../apps/api/src/orders/tool/list-user-orders.tool.ts)。购买草稿工具、购买弹框请求工具、用户信息工具、动态表单工具和卡片工具分别位于 [`purchase-tools.ts`](../../apps/api/src/chat-purchase/tool/purchase-tools.ts)、[`request-purchase-form.tool.ts`](../../apps/api/src/chat-purchase/tool/request-purchase-form.tool.ts)、[`chat-user-information.tool.ts`](../../apps/api/src/chat-records/tools/chat-user-information.tool.ts)、[`request-dynamic-form.tool.ts`](../../apps/api/src/llm/tools/request-dynamic-form.tool.ts) 和 [`chat-card-display.tool.ts`](../../apps/api/src/chat-records/display/chat-card-display.tool.ts)。
+
+精确规格和本人偏好工具分别位于 [`chat-product-skus.tool.ts`](../../apps/api/src/chat-records/tools/chat-product-skus.tool.ts) 和 [`chat-preferences.tool.ts`](../../apps/api/src/chat-records/tools/chat-preferences.tool.ts)。二者共用 JSON/SSE 装配，领域读取为独立只读 RR 快照；经校验调用后，无论成功、空、关闭或失败，整轮退出自动记忆和摘要来源，下一普通轮恢复。trace 仅保留计数、枚举和标记，activity 输入输出为 null，历史成对隐藏工具调用和结果；最终聊天正文仍保存。
 
 ## 已有但不是模型自主选择的调用
 
@@ -43,11 +47,6 @@
 ## 可补充或扩展的工具
 
 按用户收益、现有数据源和安全边界排序。以下均为候选，实施前仍需按项目流程确认范围并更新相应契约。
-
-### 中优先级
-
-- **精确商品规格查询 `get_product_skus`**：适用于“这件衣服黑色 M 码是否有货、价格是多少”。现有商品搜索只给尺码/颜色集合及总体有货摘要；SKU API 提供颜色、尺码、价格和可售状态的组合。若确有聊天场景，可由当前商品 `externalId` 查询并作字段白名单投影。正式下单仍由服务端重新校验 SKU、价格和库存。
-- **本人偏好明细查询 `get_my_preferences`**：仅在用户直接询问“我保存了哪些尺码、颜色或版型偏好”时调用。当前聊天已按相关性将偏好上下文注入模型；一般推荐不需要再查一次。偏好新增、修改、删除和开关操作继续由用户管理界面执行，模型不得自动写入。
 
 ### 可选的界面请求
 

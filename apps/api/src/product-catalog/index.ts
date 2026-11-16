@@ -27,6 +27,14 @@ export {
   type TryOnProductProjection,
 } from './port/product-catalog-try-on.port.js';
 export type { ProductSkuResponse } from './dto/product-sku-response.dto.js';
+export { ProductSkuReaderService } from './service/product-sku-reader.service.js';
+export {
+  productSkuLookupSchema,
+  productSkuLookupResultSchema,
+  type ProductSkuLookupSchemaInput,
+  type ProductSkuLookupInput,
+  type ProductSkuLookupResult,
+} from './dto/product-sku-lookup.dto.js';
 export { normalizeProductPublicUrl } from './public-url.js';
 export {
   productCatalogImportSchema,

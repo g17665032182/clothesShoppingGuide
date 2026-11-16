@@ -31,6 +31,21 @@ const ADDRESS_TOOL_NAMES = new Set([
   'select_my_shipping_address',
 ]);
 const USER_INFORMATION_TOOL_NAME = 'get_my_information';
+const DETAIL_QUERY_TOOL_NAMES = new Set([
+  'get_product_skus',
+  'get_my_preferences',
+]);
+const PREFERENCE_CATEGORIES = new Set([
+  'size',
+  'shoe_size',
+  'fit',
+  'style',
+  'color',
+  'occasion',
+  'budget',
+  'avoidance',
+  'purchase_preference',
+]);
 const INFORMATION_SECTIONS = new Set([
   'addresses',
   'orders',
@@ -196,6 +211,114 @@ function isDynamicFormTool(name: string | null | undefined): boolean {
 
 function isUserInformationTool(name: string | null | undefined): boolean {
   return name === USER_INFORMATION_TOOL_NAME;
+}
+
+function isDetailQueryTool(name: string | null | undefined): boolean {
+  return Boolean(name && DETAIL_QUERY_TOOL_NAMES.has(name));
+}
+
+function validDetailPage(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= 10
+  );
+}
+
+function safeDetailArguments(
+  name: string,
+  value: unknown,
+): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  return {
+    ...(validDetailPage(input.page) ? { page: input.page } : {}),
+    ...(name === 'get_my_preferences' &&
+    typeof input.category === 'string' &&
+    PREFERENCE_CATEGORIES.has(input.category)
+      ? { category: input.category }
+      : {}),
+    ...(name === 'get_product_skus'
+      ? {
+          hasColor: typeof input.color === 'string' && input.color.length > 0,
+          hasSize: typeof input.size === 'string' && input.size.length > 0,
+        }
+      : {}),
+  };
+}
+
+function safeDetailProjection(
+  name: string,
+  value: unknown,
+): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return {};
+  const input = source as Record<string, unknown>;
+  if (input.ok === false) {
+    const allowedCodes =
+      name === 'get_product_skus'
+        ? ['not_found', 'unavailable']
+        : ['preferences_disabled', 'unavailable'];
+    return {
+      ok: false,
+      ...(typeof input.code === 'string' && allowedCodes.includes(input.code)
+        ? { code: input.code }
+        : {}),
+    };
+  }
+  if (input.ok !== true) return {};
+  // 只保存有界计数，绝不保存规格字段、商品标识或偏好值。
+  return {
+    ok: true,
+    itemCount: Array.isArray(input.items) ? Math.min(input.items.length, 5) : 0,
+    ...(typeof input.total === 'number' &&
+    Number.isSafeInteger(input.total) &&
+    input.total >= 0
+      ? { total: input.total }
+      : {}),
+    ...(validDetailPage(input.page) ? { page: input.page } : {}),
+    ...(input.pageSize === 5 ? { pageSize: 5 } : {}),
+    ...(typeof input.hasNext === 'boolean' ? { hasNext: input.hasNext } : {}),
+  };
+}
+
+function safeDetailToolCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return value;
+  const call = value as Record<string, unknown>;
+  if (typeof call.name !== 'string' || !isDetailQueryTool(call.name))
+    return value;
+  return {
+    ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+    name: call.name,
+    ...(call.type === 'tool_call' || call.type === 'invalid_tool_call'
+      ? { type: call.type }
+      : {}),
+    args: safeDetailArguments(
+      call.name,
+      call.args ?? call.arguments ?? call.input,
+    ),
+  };
+}
+
+function sanitizeNestedDetailCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedDetailCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map((call) =>
+            safeDetailToolCall(sanitizeNestedDetailCalls(call)),
+          )
+        : sanitizeNestedDetailCalls(entry),
+    ]),
+  );
 }
 
 function safeInformationArguments(value: unknown): Record<string, unknown> {
@@ -802,7 +925,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                   sanitizeNestedInformationCalls(
                     sanitizeNestedPurchaseCalls(
                       sanitizeNestedDynamicFormCalls(
-                        sanitizeNestedChatCardCalls(event.payload),
+                        sanitizeNestedChatCardCalls(
+                          sanitizeNestedDetailCalls(event.payload),
+                        ),
                       ),
                     ),
                   ),
@@ -841,7 +966,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                   ? safeInformationArguments(event.args)
                   : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
                     ? safeAddressToolArguments(event.toolName, event.args)
-                    : event.args,
+                    : event.toolName && isDetailQueryTool(event.toolName)
+                      ? safeDetailArguments(event.toolName, event.args)
+                      : event.args,
         ),
       };
     case 'tool_result':
@@ -867,7 +994,11 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                             event.content,
                           ),
                         )
-                      : normalizeContent(event.content),
+                      : event.toolName && isDetailQueryTool(event.toolName)
+                        ? JSON.stringify(
+                            safeDetailProjection(event.toolName, event.content),
+                          )
+                        : normalizeContent(event.content),
         status:
           event.status === 'success'
             ? ChatTraceEventStatus.SUCCESS
@@ -890,7 +1021,12 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                               event.toolName,
                               event.payload,
                             )
-                          : event.payload,
+                          : event.toolName && isDetailQueryTool(event.toolName)
+                            ? safeDetailProjection(
+                                event.toolName,
+                                event.payload,
+                              )
+                            : event.payload,
               ),
       };
   }

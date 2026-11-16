@@ -16,6 +16,17 @@ import type { ChatHistoryMessage } from '../history/chat-history.mapper.js';
 import { PaginationDto } from '../dto/pagination.dto.js';
 import type { ChatTryOnPort } from '../../virtual-try-on/port/chat-try-on.port.js';
 
+type DetailRequest =
+  | 'sku'
+  | 'sku_empty'
+  | 'sku_not_found'
+  | 'sku_unavailable'
+  | 'preferences'
+  | 'preferences_empty'
+  | 'preferences_disabled'
+  | 'preferences_unavailable'
+  | 'none';
+
 function createService(
   options: {
     failFlush?: boolean;
@@ -26,6 +37,7 @@ function createService(
     informationRequests?: Array<
       'success' | 'empty' | 'unavailable' | 'photos' | 'none'
     >;
+    detailRequests?: DetailRequest[];
     purchaseActive?: boolean;
     summaryHistory?: { messages: ChatMessage[]; traces: ChatTraceEvent[] };
     cancellationCandidates?: boolean;
@@ -45,8 +57,21 @@ function createService(
   const memoryEnqueued: unknown[] = [];
   const summarySources: unknown[][] = [];
   let informationOutcome = 'none';
+  let detailOutcome: DetailRequest = 'none';
+  const detailRequests = [...(options.detailRequests ?? [])];
   const informationRequests = [...(options.informationRequests ?? [])];
   const invokeInformation = async (tools: unknown[]) => {
+    detailOutcome = detailRequests.shift() ?? 'none';
+    if (detailOutcome !== 'none') {
+      const skus = detailOutcome.startsWith('sku');
+      const query = tools.find(
+        (item) =>
+          (item as { name?: string }).name ===
+          (skus ? 'get_product_skus' : 'get_my_preferences'),
+      ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
+      assert.ok(query);
+      await query.invoke(skus ? { productExternalId: 'verified-shirt' } : {});
+    }
     informationOutcome = informationRequests.shift() ?? 'none';
     if (informationOutcome === 'none') return;
     const query = tools.find(
@@ -307,6 +332,33 @@ function createService(
         throw new Error('controlled preference failure');
       return options.failedReader ? '可用偏好' : '';
     },
+    listForChat: async (userId: string) => {
+      assert.equal(userId, 'user-1');
+      if (detailOutcome === 'preferences_unavailable')
+        throw new Error('private preference failure');
+      if (detailOutcome === 'preferences_disabled')
+        return { ok: false, code: 'preferences_disabled' };
+      const items =
+        detailOutcome === 'preferences_empty'
+          ? []
+          : [
+              {
+                category: 'style',
+                valueType: 'multi',
+                value: { items: ['casual'] },
+                isPrimary: true,
+                updatedAt: '2026-11-16T00:00:00.000Z',
+              },
+            ];
+      return {
+        ok: true,
+        items,
+        page: 1,
+        pageSize: 5,
+        total: items.length,
+        hasNext: false,
+      };
+    },
   };
   const memoryTasks = {
     enqueueInTransaction: async (transaction: unknown, input: unknown) => {
@@ -360,6 +412,35 @@ function createService(
     {} as never,
     purchaseDrafts as never,
     { lockOwnedInTransaction: async () => undefined } as never,
+    {
+      listForChat: async () => {
+        if (detailOutcome === 'sku_unavailable')
+          throw new Error('private catalog failure');
+        if (detailOutcome === 'sku_not_found')
+          return { ok: false, code: 'not_found' };
+        const items =
+          detailOutcome === 'sku_empty'
+            ? []
+            : [
+                {
+                  color: 'black',
+                  size: 'M',
+                  unitPrice: '99.00',
+                  currency: 'CNY',
+                  inStock: true,
+                },
+              ];
+        return {
+          ok: true,
+          productExternalId: 'verified-shirt',
+          items,
+          page: 1,
+          pageSize: 5,
+          total: items.length,
+          hasNext: false,
+        };
+      },
+    } as never,
     undefined,
     options.tryOn,
     undefined,
@@ -439,6 +520,57 @@ test('JSON/SSE 试穿查询成功、空和不可用均隔离整轮，下一普�
       );
       assert.equal(fixture.memoryEnqueued.length, 0);
       assert.equal(fixture.bindings.length, 1);
+      await fixture.service.chat(
+        { id: 'user-1' } as never,
+        { messages: [{ role: 'user', content: '我喜欢宽松外套' }] } as never,
+      );
+      const messages = fixture.persisted
+        .flat()
+        .filter((value): value is ChatMessage => value instanceof ChatMessage);
+      assert.ok(
+        messages.slice(-2).every((message) => message.memoryExtractionEligible),
+      );
+      assert.equal(fixture.memoryEnqueued.length, 1);
+    }
+  }
+});
+
+test('JSON/SSE 规格和偏好查询各种结果均隔离整轮，下一普通轮恢复', async () => {
+  const outcomes: DetailRequest[] = [
+    'sku',
+    'sku_empty',
+    'sku_not_found',
+    'sku_unavailable',
+    'preferences',
+    'preferences_empty',
+    'preferences_disabled',
+    'preferences_unavailable',
+  ];
+  for (const stream of [false, true]) {
+    for (const outcome of outcomes) {
+      const fixture = createService({ detailRequests: [outcome, 'none'] });
+      const request = {
+        messages: [{ role: 'user', content: '查询明细，同时我喜欢宽松' }],
+      };
+      if (stream) {
+        for await (const _event of await fixture.service.prepareStream(
+          { id: 'user-1' } as never,
+          request as never,
+        )) {
+          // 消费至 done，验证保存完成后整轮来源资格已经生效。
+        }
+      } else {
+        await fixture.service.chat({ id: 'user-1' } as never, request as never);
+      }
+      const excluded = fixture.persisted
+        .flat()
+        .filter((value): value is ChatMessage => value instanceof ChatMessage);
+      assert.equal(excluded.length, 2, outcome);
+      assert.ok(
+        excluded.every((message) => !message.memoryExtractionEligible),
+        outcome,
+      );
+      assert.equal(fixture.memoryEnqueued.length, 0, outcome);
       await fixture.service.chat(
         { id: 'user-1' } as never,
         { messages: [{ role: 'user', content: '我喜欢宽松外套' }] } as never,

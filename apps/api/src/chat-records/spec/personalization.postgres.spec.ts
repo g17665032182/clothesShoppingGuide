@@ -224,6 +224,7 @@ test(
         }),
       } as never,
       { lockOwnedInTransaction: async () => undefined } as never,
+      {} as never,
     );
     const chat = () =>
       service.chat(owner, {

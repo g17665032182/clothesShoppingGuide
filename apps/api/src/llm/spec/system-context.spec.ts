@@ -7,14 +7,17 @@ test('系统上下文包含选购和退换货工作流程', () => {
   assert.match(SYSTEM_CONTEXT, /# 选购流程/);
   assert.match(SYSTEM_CONTEXT, /# 退\/换货流程/);
   assert.match(SYSTEM_CONTEXT, /本地真实商品/);
-  assert.match(SYSTEM_CONTEXT, /商品信息只能来自本轮商品搜索工具结果/);
+  assert.match(
+    SYSTEM_CONTEXT,
+    /商品信息只能来自本轮商品搜索或规格查询工具结果/,
+  );
   assert.match(SYSTEM_CONTEXT, /正式订单动作由用户按钮执行/);
   assert.match(SYSTEM_CONTEXT, /支付仅为模拟/);
   assert.match(SYSTEM_CONTEXT, /售后尚未接入/);
   assert.match(SYSTEM_CONTEXT, /不从旧摘要恢复收货信息/);
   assert.match(
     SYSTEM_CONTEXT,
-    /`get_my_information` 查询本人地址、订单、已保存图片和试穿任务的安全摘要/u,
+    /查询本人地址、订单、已保存图片和试穿任务时，使用 `get_my_information` 获取安全摘要/u,
   );
   assert.match(
     SYSTEM_CONTEXT,
@@ -22,6 +25,16 @@ test('系统上下文包含选购和退换货工作流程', () => {
   );
   assert.match(SYSTEM_CONTEXT, /只有用户明确选择手动填写/u);
   assert.doesNotMatch(SYSTEM_CONTEXT, /调用地址选择工具将该地址写入/u);
+});
+
+test('明细工具限定明确查询、可信商品、开关和有界分页', () => {
+  assert.match(SYSTEM_CONTEXT, /`get_product_skus`/u);
+  assert.match(SYSTEM_CONTEXT, /指代有歧义先询问/u);
+  assert.match(SYSTEM_CONTEXT, /无匹配不等于无货/u);
+  assert.match(SYSTEM_CONTEXT, /`get_my_preferences`/u);
+  assert.match(SYSTEM_CONTEXT, /preferences_disabled/u);
+  assert.match(SYSTEM_CONTEXT, /不用旧上下文补齐/u);
+  assert.match(SYSTEM_CONTEXT, /达到第10页引导原购买或偏好管理界面/u);
 });
 
 test('试穿任务查询限定显式 section 和摘要，不承诺图片或生成时长', () => {

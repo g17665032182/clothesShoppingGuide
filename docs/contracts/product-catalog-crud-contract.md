@@ -202,3 +202,13 @@ Entity 不直接作为 API/工具响应。对外返回专用响应投影，不�
 字段、权限、接口、兼容与迁移详见
 [商品试穿配置 CRUD 契约](./product-try-on-setting-crud-contract.md)；
 本增量设计、契约与技术方案均已确认，实施文档待确认，尚未改变以上已实现能力。
+
+## 已确认增量：聊天精确规格查询
+
+- 日期：2026-11-16；状态：第二阶段设计、契约、技术及实施均已确认，工具已接入；验证与缺口见第二阶段实施记录。
+- 依据：[第二阶段设计](../llm/chat-tool-phase-two-design.md)及[扩展增量契约](./chat-tool-expansion-crud-contract.md)。
+- 增加只读模型工具 get_product_skus，以商品外部标识及可选颜色、尺码查询；每页固定 5 条，页码实际整数 1–10，拒绝模型身份、内部 SKU ID、页大小和未知字段。
+- 颜色、尺码沿用输入 trim 和数据库 lower 精确比较，完整过滤有效商品下有效 CNY 规格后稳定分页；不得先取默认页或固定数量后过滤。
+- 结果只含颜色、尺码、十进制单价、CNY 币种和预占后的有货布尔值，带真实总数及 hasNext；不返回 SKU ID、图片、精确库存或预占量。
+- 商品不可用、有效商品无匹配、规格无货和依赖故障分别按 not_found、成功空列表、inStock false、unavailable 处理，不合并同颜色尺码的不同 SKU。
+- 不改变现有规格 HTTP 接口、商品搜索或下单契约，不预占或修改数据，不新增路由、Entity、索引或迁移。公开查询接口及一致性机制见[第二阶段技术文档](../llm/chat-tool-phase-two-technical.md)，分工及实际验证见[实施记录](../llm/chat-tool-phase-two-implementation.md)。

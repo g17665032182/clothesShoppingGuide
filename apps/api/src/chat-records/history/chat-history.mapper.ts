@@ -46,6 +46,8 @@ const PURCHASE_TOOL_NAMES = new Set([
 const DYNAMIC_FORM_TOOL_NAMES = new Set(['request_dynamic_form']);
 const HIDDEN_USER_INFORMATION_TOOL_NAMES = new Set([
   'get_my_information',
+  'get_product_skus',
+  'get_my_preferences',
   'list_my_shipping_addresses',
   'select_my_shipping_address',
 ]);
@@ -105,13 +107,16 @@ export function mapTraceEventsToMessages(
   for (const event of sorted) {
     if (event.eventType === 'model_response') {
       const record = asRecord(event.payload);
-      const calls = record.toolCalls ?? record.tool_calls;
-      if (Array.isArray(calls)) {
-        for (const item of calls) {
-          const call = asRecord(item);
-          const id = asString(call.id);
-          const name = asString(call.name);
-          if (id && name && isHiddenTool(name)) purchaseCallIds.add(id);
+      // 非法调用也可能留下结果；所有兼容键都收集隐藏 ID，避免结果失去配对后泄漏。
+      for (const key of ['toolCalls', 'tool_calls', 'invalid_tool_calls']) {
+        const calls = record[key];
+        if (Array.isArray(calls)) {
+          for (const item of calls) {
+            const call = asRecord(item);
+            const id = asString(call.id);
+            const name = asString(call.name);
+            if (id && name && isHiddenTool(name)) purchaseCallIds.add(id);
+          }
         }
       }
     }
@@ -119,13 +124,14 @@ export function mapTraceEventsToMessages(
     const messageId = event.messageId ?? '';
     const toolCallId = event.toolCallId;
     const toolName = event.toolName;
-    if (!messageId || !toolCallId || !toolName) {
+    if (!toolCallId || !toolName) {
       continue;
     }
     if (isHiddenTool(toolName)) {
       purchaseCallIds.add(toolCallId);
       continue;
     }
+    if (!messageId) continue;
     const payload = asRecord(event.payload);
     const args = asRecord(payload.args ?? payload);
     const calls = callsByMessageId.get(messageId) ?? [];

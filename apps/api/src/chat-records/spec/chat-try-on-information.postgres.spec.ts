@@ -557,13 +557,19 @@ test(
         },
         { markConversationDeleted: async () => undefined },
         display,
-        { readContext: async () => '' },
+        {
+          readContext: async () => '',
+          listForChat: async () => {
+            throw new Error('首期试穿测试不应读取偏好明细');
+          },
+        },
         {} as never,
         {
           runState: async () => inactivePurchase,
           runStateInTransaction: async () => inactivePurchase,
         } as never,
         new ChatConversationAccess(),
+        {} as never,
         undefined,
         undefined,
         undefined,

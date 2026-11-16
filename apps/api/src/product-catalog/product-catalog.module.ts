@@ -8,6 +8,7 @@ import { ProductSku } from './entity/product-sku.entity.js';
 import { ProductCatalogController } from './controller/product-catalog.controller.js';
 import { ProductSkuController } from './controller/product-sku.controller.js';
 import { ProductCatalogService } from './service/product-catalog.service.js';
+import { ProductSkuReaderService } from './service/product-sku-reader.service.js';
 import { ProductCatalogImportService } from './service/product-catalog-import.service.js';
 import { ProductCatalogOrderService } from './service/product-catalog-order.service.js';
 import { PRODUCT_CATALOG_ORDER_PORT } from './service/product-catalog-order.port.js';
@@ -34,6 +35,7 @@ import { PRODUCT_TRY_ON_IMAGE_STORE } from './port/product-try-on-image-store.po
   ],
   providers: [
     ProductCatalogService,
+    ProductSkuReaderService,
     ProductCatalogImportService,
     ProductCatalogOrderService,
     AdminProductCatalogService,
@@ -82,6 +84,7 @@ import { PRODUCT_TRY_ON_IMAGE_STORE } from './port/product-try-on-image-store.po
   ],
   exports: [
     ProductCatalogService,
+    ProductSkuReaderService,
     ProductCatalogImportService,
     PRODUCT_CATALOG_ORDER_PORT,
     PRODUCT_CATALOG_PURCHASE_PORT,

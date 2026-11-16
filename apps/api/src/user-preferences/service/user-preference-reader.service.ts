@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { IsolationLevel } from '@mikro-orm/core';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { EntityRepository } from '@mikro-orm/postgresql';
 
@@ -10,6 +11,12 @@ import {
 } from '../entity/user-preference.entity.js';
 import { UserPreferenceSetting } from '../entity/user-preference-setting.entity.js';
 import type { UserPreferencesReader } from '../port/user-preferences.port.js';
+import {
+  preferenceChatQuerySchema,
+  preferenceChatResultSchema,
+  type PreferenceChatQuery,
+  type PreferenceChatResult,
+} from '../dto/preference-chat-query.dto.js';
 
 const MAX_ITEMS = 8;
 const MAX_CONTEXT_CHARACTERS = 2048;
@@ -20,6 +27,81 @@ export class UserPreferenceReaderService implements UserPreferencesReader {
     @InjectRepository(UserPreference)
     private readonly preferences: EntityRepository<UserPreference>,
   ) {}
+
+  public async listForChat(
+    userId: string,
+    query: PreferenceChatQuery,
+  ): Promise<PreferenceChatResult> {
+    const input = preferenceChatQuerySchema.parse(query);
+
+    try {
+      const entityManager = this.preferences.getEntityManager().fork({
+        clear: true,
+        useContext: false,
+        keepTransactionContext: false,
+      });
+
+      // 设置、总数和当页内容共用独立只读快照，避免带入请求中待写的实体。
+      return await entityManager.transactional(
+        async (em) => {
+          const setting = await em.findOne(
+            UserPreferenceSetting,
+            { userId },
+            { fields: ['enabled'] },
+          );
+          if (setting?.enabled === false) {
+            return preferenceChatResultSchema.parse({
+              ok: false,
+              code: 'preferences_disabled',
+            });
+          }
+
+          // 缺少设置等同默认开启，但纯查询不能补建设置或启动历史任务。
+          const [rows, total] = await em.findAndCount(
+            UserPreference,
+            {
+              userId,
+              status: UserPreferenceStatus.ACTIVE,
+              deletedAt: null,
+              ...(input.category ? { category: input.category } : {}),
+            },
+            {
+              fields: [
+                'id',
+                'category',
+                'valueType',
+                'value',
+                'isPrimary',
+                'updatedAt',
+              ],
+              orderBy: { isPrimary: 'DESC', updatedAt: 'DESC', id: 'ASC' },
+              limit: 5,
+              offset: (input.page - 1) * 5,
+            },
+          );
+
+          return preferenceChatResultSchema.parse({
+            ok: true,
+            items: rows.map((preference) => ({
+              category: preference.category,
+              valueType: preference.valueType,
+              value: preference.value,
+              isPrimary: preference.isPrimary,
+              updatedAt: preference.updatedAt.toISOString(),
+            })),
+            page: input.page,
+            pageSize: 5,
+            total,
+            hasNext: input.page * 5 < total,
+          });
+        },
+        { isolationLevel: IsolationLevel.REPEATABLE_READ, readOnly: true },
+      );
+    } catch {
+      // 查询故障和不安全存量值统一失败，不暴露异常或伪装成没有偏好。
+      return { ok: false, code: 'unavailable' };
+    }
+  }
 
   public async readContext(
     userId: string,

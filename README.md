@@ -109,6 +109,10 @@ Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 
 
 用户主动询问试穿进度时，工具显式请求 `try_on_tasks`，可筛选四种任务状态；省略 sections 仍只查询地址、订单和已保存图片。任务每页5条、页码1–10，仅返回本人未删除任务的状态、商品快照、时间和结果存在标记，不读取图片或生成下载链接。查询成功、空列表或失败均使该轮退出自动记忆和摘要来源，下一普通轮恢复；聊天正文仍保存。具体实现与验收见[试穿任务查询实施记录](./docs/llm/chat-tool-expansion-implementation.md)。
 
+用户明确查询某商品的颜色、尺码、价格或有货状态时，`get_product_skus` 根据可信且唯一确定的外部标识查询，颜色和尺码精确匹配；仅返回当前 CNY 价格字符串和扣除有效预占后的有货布尔值，不公开 SKU ID、图片或库存数量，不选择规格或预占库存。`get_my_preferences` 仅用于明确查询本人已保存偏好，支持九类筛选；偏好开关关闭返回 `preferences_disabled`，缺设置按默认开启解释但不创建记录，不用旧上下文补齐明细。两工具固定每页5条、页码1–10，超出聊天上限引导原购买或偏好管理界面。
+
+两种明细查询在 JSON/SSE 中共用独立只读快照。经校验调用后，无论成功、空、关闭、未找到或失败，整轮两条消息退出自动记忆与摘要来源且不登记任务，下一普通轮恢复；最终正文仍保存。trace 仅记录安全计数、枚举及标记，activity 输入输出为 null，工具调用和结果从后续模型历史成对隐藏。实现和实际验收见[第二阶段实施记录](./docs/llm/chat-tool-phase-two-implementation.md)。
+
 用户需要处理当前购买草稿时，助手可请求打开本人当前可编辑草稿的“本次购买”弹框；前端重新读取最新草稿。该请求不创建或修改草稿，正式购买操作仍由用户确认。
 
 模型只能准备/修改草稿和执行允许的查询，不能替用户选择地址或提交动态表单。正式下单、支付、取消及收货均由用户显式操作；新地址仅在点击保存后加入地址簿。用户主动发送的聊天原文仍按聊天历史规则保存，不应将工具脱敏理解为聊天原文不保存。
@@ -188,6 +192,7 @@ pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images
 | API 与资源契约 | [契约索引](./docs/contracts/README.md)                                                                                                                                                                                                          |
 | 商品目录       | [技术方案](./docs/product-guide/product-catalog-technical.md)                                                                                                                                                                                   |
 | LLM 与上下文   | [模型模块](./docs/llm/llm-module-technical.md)、[系统上下文](./docs/llm/system-context-technical.md)                                                                                                                                            |
+| 对话工具扩展   | [能力清单](./docs/llm/chat-tool-capability-inventory.md)、[第二阶段设计](./docs/llm/chat-tool-phase-two-design.md)、[技术方案](./docs/llm/chat-tool-phase-two-technical.md)、[实施与验收](./docs/llm/chat-tool-phase-two-implementation.md)     |
 | 偏好与记忆     | [分离方案](./docs/user-memory/user-preference-memory-separation-technical.md)                                                                                                                                                                   |
 | 地址簿与工具   | [实施记录](./docs/user-addresses/user-addresses-implementation.md)                                                                                                                                                                              |
 | 聊天用户信息   | [设计、技术与实施](./docs/chat-user-information/chat-user-information-design.md)、[技术文档](./docs/chat-user-information/chat-user-information-technical.md)、[实施记录](./docs/chat-user-information/chat-user-information-implementation.md) |

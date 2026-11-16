@@ -122,6 +122,7 @@ test(
         {} as never,
         drafts,
         access,
+        {} as never,
       );
       const recipient = {
         name: '测试收件人',
@@ -544,7 +545,12 @@ test(
             } as never,
             { markConversationDeleted: async () => undefined },
             new ChatDisplayService(traces, tryOnProducts),
-            { readContext: async () => '' },
+            {
+              readContext: async () => '',
+              listForChat: async () => {
+                throw new Error('购买测试不应读取偏好明细');
+              },
+            },
             new ProductCatalogService(
               em.getRepository(Product),
               llmConfig,
@@ -552,6 +558,7 @@ test(
             ),
             drafts,
             access,
+            {} as never,
           );
           Reflect.defineMetadata(
             'design:paramtypes',

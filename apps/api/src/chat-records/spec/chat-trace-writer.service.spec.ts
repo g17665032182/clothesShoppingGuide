@@ -950,3 +950,291 @@ test('卡片工具 trace 仅保存引用参数和通过 schema 的公开卡片',
   assert.deepEqual(JSON.parse(rows[4]?.content ?? '{}'), {});
   assert.equal(JSON.stringify(rows).includes('张三'), false);
 });
+
+test('第二阶段查询 trace 的独立调用仅留页码、合法类别及筛选存在标记', async () => {
+  const { writer, rows } = createWriter();
+  const skuArgs = {
+    productExternalId: 'private-product-id',
+    color: 'private-color',
+    size: 'private-size',
+    page: 10,
+    userId: 'private-user-id',
+  };
+  const preferenceArgs = {
+    category: 'style',
+    page: 2,
+    value: 'private-preference',
+  };
+  const original = structuredClone({ skuArgs, preferenceArgs });
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'tool_call',
+      messageId: 'detail-query',
+      toolCallId: 'sku-call',
+      toolName: 'get_product_skus',
+      args: skuArgs,
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'detail-query',
+      toolCallId: 'preference-call',
+      toolName: 'get_my_preferences',
+      args: preferenceArgs,
+    },
+  ]);
+  assert.deepEqual(rows[0]?.payload, {
+    page: 10,
+    hasColor: true,
+    hasSize: true,
+  });
+  assert.deepEqual(rows[1]?.payload, { page: 2, category: 'style' });
+  assert.deepEqual({ skuArgs, preferenceArgs }, original);
+  assert.equal(JSON.stringify(rows).includes('private'), false);
+});
+
+test('第二阶段查询递归清理三种调用键，字符串参数、畸形参数和额外字段均无原文回退', async () => {
+  const { writer, rows } = createWriter();
+  const skuCall = {
+    id: 'x'.repeat(200),
+    name: 'get_product_skus',
+    type: 'tool_call',
+    args: JSON.stringify({
+      productExternalId: 'private-product',
+      color: 'private-color',
+      page: 1,
+    }),
+    arguments: 'private-arguments',
+    input: 'private-input',
+    error: 'private-error',
+  };
+  const preferenceCall = {
+    id: 'preferences',
+    name: 'get_my_preferences',
+    type: 'invalid_tool_call',
+    args: '{"category":"private-category"',
+    error: 'private-error',
+  };
+  const payload = {
+    toolCalls: [skuCall, preferenceCall],
+    nested: {
+      tool_calls: [
+        {
+          name: 'get_my_preferences',
+          type: 'private-type',
+          input: JSON.stringify({ category: 'budget', page: 3 }),
+          error: 'private-error',
+        },
+      ],
+      deeper: [
+        {
+          invalid_tool_calls: [
+            {
+              name: 'get_product_skus',
+              args: '{private-invalid-json',
+              error: 'private-error',
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const original = structuredClone(payload);
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'nested-detail',
+      content: '',
+      model: 'test',
+      usage: null,
+      payload,
+    },
+  ]);
+  assert.deepEqual(rows[0]?.payload, {
+    toolCalls: [
+      {
+        id: 'x'.repeat(128),
+        name: 'get_product_skus',
+        type: 'tool_call',
+        args: { page: 1, hasColor: true, hasSize: false },
+      },
+      {
+        id: 'preferences',
+        name: 'get_my_preferences',
+        type: 'invalid_tool_call',
+        args: {},
+      },
+    ],
+    nested: {
+      tool_calls: [
+        {
+          name: 'get_my_preferences',
+          args: { category: 'budget', page: 3 },
+        },
+      ],
+      deeper: [
+        {
+          invalid_tool_calls: [{ name: 'get_product_skus', args: {} }],
+        },
+      ],
+    },
+  });
+  assert.deepEqual(payload, original);
+  assert.equal(JSON.stringify(rows).includes('private'), false);
+});
+
+test('第二阶段查询成功结果的 content 和 payload 均只保存有界计数', async () => {
+  const { writer, rows } = createWriter();
+  for (const [index, toolName] of [
+    'get_product_skus',
+    'get_my_preferences',
+  ].entries()) {
+    const result = {
+      ok: true,
+      productExternalId: 'private-product',
+      userId: 'private-user',
+      items: [
+        {
+          color: 'private-color',
+          size: 'private-size',
+          value: { items: ['private-preference'] },
+          image: 'private-image',
+          id: 'private-resource',
+        },
+      ],
+      page: 1,
+      pageSize: 5,
+      total: 1,
+      hasNext: false,
+    };
+    const original = structuredClone(result);
+    await writer.writeEvents(context, [
+      {
+        sequence: index,
+        type: 'tool_result',
+        messageId: `result-${index}`,
+        toolCallId: `call-${index}`,
+        toolName,
+        content: JSON.stringify(result),
+        payload: result,
+        status: 'success',
+      },
+    ]);
+    const projection = {
+      ok: true,
+      itemCount: 1,
+      total: 1,
+      page: 1,
+      pageSize: 5,
+      hasNext: false,
+    };
+    assert.deepEqual(JSON.parse(rows[index]?.content ?? '{}'), projection);
+    assert.deepEqual(rows[index]?.payload, projection);
+    assert.deepEqual(result, original);
+  }
+  assert.equal(JSON.stringify(rows).includes('private'), false);
+});
+
+test('第二阶段查询拒绝越界计数和筛选枚举，失败只留固定文字及对应错误码', async () => {
+  const { writer, rows } = createWriter();
+  let sequence = 0;
+  for (const page of ['1', 0, 11, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await writer.writeEvents(context, [
+      {
+        sequence: sequence++,
+        type: 'tool_call',
+        messageId: 'invalid-query',
+        toolCallId: 'invalid-call',
+        toolName: 'get_my_preferences',
+        args: { category: 'private-category', page },
+      },
+    ]);
+    assert.deepEqual(rows.at(-1)?.payload, {});
+  }
+  const malformed = {
+    ok: true,
+    items: Array.from({ length: 50 }, () => ({ value: 'private-value' })),
+    total: -1,
+    page: 11,
+    pageSize: 500,
+    hasNext: 'private-value',
+  };
+  await writer.writeEvents(context, [
+    {
+      sequence: sequence++,
+      type: 'tool_result',
+      messageId: 'malformed',
+      toolCallId: 'malformed-call',
+      toolName: 'get_my_preferences',
+      content: JSON.stringify(malformed),
+      payload: malformed,
+      status: 'success',
+    },
+  ]);
+  assert.deepEqual(rows.at(-1)?.payload, { ok: true, itemCount: 5 });
+  assert.deepEqual(JSON.parse(rows.at(-1)?.content ?? '{}'), {
+    ok: true,
+    itemCount: 5,
+  });
+  for (const [toolName, code, expectedCode] of [
+    ['get_product_skus', 'not_found', 'not_found'],
+    ['get_product_skus', 'unavailable', 'unavailable'],
+    ['get_my_preferences', 'preferences_disabled', 'preferences_disabled'],
+    ['get_my_preferences', 'unavailable', 'unavailable'],
+    ['get_my_preferences', 'not_found', undefined],
+    ['get_product_skus', 'preferences_disabled', undefined],
+    ['get_my_preferences', 'private-error', undefined],
+  ]) {
+    const result = { ok: false, code, error: 'private-error' };
+    const expected = {
+      ok: false,
+      ...(expectedCode ? { code: expectedCode } : {}),
+    };
+    await writer.writeEvents(context, [
+      {
+        sequence: sequence++,
+        type: 'tool_result',
+        messageId: 'error-result',
+        toolCallId: 'error-call',
+        toolName: toolName!,
+        content: JSON.stringify(result),
+        payload: result,
+        status: 'success',
+      },
+    ]);
+    assert.deepEqual(JSON.parse(rows.at(-1)?.content ?? '{}'), expected);
+    assert.deepEqual(rows.at(-1)?.payload, expected);
+  }
+  await writer.writeEvents(context, [
+    {
+      sequence: sequence++,
+      type: 'tool_result',
+      messageId: 'failed',
+      toolCallId: 'failed-call',
+      toolName: 'get_product_skus',
+      content: 'private-database-error',
+      payload: { ok: false, code: 'unavailable', error: 'private-error' },
+      status: 'failed',
+    },
+    {
+      sequence: sequence++,
+      type: 'tool_result',
+      messageId: 'unparseable',
+      toolCallId: 'unparseable-call',
+      toolName: 'get_my_preferences',
+      content: 'private-unparseable',
+      payload: 'private-unparseable',
+      status: 'success',
+    },
+  ]);
+  assert.equal(rows.at(-2)?.content, '工具执行失败');
+  assert.deepEqual(rows.at(-2)?.payload, {
+    ok: false,
+    code: 'unavailable',
+  });
+  assert.equal(rows.at(-1)?.content, '{}');
+  assert.deepEqual(rows.at(-1)?.payload, {});
+  assert.equal(JSON.stringify(rows).includes('private'), false);
+});
