@@ -46,6 +46,6 @@
 | [本人订单履约摘要](./chat-tool-order-fulfillment-crud-contract.md) | 本地订单状态和时间，无实时物流                   |
 | [本站购物规则查询](./chat-tool-shopping-rules-crud-contract.md)    | 既有系统规则、固定来源和版本                     |
 
-对应设计、技术与实施记录见 [LLM 文档索引](../llm/README.md)。
+对应设计、技术与实施记录见 [LLM 文档索引](../modules/llm/README.md)。
 
 新增业务资源前，请参考 [CRUD 契约模板](../../.agents/skills/nestjs-mikroorm-crud/references/crud-contract.md)在本目录创建契约，完成字段、权限、分页、删除行为和迁移兼容性确认后再实现，并更新本索引。

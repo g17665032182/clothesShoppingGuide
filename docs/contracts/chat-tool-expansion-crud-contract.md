@@ -4,12 +4,12 @@
 
 - 状态：首期和第二阶段设计、业务契约、技术及实施文档均已确认，代码已接入；验证与缺口分别见各阶段实施记录。
 - 最后更新：2026-11-16。
-- 设计依据：[对话工具能力扩展设计](../llm/chat-tool-expansion-design.md)。
+- 设计依据：[对话工具能力扩展设计](../modules/llm/chat-tool-expansion-design.md)。
 - 关联现有契约：[用户信息查询](./chat-user-information-crud-contract.md)、[虚拟试穿](./virtual-try-on-crud-contract.md)、[商品目录](./product-catalog-crud-contract.md)、[用户偏好](./user-preferences-crud-contract.md)。
 
 本文集中列出新增的只读工具行为。首期已接入 `try_on_tasks` section，对应领域契约已附增量说明。第二阶段不因首期确认而自动进入技术或代码阶段。
 
-2026-11-16 用户回复“可以”，批准[精确规格与本人偏好设计](../llm/chat-tool-phase-two-design.md)及本文第二阶段规则，包括偏好开关和整轮记忆/摘要隔离，随后分别回复“确认”批准[技术文档](../llm/chat-tool-phase-two-technical.md)及[实施文档](../llm/chat-tool-phase-two-implementation.md)。
+2026-11-16 用户回复“可以”，批准[精确规格与本人偏好设计](../modules/llm/chat-tool-phase-two-design.md)及本文第二阶段规则，包括偏好开关和整轮记忆/摘要隔离，随后分别回复“确认”批准[技术文档](../modules/llm/chat-tool-phase-two-technical.md)及[实施文档](../modules/llm/chat-tool-phase-two-implementation.md)。
 
 ## 通用契约
 
@@ -137,7 +137,7 @@
 
 ## 验收与待确认
 
-以下已勾选项包含第一阶段已有证据；第二阶段实现已接入，独立验收矩阵、实际命令与未执行项见[第二阶段实施记录](../llm/chat-tool-phase-two-implementation.md)，不以首期结果替代。
+以下已勾选项包含第一阶段已有证据；第二阶段实现已接入，独立验收矩阵、实际命令与未执行项见[第二阶段实施记录](../modules/llm/chat-tool-phase-two-implementation.md)，不以首期结果替代。
 
 - [x] 严格输入校验、分页边界、默认 sections 和筛选字段组合均有覆盖。
 - [x] 本人隔离和安全错误一致；只读查询无写入、下载或外部供应商副作用。
@@ -146,6 +146,6 @@
 - [x] 模型结果、trace、activity 和公开历史分别验证安全投影。
 - [x] JSON/SSE 工具往返和旧购买、地址、表单、推荐路径兼容。
 
-首期已确认并接入：仅试穿任务查询、每页 5 条、最多 10 页、只做摘要。[首期技术文档](../llm/chat-tool-expansion-technical.md)和[实施文档](../llm/chat-tool-expansion-implementation.md)已确认，实际验收与未执行项见实施记录。
+首期已确认并接入：仅试穿任务查询、每页 5 条、最多 10 页、只做摘要。[首期技术文档](../modules/llm/chat-tool-expansion-technical.md)和[实施文档](../modules/llm/chat-tool-expansion-implementation.md)已确认，实际验收与未执行项见实施记录。
 
 2026-11-16 用户要求推进第二阶段，随后回复“可以”批准设计与本契约，分别回复“确认”批准技术及实施文档。偏好开关和来源隔离规则已实现，两工具使用现有 JSON/SSE 通道，无新增路由、迁移或写权限；验证与剩余缺口见第二阶段实施记录。

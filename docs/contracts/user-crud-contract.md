@@ -100,4 +100,4 @@
 - [ ] 已连接本地 PostgreSQL 完成端到端迁移和 HTTP 验证。
 - [x] 已执行并记录类型检查、构建和格式检查。
 
-> 登录验证码设计、技术方案及实施见[登录验证码文档](../auth/login-captcha-design.md)。
+> 登录验证码设计、技术方案及实施见[登录验证码文档](../modules/auth/login-captcha-design.md)。

@@ -52,7 +52,7 @@
 
 - `docs/contracts/admin-management-crud-contract.md` 将商品试穿配置增量标为尚未实现，与商品试穿配置实施记录存在冲突。
 - `docs/contracts/virtual-try-on-crud-contract.md` 将商品设置校验标为尚未实施；需对照当前任务创建校验和商品设置实现确认其实际状态。
-- `docs/user-addresses/user-addresses-implementation.md` 仍将地址 Migration 标为未执行；全量验证记录已列出 2026-11-11 隔离库通过证据。
+- `docs/modules/user-addresses/user-addresses-implementation.md` 仍将地址 Migration 标为未执行；全量验证记录已列出 2026-11-11 隔离库通过证据。
 - 继续检查相关契约与实施记录是否有相同的状态漂移；保留原始失败和历史时间线，以后续复测追加新证据，不抹去历史结果。
 
 验收标准：
@@ -184,7 +184,7 @@
 - 从商品卡打开购买面板，选择有库存 SKU，填写合成收件信息，先保存地址，再通过确认卡创建订单；订单详情页模拟支付成功，未产生真实扣款。
 - 从前端再创建一笔独立待支付订单，并在二次确认后取消成功。
 - 管理员在订单履约页完成模拟支付订单发货；买家回到订单页确认收货，订单状态最终显示“已完成”。发货仅修改临时库并扣减其中测试 SKU 库存。
-- 以仓库登记的公开测试图片 `docs/virtual-try-on/fixtures/public-model.webp` 完成上传并接受页面第三方处理说明后，提交一次真实图像生成任务；任务创建成功，但供应商返回拒绝，页面显示 `PROVIDER_REJECTED`，没有生成结果。没有重试该请求。
+- 以仓库登记的公开测试图片 `docs/modules/virtual-try-on/fixtures/public-model.webp` 完成上传并接受页面第三方处理说明后，提交一次真实图像生成任务；任务创建成功，但供应商返回拒绝，页面显示 `PROVIDER_REJECTED`，没有生成结果。没有重试该请求。
 
 阻塞与未执行：
 

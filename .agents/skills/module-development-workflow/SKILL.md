@@ -121,7 +121,7 @@ description: 使用设计文档、技术文档、子代理分工、主代理集�
 同一业务的文档放在同一个目录：
 
 ```text
-docs/<业务名>/
+docs/modules/<业务名>/
   <模块名>-design.md
   <模块名>-technical.md
   <模块名>-implementation.md

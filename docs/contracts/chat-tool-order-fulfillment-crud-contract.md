@@ -5,7 +5,7 @@
 - 状态：按用户“直接写完文档，然后按实施文档实施”“继续下一阶段”的授权完成实现；业务测试及运行验收暂缓，静态检查见实施记录。
 - 日期：2026-11-17。
 - 工具：`get_my_order_fulfillment`。
-- 依据：[能力清单](../llm/chat-tool-capability-inventory.md)、[设计](../llm/chat-tool-order-fulfillment-design.md)、[订单契约](./order-crud-contract.md)、[用户信息契约](./chat-user-information-crud-contract.md)。
+- 依据：[能力清单](../modules/llm/chat-tool-capability-inventory.md)、[设计](../modules/llm/chat-tool-order-fulfillment-design.md)、[订单契约](./order-crud-contract.md)、[用户信息契约](./chat-user-information-crud-contract.md)。
 
 首版只重新组合既有聊天订单白名单中的订单号、状态及时间，加上固定来源说明。不开放 `shipment`、承运商、单号或任何新的个人信息字段，也不改变原工具的返回白名单。
 
@@ -74,4 +74,4 @@
 
 不新增依赖、配置、表、字段、索引、迁移、前端页面和业务 API；不改变 `list_my_orders`、`get_my_information`、购买及订单写流程。
 
-待后续授权验证：严格输入、本人隔离、五状态、缺失与故障、只读事务、JSON/SSE 工具反馈、历史与 trace 各路径、整轮记忆/摘要隔离及下一轮恢复。用户要求先不做测试，本阶段不新增或运行测试；静态审阅、类型、构建、格式检查结果单列于[实施文档](../llm/chat-tool-order-fulfillment-implementation.md)。
+待后续授权验证：严格输入、本人隔离、五状态、缺失与故障、只读事务、JSON/SSE 工具反馈、历史与 trace 各路径、整轮记忆/摘要隔离及下一轮恢复。用户要求先不做测试，本阶段不新增或运行测试；静态审阅、类型、构建、格式检查结果单列于[实施文档](../modules/llm/chat-tool-order-fulfillment-implementation.md)。

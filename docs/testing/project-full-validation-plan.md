@@ -128,7 +128,7 @@ git diff --check
 - 库名必须匹配 `clothes_guide_chat_try_on_information_test_*`，且不同于默认库。由调用方先核实并创建全新可销毁库，测试显式注入 ORM `dbName`，仅应用既有增量迁移。
 - 测试只清理本次 UUID fixture 并关闭应用/ORM，不接管或删除已有库；执行者负责记录新建库来源和最终清理。与所有数据库、迁移和端口任务串行。
 
-覆盖真实只读 REPEATABLE READ 快照、当页批量结果读取、本人/删除/状态分页、JWT + 实际 ToolNode + fake 模型的 JSON/SSE 往返、trace/activity/历史边界、整轮记忆及摘要排除和同会话普通轮恢复。测试不注册 Worker、存储或真实供应商；不代替浏览器和真实模型验收。实际结果见[实施记录](../llm/chat-tool-expansion-implementation.md)。
+覆盖真实只读 REPEATABLE READ 快照、当页批量结果读取、本人/删除/状态分页、JWT + 实际 ToolNode + fake 模型的 JSON/SSE 往返、trace/activity/历史边界、整轮记忆及摘要排除和同会话普通轮恢复。测试不注册 Worker、存储或真实供应商；不代替浏览器和真实模型验收。实际结果见[实施记录](../modules/llm/chat-tool-expansion-implementation.md)。
 
 ### 2.7 精确规格与本人偏好明细
 
@@ -137,7 +137,7 @@ git diff --check
 - 库名必须匹配 `^clothes_guide_chat_tool_phase_two_test_[a-z0-9_]+$`，不同于默认库和 `clothes_guide`。调用方确认不存在后创建专用库，测试显式注入 `dbName`，只应用现有迁移，不创建迁移快照或接管已有库。
 - 主代理独占数据库、端口及清理，测试只删除本轮 UUID fixture 并关闭应用和 ORM；执行后核对专用库不存在。与其他 PostgreSQL、迁移和运行时任务串行执行。
 
-覆盖超过100条的完整 SKU 筛选/计数/排序、真实预占视图、同色同码不合并；本人偏好九类/双删除过滤、关闭不读取值及缺设置不补建、坏值失败；两个 reader 的实际只读 RR 和并发快照、显式 raw 事务绑定；JWT + 实际 ToolNode + fake 模型的 JSON/SSE、安全 trace/activity/历史及整轮记忆/摘要排除。默认关闭门控的 skip 不计通过，真实数据库与浏览器、供应商分别记录。实际结果见[第二阶段实施记录](../llm/chat-tool-phase-two-implementation.md)。
+覆盖超过100条的完整 SKU 筛选/计数/排序、真实预占视图、同色同码不合并；本人偏好九类/双删除过滤、关闭不读取值及缺设置不补建、坏值失败；两个 reader 的实际只读 RR 和并发快照、显式 raw 事务绑定；JWT + 实际 ToolNode + fake 模型的 JSON/SSE、安全 trace/activity/历史及整轮记忆/摘要排除。默认关闭门控的 skip 不计通过，真实数据库与浏览器、供应商分别记录。实际结果见[第二阶段实施记录](../modules/llm/chat-tool-phase-two-implementation.md)。
 
 ### 数据库测试退出条件
 
@@ -188,7 +188,7 @@ git diff --check
 
 ## 第二阶段增量验证（2026-11-16）
 
-本次只执行对话工具第二阶段及相邻回归，不重新声明所有历史模块已完成全量数据库或浏览器验收。完整命令、分工及验收矩阵见[第二阶段实施记录](../llm/chat-tool-phase-two-implementation.md)。
+本次只执行对话工具第二阶段及相邻回归，不重新声明所有历史模块已完成全量数据库或浏览器验收。完整命令、分工及验收矩阵见[第二阶段实施记录](../modules/llm/chat-tool-phase-two-implementation.md)。
 
 | 项目                                          | 实际结果                                                                                                                       |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -196,7 +196,7 @@ git diff --check
 | 第二阶段真实 PostgreSQL/JWT/ToolNode/JSON/SSE | 11通过、0失败、0跳过                                                                                                           |
 | 首期试穿任务查询 PostgreSQL 回归              | 7通过、0失败、0跳过                                                                                                            |
 | API/Web/Shared 类型与构建                     | API独立typecheck/build及仓库pnpm typecheck/build通过                                                                           |
-| 格式与仓库组合门禁                            | 已单独格式化既有 `docs/chat-purchase/chat-purchase-prd.md`；`pnpm format:check` 与 `pnpm check` 通过                           |
+| 格式与仓库组合门禁                            | 已单独格式化既有 `docs/modules/chat-purchase/chat-purchase-prd.md`；`pnpm format:check` 与 `pnpm check` 通过                   |
 | 数据库与清理                                  | 本轮临时PostgreSQL16.14，127.0.0.1:55436；两个新建专用库已删除并查不存在，进程停止，数据目录移入废纸篓，默认开发库未启用或写入 |
 | 未执行                                        | 登录态桌面/窄屏、其他旧数据库门控、PostgreSQL17版本一致性及真实LLM/图像供应商                                                  |
 

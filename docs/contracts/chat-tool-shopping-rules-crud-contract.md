@@ -5,7 +5,7 @@
 - 日期：2026-11-17。
 - 状态：依据用户“直接写完文档，然后按实施文档实施”及后续“继续”“确认”完成实现；API 类型检查、构建及定向格式检查通过，业务测试和运行验收暂缓。
 - 工具：`get_shopping_rules`。
-- 文档：[设计](../llm/chat-tool-shopping-rules-design.md)、[技术](../llm/chat-tool-shopping-rules-technical.md)、[实施](../llm/chat-tool-shopping-rules-implementation.md)。
+- 文档：[设计](../modules/llm/chat-tool-shopping-rules-design.md)、[技术](../modules/llm/chat-tool-shopping-rules-technical.md)、[实施](../modules/llm/chat-tool-shopping-rules-implementation.md)。
 
 只查询既有已确认契约描述的本站系统规则，不建立未经提供或审核的真实店铺政策。订单功能不支持售后，不表示用户没有相关权利。
 

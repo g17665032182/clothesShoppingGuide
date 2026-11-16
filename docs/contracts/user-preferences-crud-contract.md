@@ -6,13 +6,13 @@
 - 最后更新：2026-11-04。
 - 需求：用户要求偏好与记忆“所有的都拆开”。
 - 模块：`apps/api/src/user-preferences/`。
-- 设计：[完整拆分设计](../user-memory/user-preference-memory-separation-design.md)。
+- 设计：[完整拆分设计](../modules/user-memory/user-preference-memory-separation-design.md)。
 - 关联资源：[用户记忆契约](./user-memory-crud-contract.md)。
 - 确认记录：2026-11-04 用户批准设计、本契约、技术文档，并回复“确认实施文档”授权实施；接口已切换。
 
 ## 后续变更：用户维护结构化偏好
 
-- 状态：设计、契约、技术方案和实施文档已确认，代码已实施；数据库集成测试及上线切换待完成。详见[实施记录](../user-memory/user-memory-background-implementation.md)。
+- 状态：设计、契约、技术方案和实施文档已确认，代码已实施；数据库集成测试及上线切换待完成。详见[实施记录](../modules/user-memory/user-memory-background-implementation.md)。
 - 用户本人通过现有偏好管理功能新增、修改和删除结构化偏好；LLM 只可在聊天时读取并参考，不得自动写入。
 - 保留已有偏好及其归属、内容和来源；现有偏好 CRUD 与权限不变。
 - 不再产生新的自动偏好任务；未完成或在途旧任务停止写入，历史任务保留。偏好开关只控制聊天注入，关闭不删除偏好或阻止手动管理。
@@ -102,10 +102,10 @@ Body/Query/Param 使用 Zod 和 Nest 标准校验 Pipe。对象拒绝未知字�
 ## 已确认增量：聊天本人偏好明细查询
 
 - 日期：2026-11-16；状态：第二阶段设计、契约、技术及实施均已确认，工具已接入；验证与缺口见第二阶段实施记录。
-- 依据：[第二阶段设计](../llm/chat-tool-phase-two-design.md)及[扩展增量契约](./chat-tool-expansion-crud-contract.md)。
+- 依据：[第二阶段设计](../modules/llm/chat-tool-phase-two-design.md)及[扩展增量契约](./chat-tool-expansion-crud-contract.md)。
 - 增加只读模型工具 get_my_preferences，仅用于用户明确查询已保存明细；普通推荐继续使用现有相关性注入。类别沿用九类，每页固定 5 条，页码实际整数 1–10，拒绝模型指定归属、页大小、动作和未知字段。
 - 只查询本人 active 且 deletedAt 为 null 的记录，先类别过滤，按 isPrimary 倒序、updatedAt 倒序、内部 ID 升序分页，返回真实总数和 hasNext；不使用相关性摘要代替完整列表。
 - 结果只含 category、valueType、经既有类别和安全规则重新验证的 value、isPrimary、updatedAt。不返回 ID、来源、指纹、任务或记忆文档；非法存量值导致 unavailable，不静默漏项。
 - **已确认规则**：偏好 enabled 关闭时，不读取或返回偏好值，固定返回 preferences_disabled；这扩展了原开关“只控制聊天注入”的含义。关闭不删除数据，不影响本人管理 API，也不使用独立记忆开关控制此工具。
 - 设置缺行按默认 true 解释但不补建记录，读取不调用可能写入的设置初始化路径，不恢复旧自动偏好任务。开关与结果按同次一致读取处理；新查询重新读取状态，旧聊天正文不撤回。
-- 不新增写权限、HTTP 路由、数据字段或迁移。已确认的整轮记忆/摘要来源隔离另见[记忆契约](./user-memory-crud-contract.md)，不得将明细回显当作用户新偏好；接口和查询方案见[第二阶段技术文档](../llm/chat-tool-phase-two-technical.md)，分工及实际验证见[实施记录](../llm/chat-tool-phase-two-implementation.md)。
+- 不新增写权限、HTTP 路由、数据字段或迁移。已确认的整轮记忆/摘要来源隔离另见[记忆契约](./user-memory-crud-contract.md)，不得将明细回显当作用户新偏好；接口和查询方案见[第二阶段技术文档](../modules/llm/chat-tool-phase-two-technical.md)，分工及实际验证见[实施记录](../modules/llm/chat-tool-phase-two-implementation.md)。

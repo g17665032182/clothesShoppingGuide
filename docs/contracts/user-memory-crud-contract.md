@@ -6,13 +6,13 @@
 - 最后更新：2026-11-06。
 - 需求：用户要求用户偏好与用户记忆“所有的都拆开”。
 - 模块：`apps/api/src/user-memory/`，只负责 Markdown 长期记忆。
-- 设计：[完整拆分设计](../user-memory/user-preference-memory-separation-design.md)。
+- 设计：[完整拆分设计](../modules/user-memory/user-preference-memory-separation-design.md)。
 - 独立资源：[用户偏好契约](./user-preferences-crud-contract.md)。
 - 确认记录：2026-11-04 用户批准设计、本契约、技术文档，并回复“确认实施文档”授权实施。
 
 ## 后续变更：长期背景与偏好维护边界
 
-- 状态：设计、契约、技术方案和实施文档已确认，代码已实施；数据库集成测试及上线切换待完成。详见[实施记录](../user-memory/user-memory-background-implementation.md)。
+- 状态：设计、契约、技术方案和实施文档已确认，代码已实施；数据库集成测试及上线切换待完成。详见[实施记录](../modules/user-memory/user-memory-background-implementation.md)。
 - 长期记忆为开放 Markdown，不依赖结构化偏好类别；纳入影响穿着选择、由用户明确表达的时间、季节、地点、爱好等背景，最新边界以以下 2026-11-06 增补为准。
 - 既有安全、用户隔离及用户管理规则保持不变；不改变记忆文档 API 或数据结构。
 
@@ -33,36 +33,36 @@
 - 购买轮次的两条消息以不可提取资格同事务保存，跳过自动记忆入队；旧消息迁移默认保持可提取。
 - 混合任务仅保留可提取来源，提取结果记录实际使用的消息 ID；无合法来源时不调用模型。来源资格或集合变化使旧候选失效，缓存重试也必须重新校验，不能从摘要或 trace 重建被排除文本。
 - 既有租约、generation、开关及清空保护继续生效；购买结束后的普通轮次恢复原记忆规则，手动维护 Markdown 或结构化服装偏好不受影响。
-- 实际测试结果及剩余验收见[购买实施记录](../chat-purchase/chat-purchase-implementation.md)。
+- 实际测试结果及剩余验收见[购买实施记录](../modules/chat-purchase/chat-purchase-implementation.md)。
 
 ### 2026-11-13 增量：试穿任务查询来源隔离
 
-- 状态：试穿查询业务设计、整轮隔离技术和实施文档均已确认，消息资格与入队隔离已接入；验证与缺口见[实施记录](../llm/chat-tool-expansion-implementation.md)。
-- 依据：[对话工具扩展技术文档](../llm/chat-tool-expansion-technical.md)，仅涉及显式查询 try_on_tasks 的轮次。
+- 状态：试穿查询业务设计、整轮隔离技术和实施文档均已确认，消息资格与入队隔离已接入；验证与缺口见[实施记录](../modules/llm/chat-tool-expansion-implementation.md)。
+- 依据：[对话工具扩展技术文档](../modules/llm/chat-tool-expansion-technical.md)，仅涉及显式查询 try_on_tasks 的轮次。
 - 复用 `memoryExtractionEligible`：本轮经校验调用过试穿任务查询，无论成功、空列表或失败，两条消息同事务标记为不可提取，跳过自动记忆入队，并由既有摘要/混合批次/缓存来源检查阻止后续重新读入。
 - 整轮隔离同时跳过该轮其他背景的自动提取，用户仍可手动维护；下一普通轮次恢复原规则。不重写旧消息资格、旧记忆或来源历史，不修改开关、generation、租约和记忆 API。
 - 聊天正文仍按原规则保存；不得把不可自动提取描述为用户聊天原文不保存。
 
 ### 2026-11-16 已确认增量：第二阶段查询来源隔离
 
-- 状态：第二阶段设计、契约、技术及实施均已确认；消息资格接线已实现，实际验证与缺口见第二阶段实施记录。依据：[第二阶段设计](../llm/chat-tool-phase-two-design.md)。
+- 状态：第二阶段设计、契约、技术及实施均已确认；消息资格接线已实现，实际验证与缺口见第二阶段实施记录。依据：[第二阶段设计](../modules/llm/chat-tool-phase-two-design.md)。
 - 已确认复用第一阶段整轮来源隔离：本轮经校验调用 get_product_skus 或 get_my_preferences 后，无论成功、空列表、开关关闭、商品不可用或依赖故障，用户及助手两条消息同事务标记为不可自动提取，不登记记忆任务，摘要、混合批次和缓存重试不得重新读入。
 - 库存、价格和已保存偏好回显不作为新的长期事实。整轮隔离同时跳过该轮其他背景，用户仍可手动维护，下一普通轮恢复。
 - 不修改记忆开关、generation、租约、文档 API 或旧消息资格，不重写旧记忆。聊天正文仍按既有规则保存；第二阶段偏好工具的开关由独立偏好契约决定。
-- 此项于第二阶段设计审批中另获用户确认；回调和事务接线见[第二阶段技术文档](../llm/chat-tool-phase-two-technical.md)，实际命令与结果见[实施记录](../llm/chat-tool-phase-two-implementation.md)。提取与摘要沿用既有资格检查，不修改旧消息和记忆。
+- 此项于第二阶段设计审批中另获用户确认；回调和事务接线见[第二阶段技术文档](../modules/llm/chat-tool-phase-two-technical.md)，实际命令与结果见[实施记录](../modules/llm/chat-tool-phase-two-implementation.md)。提取与摘要沿用既有资格检查，不修改旧消息和记忆。
 
 ## 后续变更草案：降低记忆提取频率
 
 - 状态：设计、契约、技术及实施已确认并完成。不属于 2026-11-04 已确认并实施的范围。
 - 日期：2026-11-05。
-- 设计文档：[会话批量提取设计](../user-memory/user-memory-session-extraction-design.md)。
-- 技术方案：[会话批量提取技术文档](../user-memory/user-memory-session-extraction-technical.md)。
+- 设计文档：[会话批量提取设计](../modules/user-memory/user-memory-session-extraction-design.md)。
+- 技术方案：[会话批量提取技术文档](../modules/user-memory/user-memory-session-extraction-technical.md)。
 - 确认记录：用户于 2026-11-05 回复“可以”、两次“确认”，批准设计、契约、技术方案及实施安排。
 - 提议行为：同一聊天会话的待处理轮次合并，最后一轮成功保存后空闲 5 分钟自动可领取；离开聊天页时通过认证接口尽力提前释放待处理任务。
 - 已确认新增 `POST /api/memories/tasks/flush`，Body 为 strict `{ conversationId: UUID }`，成功返回 `204`，仅操作当前用户尚未领取的任务。
 - 浏览器关闭通知不是可靠保证；服务端 5 分钟空闲调度必须独立兜底。
 - 批次最多 10 轮，只保存聊天消息 ID，不复制正文；已领取任务不可被新消息或 flush 改写。
-- 该变更涉及记忆任务的数据结构和 API；实现与迁移验证结果见[实施文档](../user-memory/user-memory-session-extraction-implementation.md)。
+- 该变更涉及记忆任务的数据结构和 API；实现与迁移验证结果见[实施文档](../modules/user-memory/user-memory-session-extraction-implementation.md)。
 
 结构化偏好的类别、表单预设、自定义值及 CRUD 规则由偏好契约维护，不再属于本资源。
 

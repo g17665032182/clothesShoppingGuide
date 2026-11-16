@@ -7,7 +7,7 @@
 - 最后更新：2026-11-13。
 - 资源：用户收货地址簿。
 - 所属模块：拟新增 `apps/api/src/user-addresses/`；前端页面归账号区域。
-- 关联文档：[收货地址设计](../user-addresses/user-addresses-design.md)、[订单契约](./order-crud-contract.md)、[聊天购买契约](./chat-purchase-crud-contract.md)。
+- 关联文档：[收货地址设计](../modules/user-addresses/user-addresses-design.md)、[订单契约](./order-crud-contract.md)、[聊天购买契约](./chat-purchase-crud-contract.md)。
 - 依据：用户确认建立本人地址管理、LLM 本人地址/订单查询及购买对话采集地址；查询工具不得回传完整联系方式；新增地址须显式确认。
 
 ## 范围与授权
@@ -147,4 +147,4 @@ LLM 可调用 `get_my_information` 查询本人订单摘要、地址引用和已
 - [ ] 确认订单工具筛选与摘要字段。
 - [ ] 确认用户注销和备份中的个人地址保留/删除策略。
 
-本次仅确认通过用户信息查询及购买模块完成下单地址选择联动；地址簿其他字段和 API 提案继续按本契约原状态处理。实现与验证事实见[用户信息查询实施记录](../chat-user-information/chat-user-information-implementation.md)。
+本次仅确认通过用户信息查询及购买模块完成下单地址选择联动；地址簿其他字段和 API 提案继续按本契约原状态处理。实现与验证事实见[用户信息查询实施记录](../modules/chat-user-information/chat-user-information-implementation.md)。

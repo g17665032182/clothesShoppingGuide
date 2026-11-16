@@ -6,14 +6,14 @@
 - 实现状态：照片、任务、结果和清理流程，以及商品试穿资格校验均已实现；真实供应商调用与已登录浏览器全流程尚未验证，真实用户照片流程保持关闭。
 - 最后更新：2026-11-13（状态依据：模块实施记录、2026-11-11 全量验证复测及聊天元数据增量）。
 - 资源：试穿照片资产、试穿生成任务、私有生成结果及任务完成提醒。
-- 关联文档：[PRD](../virtual-try-on/virtual-try-on-prd.md)、[设计](../virtual-try-on/virtual-try-on-design.md)、[商品目录契约](./product-catalog-crud-contract.md)。
+- 关联文档：[PRD](../modules/virtual-try-on/virtual-try-on-prd.md)、[设计](../modules/virtual-try-on/virtual-try-on-design.md)、[商品目录契约](./product-catalog-crud-contract.md)。
 
 本文只冻结业务契约，不冻结具体数据库表名、队列实现、模型 SDK、对象存储供应商或迁移 SQL。未确认项必须在技术阶段继续标记，不得由实现自行猜测。
 
 商品级准入开关为用户于 2026-11-09 确认设计与契约的独立增量，详见
 [商品试穿配置 CRUD 契约](./product-try-on-setting-crud-contract.md)。
 管理员配置开关、商品图片上传、商品卡准入投影和创建任务时的服务端复核均已实现。商品设置与迁移的实施及验证细节见
-[商品试穿配置实施文档](../virtual-try-on/product-try-on-setting-implementation.md)；
+[商品试穿配置实施文档](../modules/virtual-try-on/product-try-on-setting-implementation.md)；
 真实供应商生成与已登录浏览器完整交互仍是独立未验证项，本文既有权限及照片/任务流程契约不变。
 
 ## 范围与权限
@@ -223,12 +223,12 @@ Query：
 
 ## 审批说明
 
-用户已于 2026-11-09 确认本文及 [设计文档](../virtual-try-on/virtual-try-on-design.md)，并确认按推荐方案处理隐私和运营边界。重复删除固定返回 204。实现期间若修改 API、权限、数据留存或第三方隐私边界，必须回到本阶段重新确认。
+用户已于 2026-11-09 确认本文及 [设计文档](../modules/virtual-try-on/virtual-try-on-design.md)，并确认按推荐方案处理隐私和运营边界。重复删除固定返回 204。实现期间若修改 API、权限、数据留存或第三方隐私边界，必须回到本阶段重新确认。
 
 ## 2026-11-13 增量：聊天任务元数据读取
 
-- 状态：本人试穿任务安全摘要的设计、增量契约、技术和实施文档均已确认，独立只读 reader 已接入；验证与缺口见[实施记录](../llm/chat-tool-expansion-implementation.md)。
-- 关联：[扩展设计](../llm/chat-tool-expansion-design.md)、[增量契约](./chat-tool-expansion-crud-contract.md)、[技术方案](../llm/chat-tool-expansion-technical.md)。
+- 状态：本人试穿任务安全摘要的设计、增量契约、技术和实施文档均已确认，独立只读 reader 已接入；验证与缺口见[实施记录](../modules/llm/chat-tool-expansion-implementation.md)。
+- 关联：[扩展设计](../modules/llm/chat-tool-expansion-design.md)、[增量契约](./chat-tool-expansion-crud-contract.md)、[技术方案](../modules/llm/chat-tool-expansion-technical.md)。
 - 试穿领域提供本人未删除任务的最小公开查询入口，聊天不得直接访问 Entity/Repository 或复用带图片字段的 UI DTO 作为模型响应。
 - 每页 5 条、页码 1–10，可筛选四种非删除状态，按 createdAt 倒序及稳定次序分页。输出仅含任务安全引用、状态、有限商品快照、时间和结果是否存在的布尔值。
 - 结果可查看标志依据本人未删除结果记录，不检查存储对象，不生成下载地址或承诺之后下载成功；用户查看/下载仍经既有本人 API。

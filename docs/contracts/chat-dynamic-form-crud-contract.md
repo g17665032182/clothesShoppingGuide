@@ -6,7 +6,7 @@
 - 资源：绑定聊天会话的动态表单实例及一次提交结果。
 - 所属模块：`chat-dynamic-form`；聊天流由 `chat-records` 传输，业务写入由具体领域模块处理。
 - 最后更新：2026-11-13。
-- 关联文档：[动态表单设计](../chat-dynamic-form/chat-dynamic-form-design.md)、[流式聊天契约](./chat-streaming-crud-contract.md)、[聊天购买契约](./chat-purchase-crud-contract.md)。
+- 关联文档：[动态表单设计](../modules/chat-dynamic-form/chat-dynamic-form-design.md)、[流式聊天契约](./chat-streaming-crud-contract.md)、[聊天购买契约](./chat-purchase-crud-contract.md)。
 
 ## 权限与范围
 

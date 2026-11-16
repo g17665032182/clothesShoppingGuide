@@ -6,7 +6,7 @@
 - 最后更新：2026-11-16。
 - 资源：当前聊天运行中的偏好管理页面导航请求；不创建持久化资源。
 - 所属模块：`chat-records` 聊天工具编排；偏好 CRUD 仍归 `user-preferences` 模块。
-- 设计：[对话偏好编辑界面请求设计](../llm/chat-tool-preference-form-design.md)。
+- 设计：[对话偏好编辑界面请求设计](../modules/llm/chat-tool-preference-form-design.md)。
 - 领域依据：[用户偏好 CRUD 契约](./user-preferences-crud-contract.md)。
 
 ## 权限与操作范围

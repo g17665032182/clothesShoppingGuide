@@ -5,7 +5,7 @@
 - 状态：现有契约、2026-11-03 AI Elements 扩展及 2026-11-13 购买表单事件增量已确认并实施。
 - 资源名称：流式聊天传输
 - 业务目的：通过流式响应逐段展示大模型回复，并在完整生成后复用现有聊天记录规则保存本轮消息。
-- 关联设计文档：[流式聊天模块设计文档](../chat-streaming/chat-streaming-design.md)
+- 关联设计文档：[流式聊天模块设计文档](../modules/chat-streaming/chat-streaming-design.md)
 - 所属应用：`apps/api`、`apps/web`
 - 关联模块：`chat-records`、`llm`、`auth`
 - 最后更新：2026-11-13。
@@ -89,11 +89,11 @@ data: <JSON object>
 - 活动、来源和正文均属于同一轮运行；错误、取消或断流后，未完成工具不能继续显示运行中，临时数据不得当作已保存记录。
 - Confirmation、Plan 和 Stack Trace 不在本期范围，不新增工具审批、计划事件或面向用户的堆栈输出。
 
-关联 [AI Elements 设计文档](../chat-streaming/ai-elements-design.md)及[技术文档](../chat-streaming/ai-elements-technical.md)。设计阶段已确认，技术文档确认后再编写实施文档，实施文档确认后才能改代码。
+关联 [AI Elements 设计文档](../modules/chat-streaming/ai-elements-design.md)及[技术文档](../modules/chat-streaming/ai-elements-technical.md)。设计阶段已确认，技术文档确认后再编写实施文档，实施文档确认后才能改代码。
 
 ### 2026-11-08 聊天购买增量（已批准并实现）
 
-[聊天购买契约](./chat-purchase-crud-contract.md)及技术、实施方案均已获确认并完成代码集成，增加购买确认卡及关联订单投影，作为上文 Confirmation 非目标的后续增量。新增 purchase 引用事件，携带草稿 ID、版本及可空订单 ID，不携带收货字段；具体字段与持久化时序见购买契约。delta、done、error 的原语义继续保留。done 只证明聊天保存完成，不能作为订单创建、支付或其他订单动作成功的依据；断流后独立核实购买草稿和本人订单状态，不自动另建订单。具体校验结果及未完成浏览器验收见[实施记录](../chat-purchase/chat-purchase-implementation.md)。
+[聊天购买契约](./chat-purchase-crud-contract.md)及技术、实施方案均已获确认并完成代码集成，增加购买确认卡及关联订单投影，作为上文 Confirmation 非目标的后续增量。新增 purchase 引用事件，携带草稿 ID、版本及可空订单 ID，不携带收货字段；具体字段与持久化时序见购买契约。delta、done、error 的原语义继续保留。done 只证明聊天保存完成，不能作为订单创建、支付或其他订单动作成功的依据；断流后独立核实购买草稿和本人订单状态，不自动另建订单。具体校验结果及未完成浏览器验收见[实施记录](../modules/chat-purchase/chat-purchase-implementation.md)。
 
 ### 2026-11-13 购买表单工具事件增量
 

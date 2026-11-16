@@ -5,7 +5,7 @@
 - 状态：商品/订单卡片及 2026-11-13 确认的下单地址选择卡均已实施；登录态浏览器验收未执行。
 - 资源：聊天 assistant 消息中的结构化卡片展示块。
 - 所属模块：`chat-records` 负责服务端投影；`llm` 提供工具运行结果；`apps/web` 负责解析及组件分发。
-- 关联文档：[聊天通用卡片展示设计](../chat-card-display/chat-card-display-design.md)、[聊天记录 CRUD 契约](./chat-records-crud-contract.md)、[流式聊天 CRUD 契约](./chat-streaming-crud-contract.md)。
+- 关联文档：[聊天通用卡片展示设计](../modules/chat-card-display/chat-card-display-design.md)、[聊天记录 CRUD 契约](./chat-records-crud-contract.md)、[流式聊天 CRUD 契约](./chat-streaming-crud-contract.md)。
 - 最后更新：2026-11-13。
 
 本契约描述聊天卡片展示行为。当前确认的聊天记录、SSE、商品目录、订单、购买和取消契约继续有效。
@@ -100,4 +100,4 @@
 - [x] 地址选择卡只载入本人地址；默认项不预选，必须由用户明确点击选择。
 - [ ] 地址选择操作服务端复核用户、地址归属及购买草稿版本；无地址时转动态表单。
 
-商品/订单卡片已实施。地址选择卡片扩展的设计、契约和技术方案已获确认；实施任务见[用户信息查询实施文档](../chat-user-information/chat-user-information-implementation.md)，待该文档确认后实施。
+商品/订单卡片已实施。地址选择卡片扩展的设计、契约和技术方案已获确认；实施任务见[用户信息查询实施文档](../modules/chat-user-information/chat-user-information-implementation.md)，待该文档确认后实施。

@@ -9,14 +9,14 @@
 - 确认依据：用户回复；现有 `LlmModule`、JWT Guard、RolesGuard 和 MikroORM 约定。
 - 涉及模块：`apps/api/src/chat-records`、`apps/api/src/llm`、数据库迁移、内部聊天事件存储。
 - 当前框架：NestJS 12、MikroORM 7.2、PostgreSQL、TypeScript 6.0.3。
-- 最后更新：2026-11-12（2026-11-03 确认的 AI Elements 展示扩展已实现；自动化/数据库证据见[实施记录](../chat-streaming/ai-elements-implementation.md)和[全量验证记录](../testing/project-full-validation-plan.md)，登录态完整浏览器验收仍未完成）。
+- 最后更新：2026-11-12（2026-11-03 确认的 AI Elements 展示扩展已实现；自动化/数据库证据见[实施记录](../modules/chat-streaming/ai-elements-implementation.md)和[全量验证记录](../testing/project-full-validation-plan.md)，登录态完整浏览器验收仍未完成）。
 
 ## 范围
 
 - 包含：自动保存当前聊天轮次、用户会话列表/详情/删除、管理员列表/详情、分页和自动标题。
 - 包含：通过 LangGraph 节点保存用户输入、模型输出、工具调用和工具结果等内部事件。
 - 包含：调用模型前的聊天上下文压缩，完整原始消息仍然保留。
-- 由后端维护并注入统一系统上下文；系统上下文内容见[后端系统上下文设计](../llm/system-context-design.md)。
+- 由后端维护并注入统一系统上下文；系统上下文内容见[后端系统上下文设计](../modules/llm/system-context-design.md)。
 - 系统上下文仅用于当前模型调用，不写入聊天消息、内部 trace、历史摘要或会话持久化数据。
 - 所有客户端聊天入口仅接受 `user` 和 `assistant` 消息；客户端不得以 system 角色或额外系统指令字段提交系统信息，违规请求返回 `400`。
 - 商品推荐和本站订单已接入真实目录及持久化业务；购买仅提供模拟支付、不真实扣款，正式订单动作由用户按钮触发。外部代购、退款售后仍未接入。
@@ -28,7 +28,7 @@
 
 ### 2026-11-08 聊天购买增量（已批准并实现）
 
-[聊天购买契约](./chat-purchase-crud-contract.md)及技术、实施方案均已获确认并完成代码集成，增加真实商品购买草稿、确认卡及关联订单展示；正式订单动作由用户按钮调用，不提供模型订单写工具。草稿独立于聊天文本及摘要持久化，删除会话时清理草稿与展示引用，保留正式订单。用户主动发送的收货文本仍按本契约保存；购买轮次的 user/assistant 消息均标记 `memory_extraction_eligible=false`，不排队长期记忆提取，并从摘要来源排除。摘要通过最终 trace 的可见消息绑定识别整轮资格，不混用模型消息 ID 和数据库消息 ID；未绑定的失败/取消 trace 不作为摘要来源。验证证据与浏览器缺口见[实施记录](../chat-purchase/chat-purchase-implementation.md)。
+[聊天购买契约](./chat-purchase-crud-contract.md)及技术、实施方案均已获确认并完成代码集成，增加真实商品购买草稿、确认卡及关联订单展示；正式订单动作由用户按钮调用，不提供模型订单写工具。草稿独立于聊天文本及摘要持久化，删除会话时清理草稿与展示引用，保留正式订单。用户主动发送的收货文本仍按本契约保存；购买轮次的 user/assistant 消息均标记 `memory_extraction_eligible=false`，不排队长期记忆提取，并从摘要来源排除。摘要通过最终 trace 的可见消息绑定识别整轮资格，不混用模型消息 ID 和数据库消息 ID；未绑定的失败/取消 trace 不作为摘要来源。验证证据与浏览器缺口见[实施记录](../modules/chat-purchase/chat-purchase-implementation.md)。
 
 ## 字段契约
 
@@ -135,7 +135,7 @@
 - 拟复用现有模型 trace JSON 字段，绑定和消息保存处于同一事务；不改变原请求、Entity、索引、迁移和删除级联规则。
   具体可行性在技术阶段验证；必要的数据结构调整须重新确认。
 
-关联[设计文档](../chat-streaming/ai-elements-design.md)和[技术文档](../chat-streaming/ai-elements-technical.md)；历史验收项记录原有能力，不代表本扩展已实现或验证。
+关联[设计文档](../modules/chat-streaming/ai-elements-design.md)和[技术文档](../modules/chat-streaming/ai-elements-technical.md)；历史验收项记录原有能力，不代表本扩展已实现或验证。
 
 ## 验收清单
 

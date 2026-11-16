@@ -6,7 +6,7 @@
 - 资源：当前认证用户的地址簿、订单和已保存图片安全摘要。
 - 所属模块：`llm` 工具编排；地址、订单和虚拟试穿模块提供公开查询 Port。
 - 最后更新：2026-11-13。
-- 关联文档：[用户信息查询工具设计](../chat-user-information/chat-user-information-design.md)、[地址契约](./user-address-crud-contract.md)、[订单契约](./order-crud-contract.md)、[聊天记录契约](./chat-records-crud-contract.md)。
+- 关联文档：[用户信息查询工具设计](../modules/chat-user-information/chat-user-information-design.md)、[地址契约](./user-address-crud-contract.md)、[订单契约](./order-crud-contract.md)、[聊天记录契约](./chat-records-crud-contract.md)。
 
 本契约只描述聊天工具的只读查询边界，不替代地址、订单、图片模块自己的 CRUD 契约。
 
@@ -183,12 +183,12 @@
 
 ## 审批门槛
 
-设计、CRUD 契约、技术与实施文档均已获用户确认。实现和自动化验证见[实施记录](../chat-user-information/chat-user-information-implementation.md)；登录态浏览器验收尚未执行。
+设计、CRUD 契约、技术与实施文档均已获用户确认。实现和自动化验证见[实施记录](../modules/chat-user-information/chat-user-information-implementation.md)；登录态浏览器验收尚未执行。
 
 ## 2026-11-13 增量：本人试穿任务查询
 
-- 状态：增量设计、业务契约、技术及实施文档均已确认，第四类 section 已接入；省略 sections 仍只查询上文原三类。验证与缺口见[实施记录](../llm/chat-tool-expansion-implementation.md)。
-- 依据：[扩展设计](../llm/chat-tool-expansion-design.md)、[增量契约](./chat-tool-expansion-crud-contract.md)、[首期技术方案](../llm/chat-tool-expansion-technical.md)。
+- 状态：增量设计、业务契约、技术及实施文档均已确认，第四类 section 已接入；省略 sections 仍只查询上文原三类。验证与缺口见[实施记录](../modules/llm/chat-tool-expansion-implementation.md)。
+- 依据：[扩展设计](../modules/llm/chat-tool-expansion-design.md)、[增量契约](./chat-tool-expansion-crud-contract.md)、[首期技术方案](../modules/llm/chat-tool-expansion-technical.md)。
 - `get_my_information` 增加显式请求的 `try_on_tasks`；省略 sections 仍只读取 addresses/orders/photos。显式可选四类中的 1–4 项，不重复。
 - `tryOnStatus` 仅配合 try_on_tasks 使用，允许 queued/processing/succeeded/failed；订单 status 不变。页码为实际整数 1–10，每页固定 5 条，不接收 taskId、unread 或动作参数。
 - `sections.try_on_tasks` 为 `{ items, page, pageSize: 5, total }`。任务项目只含 taskId、四种状态、商品 externalId/name/category/color 快照、createdAt、可空 completedAt 和 resultAvailable。

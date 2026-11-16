@@ -6,7 +6,7 @@
 - 最后更新：2026-11-16。
 - 资源：当前聊天运行中的地址管理页面导航请求；不创建持久化资源。
 - 所属模块：`chat-records` 聊天工具编排；地址 CRUD 仍归 `user-addresses` 模块。
-- 设计：[对话地址管理界面请求设计](../llm/chat-tool-address-form-design.md)。
+- 设计：[对话地址管理界面请求设计](../modules/llm/chat-tool-address-form-design.md)。
 - 领域依据：[收货地址 CRUD 契约](./user-address-crud-contract.md)。
 
 本文只定义受限的 UI 导航请求，不扩展地址资源 CRUD，也不授予模型任何地址读写或用户确认权限。
@@ -147,5 +147,5 @@
 
 - 2026-11-16：依据地址能力清单、地址领域设计和已实施的偏好界面请求模式，形成本文草案。
 - 2026-11-16：用户确认本文及配套设计文档。确定固定导航至本人地址管理页、严格空对象、SSE-only、客户端 Toast 按真实导航结果反馈、每轮仅处理首次有效请求，且不承诺恢复未提交内容。
-- 2026-11-16：用户确认技术方案，并授权直接完成实施文档后实施；具体文件分工见[实施文档](../llm/chat-tool-address-form-implementation.md)。
+- 2026-11-16：用户确认技术方案，并授权直接完成实施文档后实施；具体文件分工见[实施文档](../modules/llm/chat-tool-address-form-implementation.md)。
 - 2026-11-16：代码已完成；API/Web 类型检查、API/Web 构建、Prettier 检查和 `git diff --check` 已通过。自动化测试、真实模型调用和登录态浏览器验收按用户要求暂缓。

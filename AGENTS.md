@@ -14,6 +14,7 @@
 ## 按需阅读
 
 - 文档总入口见 [`docs/README.md`](docs/README.md)，按业务和文档阶段查找；新增或迁移文档时同步维护索引与引用。
+- 同一业务的需求、设计、技术和实施文档统一放在 `docs/modules/<业务名>/`；资源契约仍集中在 `docs/contracts/`，共用开发规范和跨模块验证分别放在 `docs/development/` 与 `docs/testing/`。
 - 前端页面、组件、路由、API 或状态管理：先读 [`docs/development/frontend.md`](docs/development/frontend.md)。
 - NestJS API、Zod、MikroORM、契约或迁移：先读 [`docs/development/backend.md`](docs/development/backend.md)。
 - LLM 工具、聊天、地址、订单、取消订单或试穿隐私边界：先读 [`docs/development/security-and-business-boundaries.md`](docs/development/security-and-business-boundaries.md)，再读对应契约。

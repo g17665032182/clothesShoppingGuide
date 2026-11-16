@@ -6,7 +6,7 @@
 - 实现状态：首版后端 API、持久化与库存协作已实现；隔离 PostgreSQL 验证通过，尚未部署。
 - 资源：订单、订单明细、收货/商品/物流快照及库存预占协作。
 - 所属模块：`apps/api/src/orders/`；商品规格和库存公开能力归属 `product-catalog`。
-- 关联文档：[订单 PRD](../orders/order-module-prd.md)、[订单设计](../orders/order-module-design.md)、[商品目录契约](./product-catalog-crud-contract.md)。
+- 关联文档：[订单 PRD](../modules/orders/order-module-prd.md)、[订单设计](../modules/orders/order-module-design.md)、[商品目录契约](./product-catalog-crud-contract.md)。
 - 本地依赖依据：`apps/api/package.json` 中 NestJS 12.2.0、MikroORM 7.2.5、Zod `^4.6.7`；沿用 PostgreSQL 和当前认证授权能力。
 - 最后更新：2026-11-07。
 
@@ -18,7 +18,7 @@
 
 不提供订单内容 PATCH、任意改价/修改状态、订单删除、代买家支付/收货、真实支付或退款退换货。前端本人订单页和聊天下单按下述购买增量接入。
 
-2026-11-08 用户已确认[聊天购买增量](./chat-purchase-crud-contract.md)的设计、契约、技术及实施文档，并完成购买草稿、显式确认下单及本人订单页面代码集成。订单新增接受调用方 EntityManager 的确认创建公开端口，锁后核对确认价格、商品规格和草稿截止时间，订单写入与草稿关联处于同一事务。原直接下单 schema、多 SKU 请求、本人订单动作和幂等行为保持兼容；自动化结果及浏览器缺口见[实施记录](../chat-purchase/chat-purchase-implementation.md)。
+2026-11-08 用户已确认[聊天购买增量](./chat-purchase-crud-contract.md)的设计、契约、技术及实施文档，并完成购买草稿、显式确认下单及本人订单页面代码集成。订单新增接受调用方 EntityManager 的确认创建公开端口，锁后核对确认价格、商品规格和草稿截止时间，订单写入与草稿关联处于同一事务。原直接下单 schema、多 SKU 请求、本人订单动作和幂等行为保持兼容；自动化结果及浏览器缺口见[实施记录](../modules/chat-purchase/chat-purchase-implementation.md)。
 
 除内部后台处理外，全部 API 要求启用账号的 Bearer JWT。当前用户由认证上下文取得，不接受客户端指定订单买家。所有启用账号包括管理员都可购买；管理员角色仅在 `/api/admin/orders` 下增加管理查询和发货权限。
 

@@ -3,10 +3,10 @@
 ## 状态与依据
 
 - 状态：已确认。
-- 实现状态：管理员商品查看、订单履约、商品试穿开关及商品试穿图片上传已实现；已登录浏览器全流程仍待验收，见[实施文档](../admin-management/admin-management-implementation.md)和[商品试穿配置实施文档](../virtual-try-on/product-try-on-setting-implementation.md)。
+- 实现状态：管理员商品查看、订单履约、商品试穿开关及商品试穿图片上传已实现；已登录浏览器全流程仍待验收，见[实施文档](../modules/admin-management/admin-management-implementation.md)和[商品试穿配置实施文档](../modules/virtual-try-on/product-try-on-setting-implementation.md)。
 - 所属前端模块：`apps/web/src/pages/admin-products/`、`apps/web/src/pages/admin-orders/`。
 - 所属后端协作模块：`product-catalog`、`orders`。
-- 关联文档：[管理员运营 PRD](../admin-management/admin-management-prd.md)、[管理员运营设计](../admin-management/admin-management-design.md)。
+- 关联文档：[管理员运营 PRD](../modules/admin-management/admin-management-prd.md)、[管理员运营设计](../modules/admin-management/admin-management-design.md)。
 - 业务边界：本轮商品只读，订单只读加整单发货。
 
 ## 权限
@@ -145,4 +145,4 @@ Body：
 用户于 2026-11-09 确认允许管理员在现有商品详情 Dialog 内保存“支持试穿”开关，成功和失败使用 Toast。
 仅开放该设置，不包含商品其他信息编辑、上下架或库存修改。
 新接口与权限边界见[商品试穿配置 CRUD 契约](./product-try-on-setting-crud-contract.md)。
-本增量设计、契约、技术方案和实施均已完成；设置及图片上传的自动化与隔离数据库验证见[商品试穿配置实施文档](../virtual-try-on/product-try-on-setting-implementation.md)。浏览器交互验收尚未完成。原商品只读和订单整单发货边界保持不变。
+本增量设计、契约、技术方案和实施均已完成；设置及图片上传的自动化与隔离数据库验证见[商品试穿配置实施文档](../modules/virtual-try-on/product-try-on-setting-implementation.md)。浏览器交互验收尚未完成。原商品只读和订单整单发货边界保持不变。

@@ -17,7 +17,7 @@
 | 虚拟试穿   | 合格商品卡入口、照片上传、异步生成、结果查看/下载及删除；开发支持本地私有存储，真实人像流程保持关闭           |
 | 管理员运营 | 用户管理、商品/SKU/库存查询、商品试穿开关和缺图上传、订单查询及整单发货                                       |
 
-对话工具的当前实现、可扩展能力及用户确认边界见[对话工具能力清单](./docs/llm/chat-tool-capability-inventory.md)。
+对话工具的当前实现、可扩展能力及用户确认边界见[对话工具能力清单](./docs/modules/llm/chat-tool-capability-inventory.md)。
 
 已付款取消、真实支付/退款及退换货尚不支持。管理员商品页支持试穿配置，不提供通用商品编辑、上下架、库存调整或订单改价。
 
@@ -35,11 +35,12 @@ packages/
   shared/              共享包骨架
   typescript-config/   共享 TypeScript 配置
 docs/
-  README.md            文档总览与业务阶段索引
+  README.md            文档总入口
+  product/             产品级需求
+  modules/             全部业务模块的需求、设计、技术和实施文档
   contracts/           API、字段、权限和迁移契约
   development/         按领域读取的前端、后端、安全和验证约定
   testing/             全量验证计划、执行及修复记录
-  <业务模块>/          设计、技术和实施文档
 AGENTS.md              开发与验证约定
 ```
 
@@ -98,7 +99,7 @@ pnpm --filter @clothes-shopping-guide/api catalog:seed:test
 
 该 Seeder 提供 20 个测试商品，覆盖上衣、下装、连衣裙、外套和鞋类，每类 4 个，包含多颜色、尺码、价格和无库存场景。重复执行会更新对应测试商品与 SKU，可能改变测试商品库存，仅用于开发或隔离测试库；库存低于当前预占量时会拒绝更新。
 
-Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 `catalog:import`，具体输入及运行方式见[商品目录技术文档](./docs/product-guide/product-catalog-technical.md)。
+Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 `catalog:import`，具体输入及运行方式见[商品目录技术文档](./docs/modules/product-guide/product-catalog-technical.md)。
 
 ## 配置与业务入口
 
@@ -108,17 +109,17 @@ Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 
 
 `get_my_information` 由服务端绑定当前用户，不接受模型提供的 `userId`；地址和订单只返回安全摘要，图片只返回已保存元数据。购买草稿缺少收件信息时会查询本人地址簿：有地址则展示选择卡，由用户显式选择；地址簿为空时才展示动态表单收集草稿缺少的字段。地址查询失败不会按空列表处理，用户明确选择手动填写后才可改用动态表单。完整地址由前端临时读取，不发送给模型。
 
-用户主动询问试穿进度时，工具显式请求 `try_on_tasks`，可筛选四种任务状态；省略 sections 仍只查询地址、订单和已保存图片。任务每页5条、页码1–10，仅返回本人未删除任务的状态、商品快照、时间和结果存在标记，不读取图片或生成下载链接。查询成功、空列表或失败均使该轮退出自动记忆和摘要来源，下一普通轮恢复；聊天正文仍保存。具体实现与验收见[试穿任务查询实施记录](./docs/llm/chat-tool-expansion-implementation.md)。
+用户主动询问试穿进度时，工具显式请求 `try_on_tasks`，可筛选四种任务状态；省略 sections 仍只查询地址、订单和已保存图片。任务每页5条、页码1–10，仅返回本人未删除任务的状态、商品快照、时间和结果存在标记，不读取图片或生成下载链接。查询成功、空列表或失败均使该轮退出自动记忆和摘要来源，下一普通轮恢复；聊天正文仍保存。具体实现与验收见[试穿任务查询实施记录](./docs/modules/llm/chat-tool-expansion-implementation.md)。
 
 用户明确查询某商品的颜色、尺码、价格或有货状态时，`get_product_skus` 根据可信且唯一确定的外部标识查询，颜色和尺码精确匹配；仅返回当前 CNY 价格字符串和扣除有效预占后的有货布尔值，不公开 SKU ID、图片或库存数量，不选择规格或预占库存。`get_my_preferences` 仅用于明确查询本人已保存偏好，支持九类筛选；偏好开关关闭返回 `preferences_disabled`，缺设置按默认开启解释但不创建记录，不用旧上下文补齐明细。两工具固定每页5条、页码1–10，超出聊天上限引导原购买或偏好管理界面。
 
-两种明细查询在 JSON/SSE 中共用独立只读快照。经校验调用后，无论成功、空、关闭、未找到或失败，整轮两条消息退出自动记忆与摘要来源且不登记任务，下一普通轮恢复；最终正文仍保存。trace 仅记录安全计数、枚举及标记，activity 输入输出为 null，工具调用和结果从后续模型历史成对隐藏。实现和实际验收见[第二阶段实施记录](./docs/llm/chat-tool-phase-two-implementation.md)。
+两种明细查询在 JSON/SSE 中共用独立只读快照。经校验调用后，无论成功、空、关闭、未找到或失败，整轮两条消息退出自动记忆与摘要来源且不登记任务，下一普通轮恢复；最终正文仍保存。trace 仅记录安全计数、枚举及标记，activity 输入输出为 null，工具调用和结果从后续模型历史成对隐藏。实现和实际验收见[第二阶段实施记录](./docs/modules/llm/chat-tool-phase-two-implementation.md)。
 
 用户需要处理当前购买草稿时，助手可请求打开本人当前可编辑草稿的“本次购买”弹框；前端重新读取最新草稿。该请求不创建或修改草稿，正式购买操作仍由用户确认。
 
-用户明确询问某笔本人订单的发货情况时，`get_my_order_fulfillment` 按可信的精确订单号读取本地订单状态、发货及完成时间，并固定声明没有实时物流。它不返回承运商、任何物流单号或收件信息，不推断揽件、派送、签收或预计送达；不执行订单动作。查询轮次退出自动记忆与摘要来源，trace 不保存订单号或时间。实现和暂缓的业务验收见[履约摘要实施记录](./docs/llm/chat-tool-order-fulfillment-implementation.md)。
+用户明确询问某笔本人订单的发货情况时，`get_my_order_fulfillment` 按可信的精确订单号读取本地订单状态、发货及完成时间，并固定声明没有实时物流。它不返回承运商、任何物流单号或收件信息，不推断揽件、派送、签收或预计送达；不执行订单动作。查询轮次退出自动记忆与摘要来源，trace 不保存订单号或时间。实现和暂缓的业务验收见[履约摘要实施记录](./docs/modules/llm/chat-tool-order-fulfillment-implementation.md)。
 
-用户询问本站购物规则时，`get_shopping_rules` 按运费、付款、取消、履约或售后主题返回现有契约中的固定说明、来源和发布版本，不读取个人数据。目录随源码维护，不联网检索或自动生成政策；仅说明本站当前系统能力，不代表真实商家的退换承诺或售后受理结果。规则查询轮次不作为自动记忆和摘要来源，原始调用/结果不进入后续模型历史，trace 只保留主题、版本及计数。文档和暂缓的业务验收见[购物规则实施记录](./docs/llm/chat-tool-shopping-rules-implementation.md)。
+用户询问本站购物规则时，`get_shopping_rules` 按运费、付款、取消、履约或售后主题返回现有契约中的固定说明、来源和发布版本，不读取个人数据。目录随源码维护，不联网检索或自动生成政策；仅说明本站当前系统能力，不代表真实商家的退换承诺或售后受理结果。规则查询轮次不作为自动记忆和摘要来源，原始调用/结果不进入后续模型历史，trace 只保留主题、版本及计数。文档和暂缓的业务验收见[购物规则实施记录](./docs/modules/llm/chat-tool-shopping-rules-implementation.md)。
 
 模型只能准备/修改草稿和执行允许的查询，不能替用户选择地址或提交动态表单。正式下单、支付、取消及收货均由用户显式操作；新地址仅在点击保存后加入地址簿。用户主动发送的聊天原文仍按聊天历史规则保存，不应将工具脱敏理解为聊天原文不保存。
 
@@ -157,7 +158,7 @@ TRY_ON_ALLOWED_TEST_IMAGE_SHA256=a545ae39c389e305725b53b766ef75d9a6b2e3d168c16f7
 
 管理员在商品详情弹框配置“支持试穿”。仅有效的上衣、下装、连衣裙、外套且有有效颜色 SKU 和可用图片时允许开启；无库存不影响资格，鞋类不支持。无可用 SKU 图或商品级图时先上传商品试穿图。商品卡仅显示当前支持的入口，创建任务时服务端再次校验。
 
-照片上传使用[公开测试图片](./docs/virtual-try-on/fixtures/public-model.webp)原文件，来源、许可与规范化摘要见[素材说明](./docs/virtual-try-on/fixtures/README.md)。支持 JPEG、PNG、WebP，默认最大 10 MiB、最长边 4096，拒绝动画并清理 EXIF。不要重新压缩测试文件，否则可能无法命中摘要白名单。
+照片上传使用[公开测试图片](./docs/modules/virtual-try-on/fixtures/public-model.webp)原文件，来源、许可与规范化摘要见[素材说明](./docs/modules/virtual-try-on/fixtures/README.md)。支持 JPEG、PNG、WebP，默认最大 10 MiB、最长边 4096，拒绝动画并清理 EXIF。不要重新压缩测试文件，否则可能无法命中摘要白名单。
 
 旧测试数据已有商品图片对象键但缺少本地文件时，可运行以下恢复脚本：
 
@@ -192,13 +193,13 @@ pnpm --filter @clothes-shopping-guide/api catalog:hydrate-local-try-on-images
 
 开发规范入口见 [`AGENTS.md`](./AGENTS.md)，其中按任务链接前端、后端、安全和验证专题约定。新增应用位于 `apps/`，共享包位于 `packages/`，内部依赖使用 `workspace:*` 和 `@clothes-shopping-guide/` 命名空间。
 
-| 文档                  | 入口                                         |
-| --------------------- | -------------------------------------------- |
-| 全部业务与文档阶段    | [文档总览](./docs/README.md)                 |
-| 开发规范              | [开发文档索引](./docs/development/README.md) |
-| API 与资源契约        | [契约索引](./docs/contracts/README.md)       |
-| LLM、上下文与对话工具 | [LLM 文档索引](./docs/llm/README.md)         |
-| 偏好与记忆            | [专题索引](./docs/user-memory/README.md)     |
-| 验证计划与执行证据    | [测试索引](./docs/testing/README.md)         |
+| 文档                  | 入口                                             |
+| --------------------- | ------------------------------------------------ |
+| 全部业务与文档阶段    | [文档总览](./docs/README.md)                     |
+| 开发规范              | [开发文档索引](./docs/development/README.md)     |
+| API 与资源契约        | [契约索引](./docs/contracts/README.md)           |
+| LLM、上下文与对话工具 | [LLM 文档索引](./docs/modules/llm/README.md)     |
+| 偏好与记忆            | [专题索引](./docs/modules/user-memory/README.md) |
+| 验证计划与执行证据    | [测试索引](./docs/testing/README.md)             |
 
 各模块实施文档保留当时的验证结果与缺口；后续跨模块复测以全量验证记录对应日期的结果为准。

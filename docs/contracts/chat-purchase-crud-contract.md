@@ -6,7 +6,7 @@
 - 实现状态：已完成代码集成；自动化验证和未完成的浏览器验收见实施文档，尚未部署。
 - 最后更新：2026-11-13。
 - 资源：会话购买草稿、版本化确认快照及关联订单投影。
-- 关联文档：[PRD](../chat-purchase/chat-purchase-prd.md)、[设计](../chat-purchase/chat-purchase-design.md)、[技术](../chat-purchase/chat-purchase-technical.md)、[实施](../chat-purchase/chat-purchase-implementation.md)、[订单契约](./order-crud-contract.md)、[聊天记录契约](./chat-records-crud-contract.md)、[流式聊天契约](./chat-streaming-crud-contract.md)。
+- 关联文档：[PRD](../modules/chat-purchase/chat-purchase-prd.md)、[设计](../modules/chat-purchase/chat-purchase-design.md)、[技术](../modules/chat-purchase/chat-purchase-technical.md)、[实施](../modules/chat-purchase/chat-purchase-implementation.md)、[订单契约](./order-crud-contract.md)、[聊天记录契约](./chat-records-crud-contract.md)、[流式聊天契约](./chat-streaming-crud-contract.md)。
 
 Q1–Q14 已确认业务方向。以下字段、路由、错误及兼容性已于 2026-11-08 随 PRD、设计获用户确认；技术和实施文档随后均获确认。本轮已由子代理分工开发、主代理集成并验证，完整证据及缺口见实施记录。
 
@@ -162,7 +162,7 @@ start 的行为：
 | 工具与日志 | 专属白名单保护收货信息，结构化工具 trace、activity 和普通日志不新增收货字段明文副本；用户原始聊天文本仍按既有记录规则保存 |
 | 迁移       | 增量 Migration、约束与并发验证；保留旧数据，禁止 migration:fresh 代替验证                                                 |
 
-实际表结构、索引、外键、并发锁、事务公开接口及迁移回滚影响见已确认的[技术文档](../chat-purchase/chat-purchase-technical.md)，执行结果和剩余验收见已确认的[实施文档](../chat-purchase/chat-purchase-implementation.md)。
+实际表结构、索引、外键、并发锁、事务公开接口及迁移回滚影响见已确认的[技术文档](../modules/chat-purchase/chat-purchase-technical.md)，执行结果和剩余验收见已确认的[实施文档](../modules/chat-purchase/chat-purchase-implementation.md)。
 
 ## 验收清单
 

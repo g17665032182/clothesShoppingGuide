@@ -4,9 +4,9 @@
 
 - 状态：商品开关已实施；商品试穿图片上传增量的设计、技术和实施文档于 2026-11-09 确认，正在实施。
 - 更新日期：2026-11-09。
-- 设计：[商品试穿开关设计](../virtual-try-on/product-try-on-setting-design.md)。
-- 技术：[商品试穿配置技术文档](../virtual-try-on/product-try-on-setting-technical.md)，图片上传增量于 2026-11-09 确认。
-- 实施：[商品试穿配置实施文档](../virtual-try-on/product-try-on-setting-implementation.md)，已确认。
+- 设计：[商品试穿开关设计](../modules/virtual-try-on/product-try-on-setting-design.md)。
+- 技术：[商品试穿配置技术文档](../modules/virtual-try-on/product-try-on-setting-technical.md)，图片上传增量于 2026-11-09 确认。
+- 实施：[商品试穿配置实施文档](../modules/virtual-try-on/product-try-on-setting-implementation.md)，已确认。
 - 所属模块：`product-catalog`；协作模块：`virtual-try-on` 和聊天展示。
 - 本增量是管理员商品只读范围的单一例外，仅允许配置是否支持试穿。
 

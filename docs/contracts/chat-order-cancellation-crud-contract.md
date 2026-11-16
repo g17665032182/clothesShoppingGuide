@@ -6,7 +6,7 @@
 - 实现状态：未实现；本契约仅描述拟新增的聊天查询与展示行为。
 - 资源：聊天中的本人可取消订单投影；不新增持久化资源。
 - 所属模块：订单规则归属 `apps/api/src/orders/`；聊天工具与展示归属 `apps/api/src/chat-records/`、`apps/api/src/llm/`；前端归属 `apps/web/src/pages/chat/` 及共享订单组件。
-- 关联文档：[设计文档](../chat-order-cancellation/chat-order-cancellation-design.md)、[订单 CRUD 契约](./order-crud-contract.md)、[聊天购买 CRUD 契约](./chat-purchase-crud-contract.md)。
+- 关联文档：[设计文档](../modules/chat-order-cancellation/chat-order-cancellation-design.md)、[订单 CRUD 契约](./order-crud-contract.md)、[聊天购买 CRUD 契约](./chat-purchase-crud-contract.md)。
 - 依据：既有订单状态规则、本人订单查询工具及取消接口；用户确认沿用只取消未支付订单的规则。
 
 ## 范围与权限
