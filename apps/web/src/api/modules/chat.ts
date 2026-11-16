@@ -139,6 +139,7 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       'purchase',
       'purchase-form',
       'preference-form',
+      'address-form',
       'form',
       'form-result',
       'done',
@@ -230,6 +231,9 @@ export function parseEventFrame(frame: string): ChatStreamEvent | null {
       type: 'preference-form',
       ...(data.category === undefined ? {} : { category: data.category }),
     };
+  }
+  if (eventName === 'address-form' && isRecord(data) && hasOnlyKeys(data, [])) {
+    return { type: 'address-form' };
   }
   if (
     eventName === 'form' &&

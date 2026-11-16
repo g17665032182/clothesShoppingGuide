@@ -70,6 +70,7 @@ interface GenerationTask extends PendingTurn {
   receivedDone: boolean;
   pendingProductResults: ChatProductResults[];
   preferenceFormRequestEmitted: boolean;
+  addressFormRequestEmitted: boolean;
 }
 
 function toConversation(item: ChatApiConversation): Conversation {
@@ -259,6 +260,52 @@ export const useChatStore = defineStore('chat', () => {
     const session = sessions.value[sessionKey];
     if (session?.preferenceFormRequest)
       updateSession(sessionKey, { preferenceFormRequest: null });
+  }
+
+  function consumeAddressFormRequest(
+    sessionKey: string,
+    requestId: string,
+  ): void {
+    const session = sessions.value[sessionKey];
+    if (session?.addressFormRequest?.requestId === requestId)
+      updateSession(sessionKey, { addressFormRequest: null });
+  }
+
+  function isAddressFormRequestCurrent(
+    sessionKey: string,
+    requestId: string,
+  ): boolean {
+    const request = sessions.value[sessionKey]?.addressFormRequest;
+    return Boolean(
+      request &&
+      request.requestId === requestId &&
+      isAddressFormRequestContextCurrent(
+        sessionKey,
+        request.identityVersion,
+        request.userId,
+      ) &&
+      chatPageVisible,
+    );
+  }
+
+  function isAddressFormRequestContextCurrent(
+    sessionKey: string,
+    requestIdentityVersion: number,
+    requestUserId: string,
+  ): boolean {
+    return Boolean(
+      requestIdentityVersion === identityVersion &&
+      requestUserId === auth.state.user?.id &&
+      activeSessionKey.value === sessionKey &&
+      sessions.value[sessionKey],
+    );
+  }
+
+  function discardAddressFormRequest(sessionKey: string | null): void {
+    if (!sessionKey) return;
+    const session = sessions.value[sessionKey];
+    if (session?.addressFormRequest)
+      updateSession(sessionKey, { addressFormRequest: null });
   }
 
   function purchaseSession(conversationId: string): ChatSession | undefined {
@@ -886,8 +933,10 @@ export const useChatStore = defineStore('chat', () => {
   function setChatPageVisible(visible: boolean) {
     chatPageVisible = visible;
     if (!visible) {
-      for (const session of Object.values(sessions.value))
+      for (const session of Object.values(sessions.value)) {
         discardPreferenceFormRequest(session.key);
+        discardAddressFormRequest(session.key);
+      }
       flushActiveConversation();
     }
   }
@@ -965,6 +1014,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function startNewConversation() {
     discardPreferenceFormRequest(activeSessionKey.value);
+    discardAddressFormRequest(activeSessionKey.value);
     flushActiveConversation();
     activeSessionKey.value = null;
   }
@@ -1043,6 +1093,7 @@ export const useChatStore = defineStore('chat', () => {
     let session = findSession(id);
     if (activeSessionKey.value !== session?.key) {
       discardPreferenceFormRequest(activeSessionKey.value);
+      discardAddressFormRequest(activeSessionKey.value);
       flushActiveConversation();
     }
     if (!session) {
@@ -1243,6 +1294,7 @@ export const useChatStore = defineStore('chat', () => {
       receivedDone: false,
       pendingProductResults: [],
       preferenceFormRequestEmitted: false,
+      addressFormRequestEmitted: false,
       user: createPendingMessage(
         `pending-user-${sequence}`,
         'user',
@@ -1317,6 +1369,29 @@ export const useChatStore = defineStore('chat', () => {
                 preferenceFormRequest: {
                   requestId: `${key}:${sequence}`,
                   ...(event.category ? { category: event.category } : {}),
+                  identityVersion,
+                  userId,
+                },
+              });
+            }
+          }
+          publishTurn(key, task);
+          continue;
+        }
+        if (event.type === 'address-form') {
+          if (!task.addressFormRequestEmitted) {
+            task.addressFormRequestEmitted = true;
+            const userId = auth.state.user?.id;
+            if (
+              userId &&
+              chatPageVisible &&
+              activeSessionKey.value === key &&
+              sessions.value[key]
+            ) {
+              // 地址导航只保留在发起事件的会话和身份中，不跨上下文恢复。
+              updateSession(key, {
+                addressFormRequest: {
+                  requestId: `${key}:${sequence}`,
                   identityVersion,
                   userId,
                 },
@@ -1412,6 +1487,7 @@ export const useChatStore = defineStore('chat', () => {
     const task = tasks.get(key);
     if (!task || task.receivedDone) return;
     updateDuration(key, task);
+    discardAddressFormRequest(key);
     markUncertain(key, task);
     task.controller.abort();
     releaseTask(key, task);
@@ -1439,6 +1515,7 @@ export const useChatStore = defineStore('chat', () => {
         await deleteConversationRequest(token, id);
       if (version !== identityVersion) return false;
       if (session) {
+        discardAddressFormRequest(session.key);
         historyRequests.get(session.key)?.abort();
         historyRequests.delete(session.key);
         uncertainTurns.delete(session.key);
@@ -1558,6 +1635,9 @@ export const useChatStore = defineStore('chat', () => {
     acknowledgePurchaseFormRequest,
     consumePreferenceFormRequest,
     isPreferenceFormRequestCurrent,
+    consumeAddressFormRequest,
+    isAddressFormRequestCurrent,
+    isAddressFormRequestContextCurrent,
     markOrderCancellationComplete,
     applyDynamicFormResult,
   };

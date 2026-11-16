@@ -67,6 +67,7 @@ export function useChatPage() {
   const dynamicFormErrors = ref<Record<string, string>>({});
   const dynamicFormControllers = new Map<string, AbortController>();
   const preferenceFormRequestsInFlight = new Set<string>();
+  const addressFormRequestsInFlight = new Set<string>();
   useErrorToast(() => chat.errorMessage);
   useErrorToast(() => chat.purchase.errorMessage);
   useErrorToast(() => chat.conversationListError);
@@ -131,6 +132,54 @@ export function useChatPage() {
       } finally {
         chat.consumePreferenceFormRequest(sessionKey, request.requestId);
         preferenceFormRequestsInFlight.delete(request.requestId);
+      }
+    },
+    { flush: 'post' },
+  );
+
+  watch(
+    () => {
+      const sessionKey = chat.activeSessionKey;
+      const request = sessionKey
+        ? chat.sessions[sessionKey]?.addressFormRequest
+        : null;
+      return sessionKey && request ? { sessionKey, request } : null;
+    },
+    async (pending) => {
+      if (!pending) return;
+      const { sessionKey, request } = pending;
+      if (addressFormRequestsInFlight.has(request.requestId)) return;
+      addressFormRequestsInFlight.add(request.requestId);
+
+      const isCurrent = () =>
+        !disposed &&
+        chat.activeSessionKey === sessionKey &&
+        chat.isAddressFormRequestCurrent(sessionKey, request.requestId);
+      const isRequestContextCurrent = () =>
+        !disposed &&
+        chat.isAddressFormRequestContextCurrent(
+          sessionKey,
+          request.identityVersion,
+          request.userId,
+        );
+      if (!isCurrent()) {
+        chat.consumeAddressFormRequest(sessionKey, request.requestId);
+        addressFormRequestsInFlight.delete(request.requestId);
+        return;
+      }
+
+      try {
+        const result = await router.push({ name: 'account-addresses' });
+        if (isNavigationFailure(result)) throw new Error('navigation failed');
+        if (router.currentRoute.value.name !== 'account-addresses')
+          throw new Error('navigation redirected');
+        if (isRequestContextCurrent()) toast.success('已打开地址管理页面');
+      } catch {
+        if (isRequestContextCurrent())
+          toast.error('无法打开地址管理页面，请稍后重试');
+      } finally {
+        chat.consumeAddressFormRequest(sessionKey, request.requestId);
+        addressFormRequestsInFlight.delete(request.requestId);
       }
     },
     { flush: 'post' },

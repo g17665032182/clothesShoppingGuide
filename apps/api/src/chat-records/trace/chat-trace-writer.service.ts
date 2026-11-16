@@ -26,6 +26,7 @@ const PURCHASE_TOOL_NAMES = new Set([
 ]);
 const DYNAMIC_FORM_TOOL_NAME = 'request_dynamic_form';
 const PREFERENCE_FORM_TOOL_NAME = 'request_preference_form';
+const ADDRESS_FORM_TOOL_NAME = 'request_address_form';
 const ADDRESS_TOOL_NAMES = new Set([
   'list_my_orders',
   'list_my_shipping_addresses',
@@ -212,6 +213,10 @@ function isDynamicFormTool(name: string | null | undefined): boolean {
 
 function isPreferenceFormTool(name: string | null | undefined): boolean {
   return name === PREFERENCE_FORM_TOOL_NAME;
+}
+
+function isAddressFormTool(name: string | null | undefined): boolean {
+  return name === ADDRESS_FORM_TOOL_NAME;
 }
 
 function isUserInformationTool(name: string | null | undefined): boolean {
@@ -541,6 +546,18 @@ function safePreferenceFormProjection(value: unknown): Record<string, unknown> {
   };
 }
 
+function safeAddressFormProjection(value: unknown): Record<string, unknown> {
+  // 仅保留固定结果枚举，避免 trace 持久化模型附加字段。
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return { ok: false, code: 'unavailable' };
+  const input = source as Record<string, unknown>;
+  if (input.ok === true && input.code === 'requested') {
+    return { ok: true, code: 'requested' };
+  }
+  return { ok: false, code: 'unavailable' };
+}
+
 function safePurchaseProjection(value: unknown): Record<string, unknown> {
   const source =
     typeof value === 'string'
@@ -662,6 +679,48 @@ function safePreferenceFormCall(value: unknown): unknown {
       call.args ?? call.arguments ?? call.input,
     ),
   };
+}
+
+function safeAddressFormCall(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return value;
+  const call = value as Record<string, unknown>;
+  const functionValue = call.function;
+  const functionName =
+    typeof functionValue === 'object' &&
+    functionValue !== null &&
+    !Array.isArray(functionValue) &&
+    typeof (functionValue as Record<string, unknown>).name === 'string'
+      ? (functionValue as Record<string, unknown>).name
+      : null;
+  if (
+    call.name !== ADDRESS_FORM_TOOL_NAME &&
+    functionName !== ADDRESS_FORM_TOOL_NAME
+  )
+    return value;
+  // 无论模型使用哪种调用编码，地址导航工具都只保留固定名称和空参数。
+  return {
+    ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+    name: ADDRESS_FORM_TOOL_NAME,
+    ...(typeof call.type === 'string' ? { type: call.type.slice(0, 32) } : {}),
+    args: {},
+  };
+}
+
+function sanitizeNestedAddressFormCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedAddressFormCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      ['toolCalls', 'tool_calls', 'invalid_tool_calls'].includes(key) &&
+      Array.isArray(entry)
+        ? entry.map((call) =>
+            safeAddressFormCall(sanitizeNestedAddressFormCalls(call)),
+          )
+        : sanitizeNestedAddressFormCalls(entry),
+    ]),
+  );
 }
 
 function sanitizeNestedPurchaseCalls(value: unknown): unknown {
@@ -988,13 +1047,15 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         event.payload === undefined
           ? null
           : normalizePayload(
-              sanitizeNestedAddressCalls(
-                sanitizeNestedInformationCalls(
-                  sanitizeNestedPurchaseCalls(
-                    sanitizeNestedPreferenceFormCalls(
-                      sanitizeNestedDynamicFormCalls(
-                        sanitizeNestedChatCardCalls(
-                          sanitizeNestedDetailCalls(event.payload),
+              sanitizeNestedAddressFormCalls(
+                sanitizeNestedAddressCalls(
+                  sanitizeNestedInformationCalls(
+                    sanitizeNestedPurchaseCalls(
+                      sanitizeNestedPreferenceFormCalls(
+                        sanitizeNestedDynamicFormCalls(
+                          sanitizeNestedChatCardCalls(
+                            sanitizeNestedDetailCalls(event.payload),
+                          ),
                         ),
                       ),
                     ),
@@ -1036,15 +1097,17 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
               ? safeDynamicFormArguments(event.args)
               : isPreferenceFormTool(event.toolName)
                 ? safePreferenceFormArguments(event.args)
-                : isPurchaseTool(event.toolName)
-                  ? safePurchaseProjection(event.args)
-                  : isUserInformationTool(event.toolName)
-                    ? safeInformationArguments(event.args)
-                    : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                      ? safeAddressToolArguments(event.toolName, event.args)
-                      : event.toolName && isDetailQueryTool(event.toolName)
-                        ? safeDetailArguments(event.toolName, event.args)
-                        : event.args,
+                : isAddressFormTool(event.toolName)
+                  ? {}
+                  : isPurchaseTool(event.toolName)
+                    ? safePurchaseProjection(event.args)
+                    : isUserInformationTool(event.toolName)
+                      ? safeInformationArguments(event.args)
+                      : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
+                        ? safeAddressToolArguments(event.toolName, event.args)
+                        : event.toolName && isDetailQueryTool(event.toolName)
+                          ? safeDetailArguments(event.toolName, event.args)
+                          : event.args,
         ),
       };
     case 'tool_result':
@@ -1052,8 +1115,13 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         ...base,
         toolCallId: event.toolCallId,
         toolName: event.toolName,
-        content:
-          event.status === 'failed'
+        content: isAddressFormTool(event.toolName)
+          ? JSON.stringify(
+              event.status === 'failed'
+                ? { ok: false, code: 'unavailable' }
+                : safeAddressFormProjection(event.content),
+            )
+          : event.status === 'failed'
             ? '工具执行失败'
             : event.toolName === 'display_chat_card'
               ? safeChatCardResult(event.content)
@@ -1088,29 +1156,33 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
           event.payload === undefined
             ? null
             : normalizePayload(
-                event.toolName === 'display_chat_card'
-                  ? safeChatCardResult(event.payload)
-                  : isDynamicFormTool(event.toolName)
-                    ? safeDynamicFormProjection(event.payload)
-                    : isPreferenceFormTool(event.toolName)
-                      ? safePreferenceFormProjection(event.payload)
-                      : isPurchaseTool(event.toolName)
-                        ? safePurchaseProjection(event.payload)
-                        : isUserInformationTool(event.toolName)
-                          ? safeInformationProjection(event.payload)
-                          : event.toolName &&
-                              ADDRESS_TOOL_NAMES.has(event.toolName)
-                            ? safeAddressToolProjection(
-                                event.toolName,
-                                event.payload,
-                              )
+                isAddressFormTool(event.toolName)
+                  ? event.status === 'failed'
+                    ? { ok: false, code: 'unavailable' }
+                    : safeAddressFormProjection(event.payload)
+                  : event.toolName === 'display_chat_card'
+                    ? safeChatCardResult(event.payload)
+                    : isDynamicFormTool(event.toolName)
+                      ? safeDynamicFormProjection(event.payload)
+                      : isPreferenceFormTool(event.toolName)
+                        ? safePreferenceFormProjection(event.payload)
+                        : isPurchaseTool(event.toolName)
+                          ? safePurchaseProjection(event.payload)
+                          : isUserInformationTool(event.toolName)
+                            ? safeInformationProjection(event.payload)
                             : event.toolName &&
-                                isDetailQueryTool(event.toolName)
-                              ? safeDetailProjection(
+                                ADDRESS_TOOL_NAMES.has(event.toolName)
+                              ? safeAddressToolProjection(
                                   event.toolName,
                                   event.payload,
                                 )
-                              : event.payload,
+                              : event.toolName &&
+                                  isDetailQueryTool(event.toolName)
+                                ? safeDetailProjection(
+                                    event.toolName,
+                                    event.payload,
+                                  )
+                                : event.payload,
               ),
       };
   }

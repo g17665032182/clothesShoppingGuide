@@ -7,6 +7,7 @@
 - [聊天卡片展示 CRUD 契约](./chat-card-display-crud-contract.md)：设计、技术和实施方案已确认，功能实施中；涵盖通用 `type: card` 协议、模板分发、数据来源和历史兼容边界。
 - [聊天购买 CRUD 契约](./chat-purchase-crud-contract.md)：已实现商品卡购买、聊天草稿、确认卡与本人订单入口；审批已完成，验证证据及浏览器验收缺口见[实施文档](../chat-purchase/chat-purchase-implementation.md)。
 - [聊天试穿工具契约](./chat-try-on-tool-contract.md)：已确认商品卡触发工具、本人照片选择与明确同意、生图结果交给聊天模型并由前端安全渲染的调用链；技术方案和实施计划已确认，功能实施中。
+- [聊天地址管理界面请求契约](./chat-tool-address-form-crud-contract.md)：设计、契约与技术方案已确认并进入实施的 `request_address_form` 受限导航工具；仅请求打开本人地址管理页，不拥有地址读取或写入权限，实施记录见[实施文档](../llm/chat-tool-address-form-implementation.md)。
 - [AI 虚拟试穿 CRUD 契约](./virtual-try-on-crud-contract.md)：已确认并进入实现，涵盖商品卡试穿、照片资产、后台任务和本人结果资源；生产真实人像仍受供应商隐私审查阻塞。
 
 新增业务资源前，请参考 `.agents/skills/nestjs-mikroorm-crud/references/crud-contract.md` 在本目录创建契约，完成字段、权限、分页、删除行为和迁移兼容性确认后再实现。

@@ -319,6 +319,7 @@ export type ChatStreamEvent =
   | { type: 'purchase'; purchase: PurchaseReference | null }
   | { type: 'purchase-form' }
   | { type: 'preference-form'; category?: PreferenceCategory }
+  | { type: 'address-form' }
   | { type: 'form'; form: ChatDynamicForm }
   | { type: 'form-result'; result: ChatDynamicFormResult }
   | {

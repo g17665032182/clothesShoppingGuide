@@ -99,6 +99,7 @@ import {
   createRequestPreferenceFormTool,
   preferenceFormCategorySchema,
 } from '../tools/request-preference-form.tool.js';
+import { createRequestAddressFormTool } from '../tools/request-address-form.tool.js';
 import type { z } from 'zod';
 
 type PreferenceFormCategory = z.infer<typeof preferenceFormCategorySchema>;
@@ -150,6 +151,7 @@ export type ChatStreamEvent =
   | { type: 'purchase'; purchase: NonNullable<ChatDisplayData['purchase']> }
   | { type: 'purchase-form' }
   | { type: 'preference-form'; category?: PreferenceFormCategory }
+  | { type: 'address-form' }
   | { type: 'form'; form: DynamicFormDefinition }
   | {
       type: 'start';
@@ -202,6 +204,8 @@ type PreparedChat = {
   pendingPreferenceFormRequest: boolean;
   pendingPreferenceFormCategory: PreferenceFormCategory | undefined;
   preferenceFormEventSent: boolean;
+  pendingAddressFormRequest: boolean;
+  addressFormEventSent: boolean;
   purchaseReferencedDraftId?: string;
   pendingDynamicForms: DynamicFormDefinition[];
   tryOnAction?: TryOnActionInput;
@@ -370,6 +374,8 @@ export class ChatRecordsService {
         if (purchaseFormEvent) yield purchaseFormEvent;
         const preferenceFormEvent = this.takePreferenceFormRequest(prepared);
         if (preferenceFormEvent) yield preferenceFormEvent;
+        const addressFormEvent = this.takeAddressFormRequest(prepared);
+        if (addressFormEvent) yield addressFormEvent;
         yield { type: 'delta', content: result.content };
         if (display.purchase)
           yield { type: 'purchase', purchase: display.purchase };
@@ -398,6 +404,8 @@ export class ChatRecordsService {
             const preferenceFormEvent =
               this.takePreferenceFormRequest(prepared);
             if (preferenceFormEvent) yield preferenceFormEvent;
+            const addressFormEvent = this.takeAddressFormRequest(prepared);
+            if (addressFormEvent) yield addressFormEvent;
           } else {
             for (const form of prepared.pendingDynamicForms.splice(0)) {
               this.displayService.stageDynamicForm(display, form);
@@ -410,6 +418,8 @@ export class ChatRecordsService {
             const preferenceFormEvent =
               this.takePreferenceFormRequest(prepared);
             if (preferenceFormEvent) yield preferenceFormEvent;
+            const addressFormEvent = this.takeAddressFormRequest(prepared);
+            if (addressFormEvent) yield addressFormEvent;
           }
         }
       } finally {
@@ -419,6 +429,10 @@ export class ChatRecordsService {
       if (!result || signal?.aborted) {
         throw new DOMException('The operation was aborted', 'AbortError');
       }
+
+      // 某些模型流不会产生可消费的中间事件；结束前仍需发出已接受的导航请求。
+      const addressFormEvent = this.takeAddressFormRequest(prepared);
+      if (addressFormEvent) yield addressFormEvent;
 
       if (result.finalTraceSequence === null) {
         throw new ServiceUnavailableException('最终模型记录缺失，无法保存回复');
@@ -655,6 +669,8 @@ export class ChatRecordsService {
       pendingPreferenceFormRequest: false,
       pendingPreferenceFormCategory: undefined,
       preferenceFormEventSent: false,
+      pendingAddressFormRequest: false,
+      addressFormEventSent: false,
       pendingDynamicForms: [],
       ...(dto.tryOnAction ? { tryOnAction: dto.tryOnAction } : {}),
     };
@@ -1086,6 +1102,19 @@ export class ChatRecordsService {
             }),
           ]
         : []),
+      ...(includePurchaseForm
+        ? [
+            createRequestAddressFormTool(() => {
+              // 同一轮只接受首次有效请求，后续调用不能覆盖或重复排队。
+              if (
+                !prepared.pendingAddressFormRequest &&
+                !prepared.addressFormEventSent
+              ) {
+                prepared.pendingAddressFormRequest = true;
+              }
+            }),
+          ]
+        : []),
       createListUserOrdersTool(
         this.orders!,
         prepared.persistedConversation.userId,
@@ -1147,6 +1176,16 @@ export class ChatRecordsService {
     return category
       ? { type: 'preference-form', category }
       : { type: 'preference-form' };
+  }
+
+  private takeAddressFormRequest(
+    prepared: PreparedChat,
+  ): ChatStreamEvent | null {
+    if (!prepared.pendingAddressFormRequest || prepared.addressFormEventSent)
+      return null;
+    prepared.pendingAddressFormRequest = false;
+    prepared.addressFormEventSent = true;
+    return { type: 'address-form' };
   }
 
   private traceContext(prepared: PreparedChat, signal?: AbortSignal) {

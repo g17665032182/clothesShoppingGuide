@@ -3,7 +3,7 @@
 - 盘点日期：2026-11-16
 - 范围：普通用户聊天中由模型发起的工具调用，以及与工具相邻的前端操作。
 - 依据：当前源码和已确认业务契约。此文档记录能力现状与扩展候选，不代表候选能力已获准实施。
-- 扩展方案：[扩展设计](./chat-tool-expansion-design.md)、[增量契约](../contracts/chat-tool-expansion-crud-contract.md)、[首期技术方案](./chat-tool-expansion-technical.md)及[实施记录](./chat-tool-expansion-implementation.md)均已确认；首期试穿任务查询已接入。第二阶段[设计](./chat-tool-phase-two-design.md)、[技术](./chat-tool-phase-two-technical.md)及[实施记录](./chat-tool-phase-two-implementation.md)也已确认，精确规格和本人偏好工具已注册；各阶段实际验证及缺口见对应记录。其他候选仍未实施。
+- 扩展方案：[扩展设计](./chat-tool-expansion-design.md)、[增量契约](../contracts/chat-tool-expansion-crud-contract.md)、[首期技术方案](./chat-tool-expansion-technical.md)及[实施记录](./chat-tool-expansion-implementation.md)均已确认；首期试穿任务查询已接入。第二阶段[设计](./chat-tool-phase-two-design.md)、[技术](./chat-tool-phase-two-technical.md)及[实施记录](./chat-tool-phase-two-implementation.md)也已确认，精确规格和本人偏好工具已注册；地址管理页导航工具本轮已接入。各阶段实际验证及缺口见对应记录，其他候选仍未实施。
 
 ## 工具调用原则
 
@@ -27,6 +27,7 @@
 | `discard_purchase_draft`         | 放弃本人未提交的购买草稿。                                                                             | 不取消正式订单。                                                                                                    |
 | `request_purchase_form`          | 请求前端打开本人当前仍可编辑的购买草稿弹框。                                                           | 无参数、只用于 SSE；服务端重读并校验草稿，不创建或修改购买。                                                        |
 | `request_preference_form`        | 请求前端打开本人现有偏好管理页，可选预选一个偏好类别。                                                 | 仅用于 SSE；固定跳转 `account-memories?view=preferences`，不读取、预填或写入偏好，不接受 URL 或身份参数。           |
+| `request_address_form`           | 请求前端打开本人现有地址管理页。                                                                       | 仅用于 SSE；固定跳转 `account-addresses`，严格空对象输入，不读取、预填或写入地址，不接受 URL 或身份参数。           |
 | `list_my_orders`                 | 查询最多 5 笔本人订单摘要；待付款筛选可返回服务端确认的取消候选。                                      | 只读；不提供收件信息，不执行取消、支付或收货。                                                                      |
 | `get_my_information`             | 查询本人地址引用、订单摘要、已保存图片元数据，或显式请求的试穿任务摘要；下单缺地址时启动地址选择流程。 | 省略 sections 仍为原三类；试穿只返回本人未删除任务，每页5条、最多10页，不返回图片/结果ID/存储键，不触发生成或下载。 |
 | `request_dynamic_form`           | 请求前端渲染服务端注册的动态表单；目前购买收件信息使用 `purchase_recipient`。                          | 工具只发出表单定义和安全引用；不能读取或提交用户填写值。                                                            |
@@ -51,7 +52,7 @@
 
 ### 可选的界面请求
 
-- **地址簿表单 `request_address_form`**：适用于“在聊天里新增/修改收货地址”。地址簿已有本人 CRUD API，但当前动态表单注册类型只有购买收件字段。若扩展，只由工具请求渲染受限表单；地址新增/修改必须由用户在前端确认提交，完整地址不得进入模型、trace 或通用 activity。
+- 地址管理页导航 `request_address_form` 已接入当前能力清单；它只请求打开固定的本人地址管理页，不读取、预填或写入地址。具体契约、实现和验证缺口见[地址管理界面请求实施文档](./chat-tool-address-form-implementation.md)。
 - 偏好编辑界面已由 `request_preference_form` 接入当前能力清单；后续若需在聊天内渲染字段或自动定位具体记录，必须重新确认设计、权限和契约。
 
 ### 需先确认数据与权限

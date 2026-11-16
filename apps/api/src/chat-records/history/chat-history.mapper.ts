@@ -45,6 +45,7 @@ const PURCHASE_TOOL_NAMES = new Set([
 ]);
 const DYNAMIC_FORM_TOOL_NAMES = new Set(['request_dynamic_form']);
 const PREFERENCE_FORM_TOOL_NAMES = new Set(['request_preference_form']);
+const ADDRESS_FORM_TOOL_NAMES = new Set(['request_address_form']);
 const HIDDEN_USER_INFORMATION_TOOL_NAMES = new Set([
   'get_my_information',
   'get_product_skus',
@@ -62,8 +63,36 @@ function isHiddenTool(name: string): boolean {
     isPurchaseTool(name) ||
     DYNAMIC_FORM_TOOL_NAMES.has(name) ||
     PREFERENCE_FORM_TOOL_NAMES.has(name) ||
+    ADDRESS_FORM_TOOL_NAMES.has(name) ||
     HIDDEN_USER_INFORMATION_TOOL_NAMES.has(name)
   );
+}
+
+function collectNestedAddressToolCallIds(
+  value: unknown,
+  hiddenCallIds: Set<string>,
+): void {
+  if (Array.isArray(value)) {
+    for (const item of value)
+      collectNestedAddressToolCallIds(item, hiddenCallIds);
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+
+  const record = value as UnknownRecord;
+  const id = asString(record.id);
+  const name = asString(record.name);
+  const functionName = asString(asRecord(record.function).name);
+  if (
+    id &&
+    (name === 'request_address_form' || functionName === 'request_address_form')
+  ) {
+    hiddenCallIds.add(id);
+  }
+
+  for (const entry of Object.values(record)) {
+    collectNestedAddressToolCallIds(entry, hiddenCallIds);
+  }
 }
 
 function payloadToolCalls(payload: unknown): Array<{
@@ -109,18 +138,18 @@ export function mapTraceEventsToMessages(
   for (const event of sorted) {
     if (event.eventType === 'model_response') {
       const record = asRecord(event.payload);
-      // 非法调用也可能留下结果；所有兼容键都收集隐藏 ID，避免结果失去配对后泄漏。
+      // 保持既有工具只处理顶层调用；地址工具额外覆盖嵌套和非法调用。
       for (const key of ['toolCalls', 'tool_calls', 'invalid_tool_calls']) {
         const calls = record[key];
-        if (Array.isArray(calls)) {
-          for (const item of calls) {
-            const call = asRecord(item);
-            const id = asString(call.id);
-            const name = asString(call.name);
-            if (id && name && isHiddenTool(name)) hiddenCallIds.add(id);
-          }
+        if (!Array.isArray(calls)) continue;
+        for (const item of calls) {
+          const call = asRecord(item);
+          const id = asString(call.id);
+          const name = asString(call.name);
+          if (id && name && isHiddenTool(name)) hiddenCallIds.add(id);
         }
       }
+      collectNestedAddressToolCallIds(event.payload, hiddenCallIds);
     }
     if (event.eventType !== 'tool_call') continue;
     const messageId = event.messageId ?? '';

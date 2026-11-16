@@ -26,6 +26,12 @@ export interface ChatPreferenceFormRequest {
   userId: string;
 }
 
+export interface ChatAddressFormRequest {
+  requestId: string;
+  identityVersion: number;
+  userId: string;
+}
+
 export interface ChatSession {
   /** 服务端分配会话 ID 前后沿用同一个本地标识，防止后台首轮抢占当前会话。 */
   key: string;
@@ -40,6 +46,7 @@ export interface ChatSession {
   isLoadingEarlierMessages: boolean;
   purchase: ChatPurchaseState;
   preferenceFormRequest: ChatPreferenceFormRequest | null;
+  addressFormRequest: ChatAddressFormRequest | null;
 }
 
 export interface PendingTurn {
@@ -74,5 +81,6 @@ export function createChatSession(
       openFormRequested: false,
     },
     preferenceFormRequest: null,
+    addressFormRequest: null,
   };
 }
