@@ -76,7 +76,11 @@ import {
 } from '../../chat-purchase/index.js';
 import { ChatConversationAccess } from '../conversation-access/index.js';
 import { eligibleSummaryTraceIds } from './chat-summary-source.js';
-import { OrdersService, createListUserOrdersTool } from '../../orders/index.js';
+import {
+  OrdersService,
+  OrderFulfillmentReaderService,
+  createListUserOrdersTool,
+} from '../../orders/index.js';
 import {
   CHAT_TRY_ON_PORT,
   type ChatTryOnOutcome,
@@ -95,6 +99,8 @@ import { PurchaseAddressCoordinator } from '../tools/purchase-address-coordinato
 import { createChatUserInformationTool } from '../tools/chat-user-information.tool.js';
 import { createChatProductSkusTool } from '../tools/chat-product-skus.tool.js';
 import { createChatPreferencesTool } from '../tools/chat-preferences.tool.js';
+import { createChatOrderFulfillmentTool } from '../tools/chat-order-fulfillment.tool.js';
+import { createChatShoppingRulesTool } from '../tools/chat-shopping-rules.tool.js';
 import {
   createRequestPreferenceFormTool,
   preferenceFormCategorySchema,
@@ -274,6 +280,9 @@ export class ChatRecordsService {
     private readonly dynamicForms?: ChatDynamicFormService,
     @Optional()
     private readonly userInformation?: ChatUserInformationService,
+    @Optional()
+    @Inject(OrderFulfillmentReaderService)
+    private readonly orderFulfillmentReader?: OrderFulfillmentReaderService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -1060,6 +1069,22 @@ export class ChatRecordsService {
           prepared.detailQueryRequested = true;
         },
       ),
+      createChatShoppingRulesTool(() => {
+        // 系统规则只供本轮回答，不应提取为用户的长期偏好或摘要来源。
+        prepared.detailQueryRequested = true;
+      }),
+      ...(this.orderFulfillmentReader
+        ? [
+            createChatOrderFulfillmentTool(
+              this.orderFulfillmentReader,
+              prepared.persistedConversation.userId,
+              () => {
+                // 本地履约状态只供当前轮回答，未找到或失败也不能进入长期来源。
+                prepared.detailQueryRequested = true;
+              },
+            ),
+          ]
+        : []),
       ...createPurchaseTools(
         this.purchaseDrafts,
         prepared.persistedConversation.userId,

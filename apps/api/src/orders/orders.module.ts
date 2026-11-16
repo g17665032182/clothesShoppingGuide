@@ -8,6 +8,7 @@ import { Order } from './entity/order.entity.js';
 import { OrderIdempotency } from './entity/order-idempotency.entity.js';
 import { OrderItem } from './entity/order-item.entity.js';
 import { OrderExpirationService } from './service/order-expiration.service.js';
+import { OrderFulfillmentReaderService } from './service/order-fulfillment-reader.service.js';
 import { OrdersService } from './service/orders.service.js';
 import { ORDER_CATALOG_IMPORT_PORT } from './port/order-catalog-import.port.js';
 import { ORDER_CONFIRMED_CREATION_PORT } from './port/order-confirmed-creation.port.js';
@@ -21,6 +22,7 @@ import { ORDER_CONFIRMED_CREATION_PORT } from './port/order-confirmed-creation.p
   providers: [
     OrdersService,
     OrderExpirationService,
+    OrderFulfillmentReaderService,
     {
       provide: ORDER_CATALOG_IMPORT_PORT,
       useExisting: OrdersService,
@@ -32,6 +34,7 @@ import { ORDER_CONFIRMED_CREATION_PORT } from './port/order-confirmed-creation.p
   ],
   exports: [
     OrdersService,
+    OrderFulfillmentReaderService,
     ORDER_CATALOG_IMPORT_PORT,
     ORDER_CONFIRMED_CREATION_PORT,
   ],

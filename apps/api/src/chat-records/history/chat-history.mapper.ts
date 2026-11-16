@@ -46,10 +46,12 @@ const PURCHASE_TOOL_NAMES = new Set([
 const DYNAMIC_FORM_TOOL_NAMES = new Set(['request_dynamic_form']);
 const PREFERENCE_FORM_TOOL_NAMES = new Set(['request_preference_form']);
 const ADDRESS_FORM_TOOL_NAMES = new Set(['request_address_form']);
+const SHOPPING_RULES_TOOL_NAME = 'get_shopping_rules';
 const HIDDEN_USER_INFORMATION_TOOL_NAMES = new Set([
   'get_my_information',
   'get_product_skus',
   'get_my_preferences',
+  'get_my_order_fulfillment',
   'list_my_shipping_addresses',
   'select_my_shipping_address',
 ]);
@@ -64,17 +66,18 @@ function isHiddenTool(name: string): boolean {
     DYNAMIC_FORM_TOOL_NAMES.has(name) ||
     PREFERENCE_FORM_TOOL_NAMES.has(name) ||
     ADDRESS_FORM_TOOL_NAMES.has(name) ||
+    name === SHOPPING_RULES_TOOL_NAME ||
     HIDDEN_USER_INFORMATION_TOOL_NAMES.has(name)
   );
 }
 
-function collectNestedAddressToolCallIds(
+function collectNestedPrivateToolCallIds(
   value: unknown,
   hiddenCallIds: Set<string>,
 ): void {
   if (Array.isArray(value)) {
     for (const item of value)
-      collectNestedAddressToolCallIds(item, hiddenCallIds);
+      collectNestedPrivateToolCallIds(item, hiddenCallIds);
     return;
   }
   if (typeof value !== 'object' || value === null) return;
@@ -85,13 +88,18 @@ function collectNestedAddressToolCallIds(
   const functionName = asString(asRecord(record.function).name);
   if (
     id &&
-    (name === 'request_address_form' || functionName === 'request_address_form')
+    (name === 'request_address_form' ||
+      functionName === 'request_address_form' ||
+      name === 'get_my_order_fulfillment' ||
+      functionName === 'get_my_order_fulfillment' ||
+      name === SHOPPING_RULES_TOOL_NAME ||
+      functionName === SHOPPING_RULES_TOOL_NAME)
   ) {
     hiddenCallIds.add(id);
   }
 
   for (const entry of Object.values(record)) {
-    collectNestedAddressToolCallIds(entry, hiddenCallIds);
+    collectNestedPrivateToolCallIds(entry, hiddenCallIds);
   }
 }
 
@@ -138,7 +146,7 @@ export function mapTraceEventsToMessages(
   for (const event of sorted) {
     if (event.eventType === 'model_response') {
       const record = asRecord(event.payload);
-      // 保持既有工具只处理顶层调用；地址工具额外覆盖嵌套和非法调用。
+      // 地址导航、履约和规则查询额外识别嵌套及非法调用，避免恢复对应结果。
       for (const key of ['toolCalls', 'tool_calls', 'invalid_tool_calls']) {
         const calls = record[key];
         if (!Array.isArray(calls)) continue;
@@ -149,7 +157,7 @@ export function mapTraceEventsToMessages(
           if (id && name && isHiddenTool(name)) hiddenCallIds.add(id);
         }
       }
-      collectNestedAddressToolCallIds(event.payload, hiddenCallIds);
+      collectNestedPrivateToolCallIds(event.payload, hiddenCallIds);
     }
     if (event.eventType !== 'tool_call') continue;
     const messageId = event.messageId ?? '';

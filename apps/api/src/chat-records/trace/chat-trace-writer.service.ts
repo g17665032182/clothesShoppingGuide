@@ -11,6 +11,10 @@ import {
   chatCardSchema,
   chatCardSelectionSchema,
 } from '../display/chat-display.projection.js';
+import {
+  shoppingRulesInputSchema,
+  shoppingRulesResultSchema,
+} from '../dto/shopping-rules.dto.js';
 
 import {
   ChatTraceEvent,
@@ -33,9 +37,19 @@ const ADDRESS_TOOL_NAMES = new Set([
   'select_my_shipping_address',
 ]);
 const USER_INFORMATION_TOOL_NAME = 'get_my_information';
+const ORDER_FULFILLMENT_TOOL_NAME = 'get_my_order_fulfillment';
+const SHOPPING_RULES_TOOL_NAME = 'get_shopping_rules';
 const DETAIL_QUERY_TOOL_NAMES = new Set([
   'get_product_skus',
   'get_my_preferences',
+  ORDER_FULFILLMENT_TOOL_NAME,
+]);
+const ORDER_STATUSES = new Set([
+  'pending_payment',
+  'pending_shipment',
+  'pending_receipt',
+  'completed',
+  'closed',
 ]);
 const PREFERENCE_CATEGORIES = new Set([
   'size',
@@ -240,6 +254,8 @@ function safeDetailArguments(
   name: string,
   value: unknown,
 ): Record<string, unknown> {
+  // 履约查询参数包含订单号，trace 不能保留该业务引用。
+  if (name === ORDER_FULFILLMENT_TOOL_NAME) return {};
   const source = parseToolValue(value);
   if (typeof source !== 'object' || source === null || Array.isArray(source))
     return {};
@@ -264,6 +280,8 @@ function safeDetailProjection(
   name: string,
   value: unknown,
 ): Record<string, unknown> {
+  if (name === ORDER_FULFILLMENT_TOOL_NAME)
+    return safeOrderFulfillmentProjection(value);
   const source = parseToolValue(value);
   if (typeof source !== 'object' || source === null || Array.isArray(source))
     return {};
@@ -296,6 +314,94 @@ function safeDetailProjection(
   };
 }
 
+function safeOrderFulfillmentProjection(
+  value: unknown,
+): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (typeof source !== 'object' || source === null || Array.isArray(source))
+    return { ok: false, code: 'unavailable' };
+  const input = source as Record<string, unknown>;
+  if (input.ok === false) {
+    return {
+      ok: false,
+      code: input.code === 'not_found' ? 'not_found' : 'unavailable',
+    };
+  }
+  const order =
+    typeof input.order === 'object' &&
+    input.order !== null &&
+    !Array.isArray(input.order)
+      ? (input.order as Record<string, unknown>)
+      : {};
+  if (
+    input.ok !== true ||
+    input.source !== 'local_order_record' ||
+    input.realtimeTrackingAvailable !== false ||
+    typeof order.status !== 'string' ||
+    !ORDER_STATUSES.has(order.status)
+  )
+    return { ok: false, code: 'unavailable' };
+  // 仅保留固定来源和订单状态，不保存订单号、动作时间或其他业务字段。
+  return {
+    ok: true,
+    source: 'local_order_record',
+    realtimeTrackingAvailable: false,
+    status: order.status,
+  };
+}
+
+function safeShoppingRulesArguments(value: unknown): Record<string, unknown> {
+  const parsed = shoppingRulesInputSchema.safeParse(parseToolValue(value));
+  return parsed.success ? { topic: parsed.data.topic } : {};
+}
+
+function safeShoppingRulesProjection(value: unknown): Record<string, unknown> {
+  const parsed = shoppingRulesResultSchema.safeParse(parseToolValue(value));
+  if (!parsed.success || !parsed.data.ok)
+    return { ok: false, code: 'unavailable' };
+  // 规则正文和来源说明不进入 trace，只记录本次查询的主题、版本与条数。
+  return {
+    ok: true,
+    topic: parsed.data.topic,
+    version: parsed.data.version,
+    itemCount: parsed.data.statements.length,
+  };
+}
+
+function sanitizeNestedShoppingRulesCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedShoppingRulesCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  const call = value as Record<string, unknown>;
+  const functionValue =
+    typeof call.function === 'object' &&
+    call.function !== null &&
+    !Array.isArray(call.function)
+      ? (call.function as Record<string, unknown>)
+      : {};
+  if (
+    call.name === SHOPPING_RULES_TOOL_NAME ||
+    functionValue.name === SHOPPING_RULES_TOOL_NAME
+  ) {
+    // 非法调用及原生 function 编码同样丢弃任意参数、正文和错误文本。
+    return {
+      ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+      name: SHOPPING_RULES_TOOL_NAME,
+      ...(call.type === 'tool_call' || call.type === 'invalid_tool_call'
+        ? { type: call.type }
+        : {}),
+      args: safeShoppingRulesArguments(
+        call.args ?? call.arguments ?? call.input ?? functionValue.arguments,
+      ),
+    };
+  }
+  return Object.fromEntries(
+    Object.entries(call).map(([key, entry]) => [
+      key,
+      sanitizeNestedShoppingRulesCalls(entry),
+    ]),
+  );
+}
+
 function safeDetailToolCall(value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
     return value;
@@ -318,6 +424,28 @@ function safeDetailToolCall(value: unknown): unknown {
 function sanitizeNestedDetailCalls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeNestedDetailCalls);
   if (typeof value !== 'object' || value === null) return value;
+  const call = value as Record<string, unknown>;
+  const functionValue = call.function;
+  const functionName =
+    typeof functionValue === 'object' &&
+    functionValue !== null &&
+    !Array.isArray(functionValue)
+      ? (functionValue as Record<string, unknown>).name
+      : null;
+  if (
+    call.name === ORDER_FULFILLMENT_TOOL_NAME ||
+    functionName === ORDER_FULFILLMENT_TOOL_NAME
+  ) {
+    // 同时覆盖原生 function 编码和非法调用，原始参数及错误文本不落库。
+    return {
+      ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+      name: ORDER_FULFILLMENT_TOOL_NAME,
+      ...(call.type === 'tool_call' || call.type === 'invalid_tool_call'
+        ? { type: call.type }
+        : {}),
+      args: {},
+    };
+  }
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [
       key,
@@ -1039,6 +1167,46 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
     usage: null,
   };
 
+  // 规则查询使用独立白名单，避免改变个人明细工具已有的投影和失败语义。
+  if (
+    event.type === 'tool_call' &&
+    event.toolName === SHOPPING_RULES_TOOL_NAME
+  ) {
+    return {
+      ...base,
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      payload: normalizePayload(safeShoppingRulesArguments(event.args)),
+    };
+  }
+  if (
+    event.type === 'tool_result' &&
+    event.toolName === SHOPPING_RULES_TOOL_NAME
+  ) {
+    return {
+      ...base,
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      content: JSON.stringify(
+        event.status === 'failed'
+          ? { ok: false, code: 'unavailable' }
+          : safeShoppingRulesProjection(event.content),
+      ),
+      status:
+        event.status === 'success'
+          ? ChatTraceEventStatus.SUCCESS
+          : ChatTraceEventStatus.FAILED,
+      payload:
+        event.payload === undefined
+          ? null
+          : normalizePayload(
+              event.status === 'failed'
+                ? { ok: false, code: 'unavailable' }
+                : safeShoppingRulesProjection(event.payload),
+            ),
+    };
+  }
+
   switch (event.type) {
     case 'input':
       return { ...base, content: event.content };
@@ -1054,7 +1222,9 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
                       sanitizeNestedPreferenceFormCalls(
                         sanitizeNestedDynamicFormCalls(
                           sanitizeNestedChatCardCalls(
-                            sanitizeNestedDetailCalls(event.payload),
+                            sanitizeNestedDetailCalls(
+                              sanitizeNestedShoppingRulesCalls(event.payload),
+                            ),
                           ),
                         ),
                       ),
@@ -1115,39 +1285,52 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         ...base,
         toolCallId: event.toolCallId,
         toolName: event.toolName,
-        content: isAddressFormTool(event.toolName)
-          ? JSON.stringify(
-              event.status === 'failed'
-                ? { ok: false, code: 'unavailable' }
-                : safeAddressFormProjection(event.content),
-            )
-          : event.status === 'failed'
-            ? '工具执行失败'
-            : event.toolName === 'display_chat_card'
-              ? safeChatCardResult(event.content)
-              : isDynamicFormTool(event.toolName)
-                ? JSON.stringify(safeDynamicFormProjection(event.content))
-                : isPreferenceFormTool(event.toolName)
-                  ? JSON.stringify(safePreferenceFormProjection(event.content))
-                  : isPurchaseTool(event.toolName)
-                    ? safePurchaseResult(event.content)
-                    : isUserInformationTool(event.toolName)
-                      ? JSON.stringify(safeInformationProjection(event.content))
-                      : event.toolName && ADDRESS_TOOL_NAMES.has(event.toolName)
-                        ? JSON.stringify(
-                            safeAddressToolProjection(
-                              event.toolName,
-                              event.content,
-                            ),
-                          )
-                        : event.toolName && isDetailQueryTool(event.toolName)
+        content:
+          event.toolName === ORDER_FULFILLMENT_TOOL_NAME
+            ? JSON.stringify(
+                event.status === 'failed'
+                  ? { ok: false, code: 'unavailable' }
+                  : safeOrderFulfillmentProjection(event.content),
+              )
+            : isAddressFormTool(event.toolName)
+              ? JSON.stringify(
+                  event.status === 'failed'
+                    ? { ok: false, code: 'unavailable' }
+                    : safeAddressFormProjection(event.content),
+                )
+              : event.status === 'failed'
+                ? '工具执行失败'
+                : event.toolName === 'display_chat_card'
+                  ? safeChatCardResult(event.content)
+                  : isDynamicFormTool(event.toolName)
+                    ? JSON.stringify(safeDynamicFormProjection(event.content))
+                    : isPreferenceFormTool(event.toolName)
+                      ? JSON.stringify(
+                          safePreferenceFormProjection(event.content),
+                        )
+                      : isPurchaseTool(event.toolName)
+                        ? safePurchaseResult(event.content)
+                        : isUserInformationTool(event.toolName)
                           ? JSON.stringify(
-                              safeDetailProjection(
-                                event.toolName,
-                                event.content,
-                              ),
+                              safeInformationProjection(event.content),
                             )
-                          : normalizeContent(event.content),
+                          : event.toolName &&
+                              ADDRESS_TOOL_NAMES.has(event.toolName)
+                            ? JSON.stringify(
+                                safeAddressToolProjection(
+                                  event.toolName,
+                                  event.content,
+                                ),
+                              )
+                            : event.toolName &&
+                                isDetailQueryTool(event.toolName)
+                              ? JSON.stringify(
+                                  safeDetailProjection(
+                                    event.toolName,
+                                    event.content,
+                                  ),
+                                )
+                              : normalizeContent(event.content),
         status:
           event.status === 'success'
             ? ChatTraceEventStatus.SUCCESS
@@ -1156,33 +1339,37 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
           event.payload === undefined
             ? null
             : normalizePayload(
-                isAddressFormTool(event.toolName)
+                event.toolName === ORDER_FULFILLMENT_TOOL_NAME
                   ? event.status === 'failed'
                     ? { ok: false, code: 'unavailable' }
-                    : safeAddressFormProjection(event.payload)
-                  : event.toolName === 'display_chat_card'
-                    ? safeChatCardResult(event.payload)
-                    : isDynamicFormTool(event.toolName)
-                      ? safeDynamicFormProjection(event.payload)
-                      : isPreferenceFormTool(event.toolName)
-                        ? safePreferenceFormProjection(event.payload)
-                        : isPurchaseTool(event.toolName)
-                          ? safePurchaseProjection(event.payload)
-                          : isUserInformationTool(event.toolName)
-                            ? safeInformationProjection(event.payload)
-                            : event.toolName &&
-                                ADDRESS_TOOL_NAMES.has(event.toolName)
-                              ? safeAddressToolProjection(
-                                  event.toolName,
-                                  event.payload,
-                                )
+                    : safeOrderFulfillmentProjection(event.payload)
+                  : isAddressFormTool(event.toolName)
+                    ? event.status === 'failed'
+                      ? { ok: false, code: 'unavailable' }
+                      : safeAddressFormProjection(event.payload)
+                    : event.toolName === 'display_chat_card'
+                      ? safeChatCardResult(event.payload)
+                      : isDynamicFormTool(event.toolName)
+                        ? safeDynamicFormProjection(event.payload)
+                        : isPreferenceFormTool(event.toolName)
+                          ? safePreferenceFormProjection(event.payload)
+                          : isPurchaseTool(event.toolName)
+                            ? safePurchaseProjection(event.payload)
+                            : isUserInformationTool(event.toolName)
+                              ? safeInformationProjection(event.payload)
                               : event.toolName &&
-                                  isDetailQueryTool(event.toolName)
-                                ? safeDetailProjection(
+                                  ADDRESS_TOOL_NAMES.has(event.toolName)
+                                ? safeAddressToolProjection(
                                     event.toolName,
                                     event.payload,
                                   )
-                                : event.payload,
+                                : event.toolName &&
+                                    isDetailQueryTool(event.toolName)
+                                  ? safeDetailProjection(
+                                      event.toolName,
+                                      event.payload,
+                                    )
+                                  : event.payload,
               ),
       };
   }
