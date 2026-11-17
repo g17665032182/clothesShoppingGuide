@@ -21,7 +21,7 @@ docs/
 | [产品需求](./product/prd.md)        | 产品级 PRD；各业务 PRD 与对应设计、技术和实施文档一起放在业务目录 |
 | [业务模块](./modules/README.md)     | 按业务和文档阶段查找全部模块文档                                  |
 | [业务契约](./contracts/README.md)   | 资源、校验、权限、响应、迁移与兼容边界                            |
-| [开发规范](./development/README.md) | 前端、操作反馈、后端、安全及环境验证约定                          |
+| [开发规范](./development/README.md) | 前端、操作反馈、后端、安全、部署及环境验证约定                    |
 | [测试与验收](./testing/README.md)   | 全量验证计划、分日期执行记录和后续缺口                            |
 
 常用专题：[LLM 与对话工具](./modules/llm/README.md)、[用户偏好与记忆](./modules/user-memory/README.md)。

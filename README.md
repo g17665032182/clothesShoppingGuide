@@ -89,6 +89,11 @@ Web 开发服务器将 `/api` 代理到本机 3000 端口。前端路由使用 h
 
 `pnpm migration:fresh` 内置 `--drop-db --seed`，会删除并重建目标数据库。只在明确可销毁的本地或 CI 数据库中使用；保留数据的环境使用增量迁移并先审查、备份。
 
+Render 与 Neon 的固定部署配置、环境变量映射、迁移/Seeder 顺序和故障处理见
+[Render 与 Neon 部署手册](./docs/development/deployment.md)。提交到 `main` 后，
+Render 按仓库根目录 [`render.yaml`](./render.yaml) 自动构建 API 和 Web；生产环境
+发布前只执行增量 `migration:up` 和幂等 `seed`。
+
 ### 初始化测试商品
 
 默认 `DatabaseSeeder` 只创建管理员，不创建商品。需要测试目录时单独运行：
@@ -199,6 +204,7 @@ Agent 可从[项目速读](./docs/development/agent-guide.md)开始，按任务�
 | --------------------- | ------------------------------------------------ |
 | 全部业务与文档阶段    | [文档总览](./docs/README.md)                     |
 | 开发规范              | [开发文档索引](./docs/development/README.md)     |
+| Render 与 Neon 部署   | [部署手册](./docs/development/deployment.md)     |
 | API 与资源契约        | [契约索引](./docs/contracts/README.md)           |
 | LLM、上下文与对话工具 | [LLM 文档索引](./docs/modules/llm/README.md)     |
 | 偏好与记忆            | [专题索引](./docs/modules/user-memory/README.md) |

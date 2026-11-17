@@ -1,0 +1,139 @@
+# Render 与 Neon 部署
+
+[返回开发文档索引](./README.md) · [返回项目文档总览](../README.md)
+
+核对日期：2026-11-18。当前生产部署使用 GitHub 仓库
+`https://github.com/g17665032182/clothesShoppingGuide.git`，由 Render
+运行 API Web Service 和 Web Static Site，数据库使用外部 Neon PostgreSQL。
+
+## 固定配置
+
+仓库根目录的 [`render.yaml`](../../render.yaml) 是部署配置的唯一维护入口：
+
+| 服务                         | Render 类型      | 构建                                                                                | 启动/发布                |
+| ---------------------------- | ---------------- | ----------------------------------------------------------------------------------- | ------------------------ |
+| `clothes-shopping-guide-api` | Node Web Service | 安装依赖、构建 API、执行 `deploy:prepare:built`                                     | 启动 `pnpm start:prod`   |
+| `clothes-shopping-guide-web` | Static Site      | `pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build` | 发布目录 `apps/web/dist` |
+
+API 健康检查固定为 `/api/health`。Web 配置了 `/* -> /index.html` 回退，以支持
+Vue Router 的 history 路由。
+
+两个服务都从仓库根目录构建，不设置 `rootDir`。这样 Render 可以读取根目录
+`pnpm-workspace.yaml`、`package.json` 和 `pnpm-lock.yaml`。
+
+## Neon 配置
+
+应用的 MikroORM 配置读取 `DB_*`，不是 Neon 控制台复制出来的 `PG*` 变量。将
+Neon 连接信息按下表填写到 API 服务：
+
+| 应用变量      | Neon 变量                      |
+| ------------- | ------------------------------ |
+| `DB_HOST`     | `PGHOST`                       |
+| `DB_PORT`     | `5432`（通常与 `PGPORT` 相同） |
+| `DB_USER`     | `PGUSER`                       |
+| `DB_PASSWORD` | `PGPASSWORD`                   |
+| `DB_NAME`     | `PGDATABASE`                   |
+
+`PGSSLMODE=require` 和 `PGCHANNELBINDING=require` 可保留在 Render 环境中，便于
+CLI 或诊断工具使用。API 的 MikroORM 配置已启用 PostgreSQL TLS。
+
+不要把 Neon 连接串、密码或其他密钥写入 `render.yaml`、README、Issue 或 Git
+提交。Blueprint 中的 `sync: false` 变量需要在 Render Dashboard 首次创建服务时
+填写。
+
+## 首次创建
+
+1. 在 Render 新建 Blueprint，选择 GitHub 仓库
+   `g17665032182/clothesShoppingGuide` 和 `main` 分支。
+2. Render 读取仓库根目录的 `render.yaml`，确认会创建 API 和 Web 两个服务。
+3. 为 API 服务填写所有 `sync: false` 变量。至少包括：
+   `DB_HOST`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`、`JWT_SECRET`、
+   `PRODUCT_QUERY_CURSOR_SECRET`、`LLM_API_KEY`、`LLM_BASE_URL`、
+   `LLM_MODEL` 和 `SEED_ADMIN_*`。
+4. 如果启用七牛试穿，再填写 `QINIU_*`，并按业务契约补齐试穿供应商配置；
+   默认 `TRY_ON_ENABLED=false`，不会开启真实试穿。
+5. 部署完成后确认 API 健康检查通过，再打开 Web 地址。
+
+当前部署地址：
+
+- API：`https://clothes-shopping-guide-api.onrender.com`
+- Web：`https://clothes-shopping-guide-web.onrender.com`
+
+## 每次发布
+
+推送到 `main` 后由 Render 自动构建。为兼容 Render Free 计划（该计划不支持
+`preDeployCommand`），API 的构建命令在编译成功后继续执行迁移和 Seeder。发布顺序
+固定为：
+
+```text
+安装依赖 -> 构建 API -> migration:up -> seed -> 启动 API
+```
+
+Render 使用根目录 `pnpm deploy:prepare:built`：
+
+```bash
+pnpm --dir apps/api exec mikro-orm migration:up --config ./dist/mikro-orm.config.js
+pnpm --dir apps/api exec mikro-orm seeder:run --config ./dist/mikro-orm.config.js
+```
+
+`migration:up` 只应用尚未执行的增量迁移；`seed` 使用幂等的默认
+`DatabaseSeeder` 初始化管理员，不覆盖已经存在的管理员账号。迁移失败时不会继续
+执行 Seeder。
+
+生产 Neon 数据库严禁执行以下命令：
+
+```bash
+pnpm migration:fresh
+```
+
+它会删除并重建数据库，只能用于明确可销毁的本地或 CI 数据库。
+
+## 手工执行迁移或 Seeder
+
+优先使用 Render 的 API Shell，并确认当前 Shell 属于 API 服务。手工脚本会先构建
+API，再执行增量迁移和 Seeder：
+
+```bash
+pnpm deploy:prepare
+```
+
+如果只需要其中一步：
+
+```bash
+pnpm --filter @clothes-shopping-guide/api migration:up
+pnpm --filter @clothes-shopping-guide/api seed
+```
+
+不要在本地把生产 Neon 密码写进 `.env` 后执行 destructive 命令。执行迁移前先
+审查对应 Migration 的 SQL 和回滚影响；执行后查看部署日志，确认迁移完成、Seeder
+成功且 API 能正常启动。
+
+## 验证与故障处理
+
+部署后至少检查：
+
+```bash
+curl -fsS https://clothes-shopping-guide-api.onrender.com/api/health
+curl -I https://clothes-shopping-guide-web.onrender.com/
+```
+
+健康检查失败时按顺序检查：
+
+1. Render API 日志中的启动错误和 `PRODUCT_QUERY_CURSOR_SECRET` 长度。
+2. `DB_*` 是否映射到了同一个 Neon 项目，密码是否已轮换后同步更新。
+3. 迁移是否完成；不要用 `migration:fresh` 试探修复。
+4. Web 的 `VITE_API_BASE_URL` 是否带 `/api`，且指向当前 API 服务。
+5. LLM 或七牛配置是否只影响对应功能，而不是误报为数据库故障。
+
+需要回滚时，先在 Render 回滚到上一个已验证的部署版本，再核对数据库迁移是否
+向前兼容。不要直接回滚应用代码后删除生产迁移记录。
+
+## 资源与凭据安全
+
+Render 免费实例可能在空闲时休眠，首次请求会有冷启动延迟。生产密钥只存储在
+Render Dashboard 的环境变量中；本地 `.env`、`.env.dev` 必须保持在 Git 忽略列表
+内。
+
+此前曾在聊天内容中发送过 Neon 密码和第三方 API 凭据。它们已经视为泄露，部署
+固定后应立即轮换 Neon 密码、LLM Key、七牛密钥及试穿供应商 Key，并在 Render
+Dashboard 更新新值。
