@@ -2,6 +2,8 @@
 
 本仓库是 pnpm Monorepo：`apps/web` 为 Vue 3、Vite、shadcn-vue 前端；`apps/api` 为 NestJS、MikroORM、PostgreSQL 和 LangGraph 后端。实际依赖和命令以各包 `package.json` 为准。
 
+首次接手项目先读 [Agent 项目速读](docs/development/agent-guide.md)，了解链路与源码入口，再按任务读取相关规范、契约和实施记录；无需通读全部历史文档。
+
 ## 通用规则
 
 - 开始工作前检查 `git status`，阅读相关业务契约、实施记录和当前源码。保留已有修改、环境配置和私有图片；设计稿、计划或旧实施记录不代表当前代码状态。

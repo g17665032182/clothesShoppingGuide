@@ -2,6 +2,8 @@
 
 项目文档统一收纳在 `docs/`，按五类组织。环境准备与启动见[项目 README](../README.md)，仓库开发约定见 [AGENTS.md](../AGENTS.md)。
 
+Agent 首次接手先读 [Agent 项目速读](./development/agent-guide.md)：项目链路、任务对应源码、业务边界和验证证据入口。需要追溯方案时再展开下方业务阶段文档。
+
 ```text
 docs/
   README.md       文档总入口
