@@ -30,7 +30,7 @@
 ```text
 apps/
   web/                 Vue 3、Vite、TypeScript、Tailwind CSS 4、shadcn-vue
-  api/                 NestJS 12、MikroORM 7、PostgreSQL、LangGraph
+  api/                 NestJS 12、SWC、MikroORM 7、PostgreSQL、LangGraph
 packages/
   shared/              共享包骨架
   typescript-config/   共享 TypeScript 配置
@@ -76,7 +76,7 @@ pnpm seed
 pnpm dev
 ```
 
-`pnpm dev:db` 只启动数据库；`pnpm dev` 同时启动 Web 和 API。日常开发无需重复迁移或 Seed，数据库停止后先运行 `pnpm dev:db` 即可。
+`pnpm dev:db` 只启动数据库；`pnpm dev` 同时启动 Web 和 API。API 使用 SWC 编译并保留独立 TypeScript 类型检查，数据库停止后先运行 `pnpm dev:db` 即可。
 
 | 服务     | 地址                               |
 | -------- | ---------------------------------- |

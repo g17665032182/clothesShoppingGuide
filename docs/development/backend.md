@@ -11,6 +11,7 @@
 - 数据访问使用 MikroORM Repository 或 EntityManager，不在 Controller 操作数据库。多表写入、状态切换和一致性操作使用事务。
 - 认证授权复用现有 JWT Guard、`@Public()`、`@CurrentUser()`、`RolesGuard` 和 `@Roles()`。新增 Guard、Decorator、Pipe 前确认现有实现不能满足需求。
 - 使用 Nest 标准异常；错误不得泄露凭据、数据库连接信息或第三方密钥。跨模块通用基础设施可放 `src/common/`，业务组件留在所属模块。
+- API 构建、开发监听、MikroORM CLI 和 TypeScript 测试统一使用 SWC；`nest build` 的类型检查仍开启，避免快速转译掩盖类型错误。
 - 配置通过 `ConfigModule` 和环境变量管理，校验类型和值；密钥不入源码，新增配置同步更新 `.env.example`。
 
 ## 契约、迁移与测试
