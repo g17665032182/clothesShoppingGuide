@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import mikroOrmConfig from './mikro-orm.config.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -16,6 +18,7 @@ import { UserPreferencesModule } from './user-preferences/index.js';
 import { OrderCatalogCoordinationModule } from './order-catalog-coordination/order-catalog-coordination.module.js';
 import { VirtualTryOnModule } from './virtual-try-on/virtual-try-on.module.js';
 import { UserAddressesModule } from './user-addresses/index.js';
+import { parseRateLimitConfig } from './common/rate-limit/rate-limit.config.js';
 
 @Module({
   imports: [
@@ -41,7 +44,36 @@ import { UserAddressesModule } from './user-addresses/index.js';
             'TRY_ON_ALLOWED_TEST_IMAGE_SHA256 必须是逗号分隔的 SHA-256 十六进制摘要',
           );
         }
+        parseRateLimitConfig(config);
         return config;
+      },
+    }),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const rateLimitConfig = parseRateLimitConfig({
+          RATE_LIMIT_TTL_MS: configService.get('RATE_LIMIT_TTL_MS'),
+          RATE_LIMIT_LIMIT: configService.get('RATE_LIMIT_LIMIT'),
+          AUTH_RATE_LIMIT_TTL_MS: configService.get('AUTH_RATE_LIMIT_TTL_MS'),
+          AUTH_RATE_LIMIT_LIMIT: configService.get('AUTH_RATE_LIMIT_LIMIT'),
+        });
+        return {
+          throttlers: [
+            {
+              name: 'default',
+              ttl: rateLimitConfig.defaultTtl,
+              limit: rateLimitConfig.defaultLimit,
+            },
+            {
+              name: 'auth',
+              ttl: rateLimitConfig.authTtl,
+              limit: rateLimitConfig.authLimit,
+            },
+          ],
+          errorMessage: '请求过于频繁，请稍后重试',
+          setHeaders: true,
+        };
       },
     }),
     LoggingModule,
@@ -61,6 +93,10 @@ import { UserAddressesModule } from './user-addresses/index.js';
     {
       provide: APP_FILTER,
       useClass: DbExceptionFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })

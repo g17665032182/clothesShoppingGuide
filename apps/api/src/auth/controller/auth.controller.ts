@@ -16,6 +16,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { AuthService } from '../service/auth.service.js';
@@ -49,6 +50,8 @@ export class AuthController {
 
   @Public()
   @Get('captcha')
+  @SkipThrottle({ default: true })
+  @Throttle({ auth: {} })
   @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: '获取登录图片验证码' })
   @ApiOkResponse({ type: CaptchaResponseDto })
@@ -58,6 +61,8 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @SkipThrottle({ default: true })
+  @Throttle({ auth: {} })
   public async register(
     @Body({ schema: registerSchema }) dto: RegisterDto,
     @Res({ passthrough: true }) response: ServerResponse,
@@ -70,6 +75,8 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
+  @SkipThrottle({ default: true })
+  @Throttle({ auth: {} })
   public async login(
     @Body({ schema: loginSchema }) dto: LoginDto,
     @Res({ passthrough: true }) response: ServerResponse,
@@ -82,6 +89,8 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('refresh')
+  @SkipThrottle({ default: true })
+  @Throttle({ auth: {} })
   public async refresh(
     @Req() request: IncomingMessage,
     @Res({ passthrough: true }) response: ServerResponse,
@@ -98,6 +107,8 @@ export class AuthController {
   @Public()
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('logout')
+  @SkipThrottle({ default: true })
+  @Throttle({ auth: {} })
   public async logout(
     @Req() request: IncomingMessage,
     @Res({ passthrough: true }) response: ServerResponse,

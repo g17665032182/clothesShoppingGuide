@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 
 import { Public } from '../../auth/decorator/public.decorator.js';
 import { HealthService } from '../service/health.service.js';
@@ -10,6 +11,7 @@ export class HealthController {
   public constructor(private readonly healthService: HealthService) {}
 
   @Public()
+  @SkipThrottle({ default: true, auth: true })
   @Get()
   public getHealth(): { status: string; service: string; timestamp: string } {
     return this.healthService.getHealth();
