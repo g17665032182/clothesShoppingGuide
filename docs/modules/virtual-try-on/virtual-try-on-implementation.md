@@ -29,7 +29,7 @@
 - `apps/api/src/app.module.ts` 及模块注册、跨模块配置和共享 DI 接线。
 - 商品目录侧公开 `ProductCatalogTryOnPort` 的实现和导出；不得让试穿模块引用目录私有 Entity/Repository。
 - Migration、Migration 快照或仓库要求的数据库元数据。
-- `apps/api/.env.example`、环境配置 Schema、根/应用包依赖清单和 `pnpm-lock.yaml`。
+- 根目录 `.env.example`、环境配置 Schema、根/应用包依赖清单和 `pnpm-lock.yaml`。
 - 现有商品卡公共入口的集成点、账号导航/路由接线，以及需要跨页面协调的文件。
 - 任何不在其他角色明确所有权中的共享文件。
 

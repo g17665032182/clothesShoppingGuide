@@ -54,10 +54,10 @@ AGENTS.md              开发与验证约定
 
 ```bash
 pnpm install --frozen-lockfile
-cp -n apps/api/.env.example apps/api/.env
+cp -n .env.example .env
 ```
 
-在 `apps/api/.env` 中设置：
+在根目录 `.env` 中设置：
 
 - `NODE_ENV=development`。
 - `DB_*`：示例值与项目 Docker Compose 一致，默认数据库为 `clothes_guide`。
@@ -65,7 +65,7 @@ cp -n apps/api/.env.example apps/api/.env
 - `PRODUCT_QUERY_CURSOR_SECRET`：至少 32 字符的随机密钥，未设置时 API 无法启动。
 - `SEED_ADMIN_*`：按需设置本地管理员账号；示例默认值仅供开发。
 
-API、迁移 CLI 和 Seeder 共用配置加载器：**进程环境变量 > `apps/api/.env.dev` > `apps/api/.env`**。如果已有 `.env.dev`，其同名配置会覆盖 `.env`；修改配置后重启 API。真实密钥仅放在被 Git 忽略的服务端配置中。
+API、迁移 CLI 和 Seeder 共用配置加载器：**进程环境变量 > 根目录 `.env.dev` > 根目录 `.env`**。如果已有 `.env.dev`，其同名配置会覆盖 `.env`；修改配置后重启 API。真实密钥仅放在被 Git 忽略的根目录配置中。
 
 启动数据库、应用增量迁移并初始化管理员：
 
@@ -105,7 +105,7 @@ Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 
 
 ### 模型与聊天
 
-在后端配置 `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，其余超时及上下文预算见 [`apps/api/.env.example`](./apps/api/.env.example)。登录后访问 `/chat` 使用导购、购买与订单查询功能；未配置模型时不能完成真实对话生成。
+在后端配置 `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，其余超时及上下文预算见 [`.env.example`](./.env.example)。登录后访问 `/chat` 使用导购、购买与订单查询功能；未配置模型时不能完成真实对话生成。
 
 `get_my_information` 由服务端绑定当前用户，不接受模型提供的 `userId`；地址和订单只返回安全摘要，图片只返回已保存元数据。购买草稿缺少收件信息时会查询本人地址簿：有地址则展示选择卡，由用户显式选择；地址簿为空时才展示动态表单收集草稿缺少的字段。地址查询失败不会按空列表处理，用户明确选择手动填写后才可改用动态表单。完整地址由前端临时读取，不发送给模型。
 

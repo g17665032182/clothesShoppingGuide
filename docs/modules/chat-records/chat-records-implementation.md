@@ -41,7 +41,7 @@ apps/api/src/chat-records/
 - `apps/api/src/llm/llm.module.ts`：继续只导出 `LlmService`，避免重复注册 `/llm/chat`。
 - `apps/api/src/app.module.ts`：注册 `ChatRecordsModule`。
 - `apps/api/src/database/migrations/`：新增会话、消息和摘要字段迁移。
-- `apps/api/.env.example`：增加上下文窗口和 Token 编码配置。
+- 根目录 `.env.example`：增加上下文窗口和 Token 编码配置。
 - `apps/api/package.json`、`pnpm-lock.yaml`：将 `js-tiktoken` 提升为直接依赖。
 - `docs/product/prd.md`、LLM 设计/技术文档：更新“无状态、不持久化”的过时描述。
 

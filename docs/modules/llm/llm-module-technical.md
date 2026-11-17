@@ -82,7 +82,7 @@ Controller 不得直接导入 `ChatOpenAI`，业务模块不得导入 `providers
 
 ### 环境变量
 
-在 `apps/api/.env.example` 中增加：
+在根目录 `.env.example` 中增加：
 
 ```env
 LLM_PROVIDER=openai-compatible

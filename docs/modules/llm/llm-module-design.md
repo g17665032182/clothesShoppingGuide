@@ -185,7 +185,7 @@ Graph 节点应读取当前状态并返回状态更新，不直接修改原状�
 
 ## 配置
 
-建议在 `apps/api/.env.example` 增加以下配置：
+建议在根目录 `.env.example` 增加以下配置：
 
 ```env
 LLM_PROVIDER=openai-compatible

@@ -109,7 +109,7 @@ apps/web/src/
 
 ### 配置
 
-计划在 `apps/api/.env.example` 增加：
+计划在根目录 `.env.example` 增加：
 
 ```text
 TRY_ON_ENABLED=false

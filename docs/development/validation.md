@@ -4,7 +4,7 @@
 
 ## 环境与数据安全
 
-- 统一使用 pnpm。日常开发使用 `pnpm dev:db`、`pnpm dev`；API、ORM CLI 和 Seeder 配置优先级为进程环境变量 > `apps/api/.env.dev` > `apps/api/.env`。不打印真实密钥、Token、密码或完整环境文件。
+- 统一使用 pnpm。日常开发使用 `pnpm dev:db`、`pnpm dev`；API、ORM CLI 和 Seeder 配置优先级为进程环境变量 > 根目录 `.env.dev` > 根目录 `.env`。不打印真实密钥、Token、密码或完整环境文件。
 - 开发环境明确设置 `NODE_ENV=development`；登录验证码在开发环境关闭、测试和生产环境启用，不为测试便利改变生产规则。
 - 保留数据的库使用 `pnpm --filter @clothes-shopping-guide/api migration:up`。`migration:fresh` 包含删库重建，仅用于明确可销毁的本地或 CI 库。默认 Seeder 只建管理员；测试商品单独运行 `catalog:seed:test`。
 - PostgreSQL、迁移及数据库 HTTP 测试必须使用具名、可销毁且不同于默认开发库的隔离库。执行前检查测试源码的 `RUN_*` 门控、实际消费的变量、派生库名和初始化/清理逻辑；无法确认目标和清理范围时不运行。

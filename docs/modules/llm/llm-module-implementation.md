@@ -184,7 +184,7 @@ git diff --check
 负责：
 
 ```text
-apps/api/.env.example
+.env.example
 apps/api/src/llm/providers/chat-model.factory.ts
 apps/api/src/llm/llm.tokens.ts
 ```

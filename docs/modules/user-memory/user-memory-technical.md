@@ -174,7 +174,7 @@ apps/api/src/user-memory/
 
 ### 5.1 初始化和配置
 
-- 新增 `QINIU_ACCESS_KEY`、`QINIU_SECRET_KEY`、`QINIU_BUCKET`、`QINIU_REGION` 和 `QINIU_DOMAIN` 配置，后续实施时同步写入 `apps/api/.env.example`，仅使用占位值。
+- 新增 `QINIU_ACCESS_KEY`、`QINIU_SECRET_KEY`、`QINIU_BUCKET`、`QINIU_REGION` 和 `QINIU_DOMAIN` 配置，后续实施时同步写入根目录 `.env.example`，仅使用占位值。
 - `QINIU_REGION` 为可选配置，使用七牛官方区域标识；官方 SDK 可在未配置时按 AK 与 Bucket 查询区域，部署网络不适合区域发现时再显式设置。`QINIU_DOMAIN` 为 Bucket 绑定且可从 API 服务端访问的生产下载域名。七牛私有空间读取通过服务端 SDK 生成短时下载签名，再由 API 服务端请求该 URL 并代理内容；建议签名有效期不超过 60 秒，且永不返回浏览器或写入日志。七牛测试域名不用于私有 Bucket。
 - 区域应按七牛当前 SDK 配置方式设置；官方文档说明上传配置支持区域 ID，未设置时可通过 AK 与 Bucket 查询区域。
 - 通过现有 `ConfigService` 校验配置。配置缺失或无效时，对象存储能力报告不可用并告警；不得回退到本地磁盘或数据库存正文。普通聊天沿用记忆不可用时跳过记忆的降级语义。
@@ -356,7 +356,7 @@ type MemoryDocumentOperation =
 - 允许日志：用户 ID 的不可逆短哈希、revision、操作类型、耗时、任务 ID 和错误代码。
 - 敏感校验失败只记录 `SENSITIVE_REJECTED`，不记录命中内容。
 - 对象存储连通性、孤儿对象清理和数据库指针完整性检查纳入健康/运维指标；健康检查不得泄露凭据或签名 URL。
-- 七牛环境配置必须同步加入 `apps/api/.env.example` 和部署文档；示例只用占位值，不提交真实 AK/SK。
+- 七牛环境配置必须同步加入根目录 `.env.example` 和部署文档；示例只用占位值，不提交真实 AK/SK。
 
 ## 11. 测试策略
 
