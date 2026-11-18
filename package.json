@@ -11,6 +11,10 @@
   "scripts": {
     "dev": "concurrently --kill-others --names web,api \"pnpm --dir apps/web exec vite --host 0.0.0.0\" \"pnpm --dir apps/api exec nest start --watch\"",
     "dev:db": "docker compose -f apps/api/docker-compose.yml up -d",
+    "test:db:up": "docker compose -p clothes-shopping-guide-test -f apps/api/docker-compose.test.yml up -d",
+    "test:db:down": "docker compose -p clothes-shopping-guide-test -f apps/api/docker-compose.test.yml down",
+    "test:db:ps": "docker compose -p clothes-shopping-guide-test -f apps/api/docker-compose.test.yml ps",
+    "test:api": "pnpm --filter @clothes-shopping-guide/api test",
     "build": "pnpm -r --if-present run build",
     "build:prod": "NODE_ENV=production pnpm --filter @clothes-shopping-guide/api build",
     "start:prod": "NODE_ENV=production pnpm --filter @clothes-shopping-guide/api start",
