@@ -76,8 +76,10 @@ CLI 或诊断工具使用。API 的 MikroORM 配置已启用 PostgreSQL TLS。
    `DB_NAME`，并设置独立的 `SEED_ADMIN_EMAIL`、`SEED_ADMIN_PASSWORD` 和
    `SEED_ADMIN_DISPLAY_NAME`。Render 会生成独立的 `JWT_SECRET` 和
    `PRODUCT_QUERY_CURSOR_SECRET`。
-4. 需要测试聊天模型时，再为测试 API 填写可用于测试的 `LLM_API_KEY`、
-   `LLM_BASE_URL` 和 `LLM_MODEL`。虚拟试穿保持关闭，不填写七牛或真实试穿凭据。
+4. 默认测试 API 使用无效的 LLM 占位 Key，仅用于通过模块启动校验；聊天请求不会
+   成功。若需测试聊天，须单独授权后为测试 API 配置专用的 `LLM_API_KEY`、
+   `LLM_BASE_URL` 和 `LLM_MODEL`，不得复用生产或本地密钥。虚拟试穿保持关闭，不
+   填写七牛或真实试穿凭据。
 5. 部署完成后确认 API 健康检查通过，再验证测试 Web 的登录及目标业务流程。
 
 API 构建命令在 API 构建成功后，对该 API 服务配置的数据库执行增量迁移和默认
