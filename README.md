@@ -94,6 +94,23 @@ Render 与 Neon 的固定部署配置、环境变量映射、迁移/Seeder 顺�
 Render 按仓库根目录 [`render.yaml`](./render.yaml) 自动构建 API 和 Web；生产环境
 发布前只执行增量 `migration:up` 和幂等 `seed`。
 
+测试环境使用独立的 [`render.test.yaml`](./render.test.yaml)，创建时在 Render
+Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库和测试密钥。它不
+复用生产 Render 服务或数据库；首次创建和部署步骤见部署手册。
+
+### 本地隔离测试环境
+
+测试环境使用独立 PostgreSQL 容器项目、端口 `55435`、账号 `clothes_test` 和数据库 `clothes_guide_test`，与日常开发数据库（端口 `5432`、数据库 `clothes_guide`）分离。它只提供测试数据库，不会自动启动 API/Web，也不会自动运行迁移或业务测试。
+
+```bash
+pnpm test:db:up
+pnpm test:db:ps
+pnpm test:api
+pnpm test:db:down
+```
+
+`test:api` 默认只执行不依赖 PostgreSQL 的 API 自动化用例；需要真实数据库的用例仍受各自 `RUN_*` 门控控制。开启前必须依照[验证约定](./docs/development/validation.md)为对应套件创建名称匹配的专用测试库，并核对测试实际连接和清理逻辑，不能把默认 `clothes_guide_test` 直接当作所有套件的目标库。`test:db:down` 只停止并移除测试容器，不删除命名卷；保留数据可供后续测试复用。移除测试卷会永久删除其中数据，需单独确认后手动执行 Docker 卷删除。
+
 ### 初始化测试商品
 
 默认 `DatabaseSeeder` 只创建管理员，不创建商品。需要测试目录时单独运行：

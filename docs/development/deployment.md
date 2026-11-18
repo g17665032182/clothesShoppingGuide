@@ -59,6 +59,37 @@ CLI 或诊断工具使用。API 的 MikroORM 配置已启用 PostgreSQL TLS。
 - API：`https://clothes-shopping-guide-api.onrender.com`
 - Web：`https://clothes-shopping-guide-web.onrender.com`
 
+## 测试环境
+
+测试环境使用仓库根目录的 [`render.test.yaml`](../../render.test.yaml)，资源名称与
+生产服务不同。创建测试 Blueprint 时在 Render Dashboard 的 Blueprint Path 填写
+`render.test.yaml`；Render 支持在创建 Blueprint 时指定自定义文件路径。此 Blueprint
+的自动部署关闭，配置更新后需在 Dashboard 手动部署，避免 `main` 上的提交未经确认
+就迁移测试库。
+
+1. 在 Neon 创建与生产项目隔离的测试项目或分支，并准备专用数据库用户。不要复制
+   生产连接变量或把生产连接串用于测试。
+2. 在 Render 选择 New > Blueprint，连接本仓库及 `main` 分支，Blueprint Path 填
+   `render.test.yaml`，确认只创建 `clothes-shopping-guide-test-api` 和
+   `clothes-shopping-guide-test-web`。
+3. 为测试 API 填入 Neon 测试库的 `DB_HOST`、`DB_USER`、`DB_PASSWORD`、
+   `DB_NAME`，并设置独立的 `SEED_ADMIN_EMAIL`、`SEED_ADMIN_PASSWORD` 和
+   `SEED_ADMIN_DISPLAY_NAME`。Render 会生成独立的 `JWT_SECRET` 和
+   `PRODUCT_QUERY_CURSOR_SECRET`。
+4. 需要测试聊天模型时，再为测试 API 填写可用于测试的 `LLM_API_KEY`、
+   `LLM_BASE_URL` 和 `LLM_MODEL`。虚拟试穿保持关闭，不填写七牛或真实试穿凭据。
+5. 部署完成后确认 API 健康检查通过，再验证测试 Web 的登录及目标业务流程。
+
+API 构建命令在 API 构建成功后，对该 API 服务配置的数据库执行增量迁移和默认
+管理员 Seeder。确认 Render API 环境变量仅含测试库凭据后，才可首次部署或手动
+触发部署。测试库不会由此自动导入商品；仅在需要商品数据时通过受控流程导入测试
+数据。测试环境的 API 和 Web 目前使用 Render 默认子域名，Web API 地址在
+`render.test.yaml` 中指向 `clothes-shopping-guide-test-api.onrender.com`。
+
+测试服务自动部署关闭，因此提交代码不会自动更新测试环境。每次需要验证新版本时，
+先确认目标提交和测试库配置，再分别在 Render Dashboard 为测试 API 和测试 Web
+触发部署，并检查 API 部署日志中的迁移、Seeder 及健康检查结果。
+
 ## 每次发布
 
 推送到 `main` 后由 Render 自动构建。为兼容 Render Free 计划（该计划不支持
