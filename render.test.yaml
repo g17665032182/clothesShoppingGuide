@@ -4,7 +4,7 @@ services:
     name: clothes-shopping-guide-test-api
     runtime: node
     plan: free
-    branch: main
+    branch: codex/render-test-env
     autoDeployTrigger: off
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/api build && pnpm deploy:prepare:built
     startCommand: pnpm start:prod
@@ -54,7 +54,7 @@ services:
   - type: web
     name: clothes-shopping-guide-test-web
     runtime: static
-    branch: main
+    branch: codex/render-test-env
     autoDeployTrigger: off
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build
     staticPublishPath: apps/web/dist

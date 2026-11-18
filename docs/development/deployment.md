@@ -87,8 +87,9 @@ API 构建命令在 API 构建成功后，对该 API 服务配置的数据库执
 `render.test.yaml` 中指向 `clothes-shopping-guide-test-api.onrender.com`。
 
 测试服务自动部署关闭，因此提交代码不会自动更新测试环境。每次需要验证新版本时，
-先确认目标提交和测试库配置，再分别在 Render Dashboard 为测试 API 和测试 Web
-触发部署，并检查 API 部署日志中的迁移、Seeder 及健康检查结果。
+先更新 `render.test.yaml` 中两个服务的 `branch` 到待测分支，推送后在 Render
+Dashboard 手动同步 Blueprint；核对同步预览没有生产服务后，再部署测试 API 和
+测试 Web，并检查 API 部署日志中的迁移、Seeder 及健康检查结果。
 
 ## 每次发布
 
