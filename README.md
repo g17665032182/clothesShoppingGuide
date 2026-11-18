@@ -132,7 +132,7 @@ Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 
 
 ### 模型与聊天
 
-在后端配置 `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，其余超时及上下文预算见 [`.env.example`](./.env.example)。登录后访问 `/chat` 使用导购、购买与订单查询功能；未配置模型时不能完成真实对话生成。
+在后端配置 `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，并按模型设置必填的 `LLM_CONTEXT_WINDOW_TOKENS`；其余超时及 token 编码见 [`.env.example`](./.env.example)。登录后访问 `/chat` 使用导购、购买与订单查询功能；未配置有效模型时不能完成真实对话生成。
 
 启用聊天中的近三天天气预报需设置 `LLM_ENABLE_REMOTE_TOOLS=true` 和 `WEATHER_MCP_URL`。工具通过 XingYuWeather MCP 查询用户指定城市，不需要 OpenWeatherMap Key；服务不可用时仅当前天气查询失败。
 

@@ -80,8 +80,11 @@ Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App
    `PRODUCT_QUERY_CURSOR_SECRET`。
 4. 默认测试 API 使用无效的 LLM 占位 Key，仅用于通过模块启动校验；聊天请求不会
    成功。若需测试聊天，须单独授权后为测试 API 配置专用的 `LLM_API_KEY`、
-   `LLM_BASE_URL` 和 `LLM_MODEL`，不得复用生产或本地密钥。虚拟试穿保持关闭，不
-   填写七牛或真实试穿凭据。
+   `LLM_BASE_URL` 和 `LLM_MODEL`，不得复用生产或本地密钥。同时按供应商实际模型
+   设置 `LLM_CONTEXT_WINDOW_TOKENS`（正整数）和匹配的 `LLM_TOKEN_ENCODING`。
+   窗口缺失或非法时，聊天接口会在调用模型前返回 `503`；只补窗口不会使占位 Key
+   生效。可在测试 API 的 Environment 页面一起设置这些变量，并用 **Save and deploy**
+   重新部署现有构建。虚拟试穿保持关闭，不填写七牛或真实试穿凭据。
 5. 部署完成后确认 API 健康检查通过，再验证测试 Web 的登录及目标业务流程。
 
 API 构建命令在 API 构建成功后，对该 API 服务配置的数据库执行增量迁移和默认
