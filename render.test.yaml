@@ -45,11 +45,11 @@ services:
       - key: TRY_ON_REAL_PHOTOS_ENABLED
         value: 'false'
       - key: SEED_ADMIN_EMAIL
-        sync: false
+        value: test-admin@example.invalid
       - key: SEED_ADMIN_PASSWORD
-        sync: false
+        generateValue: true
       - key: SEED_ADMIN_DISPLAY_NAME
-        sync: false
+        value: 测试管理员
 
   - type: web
     name: clothes-shopping-guide-test-web
