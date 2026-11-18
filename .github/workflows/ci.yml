@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - codex/render-test-env
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 # 校验任务只需要读取仓库内容。
 permissions:
@@ -16,7 +21,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17-alpine
@@ -42,6 +47,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 校验代码
         run: pnpm check
+      - name: 运行 API 自动化测试
+        run: pnpm test:api
       - name: 重建数据库并执行 Seeder
         run: pnpm migration:fresh
         env:

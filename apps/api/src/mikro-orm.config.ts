@@ -26,9 +26,9 @@ export default defineConfig({
     connectionTimeoutMillis: 5_000,
     statement_timeout: 15_000,
     query_timeout: 20_000,
-    ssl:{
+    ssl: {
       rejectUnauthorized: false,
-    }
+    },
   },
   discovery: {
     // 基础项目尚未包含业务 Entity，避免启动时把空实体目录视为错误。

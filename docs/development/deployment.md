@@ -62,10 +62,9 @@ CLI 或诊断工具使用。API 的 MikroORM 配置已启用 PostgreSQL TLS。
 ## 测试环境
 
 测试环境使用仓库根目录的 [`render.test.yaml`](../../render.test.yaml)，资源名称与
-生产服务不同。创建测试 Blueprint 时在 Render Dashboard 的 Blueprint Path 填写
-`render.test.yaml`；Render 支持在创建 Blueprint 时指定自定义文件路径。此 Blueprint
-的自动部署关闭，配置更新后需在 Dashboard 手动部署，避免 `main` 上的提交未经确认
-就迁移测试库。
+生产服务不同。创建测试 Blueprint 时在 Render Dashboard 的 Branch 填
+`codex/render-test-env`，Blueprint Path 填 `render.test.yaml`。测试 API/Web 只跟踪
+该分支，并设置为 GitHub Actions 检查通过后自动部署；测试部署不会修改生产服务。
 
 1. 在 Neon 创建与生产项目隔离的测试项目或分支，并准备专用数据库用户。不要复制
    生产连接变量或把生产连接串用于测试。
@@ -88,14 +87,17 @@ API 构建命令在 API 构建成功后，对该 API 服务配置的数据库执
 数据。测试环境的 API 和 Web 目前使用 Render 默认子域名，Web API 地址在
 `render.test.yaml` 中指向 `clothes-shopping-guide-test-api.onrender.com`。
 
-测试服务自动部署关闭，因此提交代码不会自动更新测试环境。每次需要验证新版本时，
-先更新 `render.test.yaml` 中两个服务的 `branch` 到待测分支，推送后在 Render
-Dashboard 手动同步 Blueprint；核对同步预览没有生产服务后，再部署测试 API 和
-测试 Web，并检查 API 部署日志中的迁移、Seeder 及健康检查结果。
+向 `codex/render-test-env` 推送后，GitHub Actions 依次执行格式/类型/构建校验、
+API 自动化测试和隔离 PostgreSQL 迁移/Seeder 验证。所有检查通过后，Render 自动
+部署测试 API 和 Web；API 健康检查路径为 `/api/health`。失败时 Render 不会自动部署。
 
 ## 每次发布
 
-推送到 `main` 后由 Render 自动构建。为兼容 Render Free 计划（该计划不支持
+PR 合并到 `main` 后，GitHub Actions 会再次执行同一组检查；通过后 Render 才自动
+部署生产 API 和 Web。Render 生产服务的 Auto-Deploy 设置必须为 **After CI Checks
+Pass**，不能为 **On Commit**。现有生产服务不是由 Blueprint 管理的，需在两个生产
+服务的 Dashboard Settings 中分别确认此选项。这样迁移只会在生产 API 的检查通过后
+由其部署命令执行。为兼容 Render Free 计划（该计划不支持
 `preDeployCommand`），API 的构建命令在编译成功后继续执行迁移和 Seeder。发布顺序
 固定为：
 
@@ -121,6 +123,11 @@ pnpm migration:fresh
 ```
 
 它会删除并重建数据库，只能用于明确可销毁的本地或 CI 数据库。
+
+GitHub 仓库 `main` 分支需将 `CI / check` 设为必需状态检查，避免未通过 CI 的 PR
+合并。Render 的 **After CI Checks Pass** 是部署门控，GitHub 分支保护则是合并门控；
+二者都需开启。Render 将 GitHub Actions 的 `success`、`neutral` 和 `skipped` 结论
+视为检查通过，因此必需的 `check` Job 保持无条件运行，不要以 job-level `if` 跳过。
 
 ## 手工执行迁移或 Seeder
 

@@ -5,7 +5,7 @@ services:
     runtime: node
     plan: free
     branch: codex/render-test-env
-    autoDeployTrigger: off
+    autoDeployTrigger: checksPass
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/api build && pnpm deploy:prepare:built
     startCommand: pnpm start:prod
     healthCheckPath: /api/health
@@ -53,7 +53,7 @@ services:
     name: clothes-shopping-guide-test-web
     runtime: static
     branch: codex/render-test-env
-    autoDeployTrigger: off
+    autoDeployTrigger: checksPass
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build
     staticPublishPath: apps/web/dist
     envVars:
