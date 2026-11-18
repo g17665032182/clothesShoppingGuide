@@ -48,7 +48,7 @@ jobs:
       - name: 校验代码
         run: pnpm check
       - name: 运行 API 自动化测试
-        run: pnpm test:api
+        run: pnpm --filter @clothes-shopping-guide/api test
       - name: 重建数据库并执行 Seeder
         run: pnpm migration:fresh
         env:
