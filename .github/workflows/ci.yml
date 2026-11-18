@@ -57,3 +57,4 @@ jobs:
           DB_USER: clothes
           DB_PASSWORD: clothes
           DB_NAME: clothes_guide
+          DB_SSL: 'false'

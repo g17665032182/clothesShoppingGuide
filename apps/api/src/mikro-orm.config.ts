@@ -26,9 +26,13 @@ export default defineConfig({
     connectionTimeoutMillis: 5_000,
     statement_timeout: 15_000,
     query_timeout: 20_000,
-    ssl: {
-      rejectUnauthorized: false,
-    },
+    // 默认保持 TLS；仅隔离的本地或 CI PostgreSQL 可显式设 DB_SSL=false。
+    ssl:
+      process.env.DB_SSL === 'false'
+        ? false
+        : {
+            rejectUnauthorized: false,
+          },
   },
   discovery: {
     // 基础项目尚未包含业务 Entity，避免启动时把空实体目录视为错误。

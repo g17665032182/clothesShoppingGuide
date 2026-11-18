@@ -35,7 +35,8 @@ Neon 连接信息按下表填写到 API 服务：
 | `DB_NAME`     | `PGDATABASE`                   |
 
 `PGSSLMODE=require` 和 `PGCHANNELBINDING=require` 可保留在 Render 环境中，便于
-CLI 或诊断工具使用。API 的 MikroORM 配置已启用 PostgreSQL TLS。
+CLI 或诊断工具使用。API 的 MikroORM 配置默认启用 PostgreSQL TLS；只有隔离的本地
+或 CI PostgreSQL 可显式设置 `DB_SSL=false`，Render/Neon 环境不得关闭 TLS。
 
 不要把 Neon 连接串、密码或其他密钥写入 `render.yaml`、README、Issue 或 Git
 提交。Blueprint 中的 `sync: false` 变量需要在 Render Dashboard 首次创建服务时
