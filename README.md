@@ -98,6 +98,11 @@ Render 按仓库根目录 [`render.yaml`](./render.yaml) 自动构建 API 和 We
 Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库和测试密钥。它不
 复用生产 Render 服务或数据库；首次创建和部署步骤见部署手册。
 
+CI 在发往 `main` 的 PR、`main` 推送和 `codex/render-test-env` 推送时运行格式/类型/
+构建、API 自动化测试及临时 PostgreSQL 迁移验证。`main` 要求 PR 和 `check` 状态
+通过；Render 测试与生产服务均只在 GitHub 检查通过后自动部署。测试验证通过后再
+通过 PR 合并到 `main`，测试数据库数据不会回灌生产库。
+
 ### 本地隔离测试环境
 
 测试环境使用独立 PostgreSQL 容器项目、端口 `55435`、账号 `clothes_test` 和数据库 `clothes_guide_test`，与日常开发数据库（端口 `5432`、数据库 `clothes_guide`）分离。它只提供测试数据库，不会自动启动 API/Web，也不会自动运行迁移或业务测试。
