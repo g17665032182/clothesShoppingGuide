@@ -66,6 +66,8 @@ CLI 或诊断工具使用。API 的 MikroORM 配置默认启用 PostgreSQL TLS�
 生产服务不同。创建测试 Blueprint 时在 Render Dashboard 的 Branch 填
 `codex/render-test-env`，Blueprint Path 填 `render.test.yaml`。测试 API/Web 只跟踪
 该分支，并设置为 GitHub Actions 检查通过后自动部署；测试部署不会修改生产服务。
+Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App 被暂停，Render
+无法接收提交和 CI 状态更新，自动部署将停止。
 
 1. 在 Neon 创建与生产项目隔离的测试项目或分支，并准备专用数据库用户。不要复制
    生产连接变量或把生产连接串用于测试。
