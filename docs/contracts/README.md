@@ -45,6 +45,7 @@
 | [地址管理界面请求](./chat-tool-address-form-crud-contract.md)      | 请求打开固定本人地址管理页                       |
 | [本人订单履约摘要](./chat-tool-order-fulfillment-crud-contract.md) | 本地订单状态和时间，无实时物流                   |
 | [本站购物规则查询](./chat-tool-shopping-rules-crud-contract.md)    | 既有系统规则、固定来源和版本                     |
+| [聊天天气查询](./chat-tool-weather-crud-contract.md)               | 按用户指定城市查询近 3 天预报的模型工具          |
 
 对应设计、技术与实施记录见 [LLM 文档索引](../modules/llm/README.md)。
 

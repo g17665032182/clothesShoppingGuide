@@ -54,6 +54,51 @@ test('trace 事件可以恢复用户、带工具调用的模型和工具结果�
   assert.equal((messages[2]?.message as ToolMessage).tool_call_id, 'call-1');
 });
 
+test('天气查询调用及结果从后续模型历史隐藏', () => {
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 1,
+      messageId: 'model',
+      content: '',
+      payload: {
+        toolCalls: [
+          {
+            id: 'weather-call',
+            name: 'get_weather_forecast',
+            args: { city: '上海' },
+          },
+          { id: 'ordinary-call', name: 'ordinary_tool', args: { q: 'coat' } },
+        ],
+      },
+    },
+    {
+      eventType: 'tool_call',
+      sequence: 2,
+      messageId: 'model',
+      toolCallId: 'weather-call',
+      toolName: 'get_weather_forecast',
+      payload: { args: { city: '上海' } },
+    },
+    {
+      eventType: 'tool_result',
+      sequence: 3,
+      messageId: 'weather-result',
+      toolCallId: 'weather-call',
+      toolName: 'get_weather_forecast',
+      content: '{"ok":true,"location":"上海"}',
+      status: 'success',
+    },
+  ]);
+
+  assert.equal(messages.length, 1);
+  assert.deepEqual((messages[0]?.message as AIMessage).tool_calls, [
+    { id: 'ordinary-call', name: 'ordinary_tool', args: { q: 'coat' } },
+  ]);
+  assert.equal(JSON.stringify(messages).includes('天气'), false);
+  assert.equal(JSON.stringify(messages).includes('weather-call'), false);
+});
+
 test('旧聊天消息映射为普通 LangChain 消息', () => {
   const messages = mapLegacyMessagesToLangChain([
     { id: 'user-1', role: 'user', content: '你好' },

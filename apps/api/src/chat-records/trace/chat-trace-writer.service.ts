@@ -15,6 +15,7 @@ import {
   shoppingRulesInputSchema,
   shoppingRulesResultSchema,
 } from '../dto/shopping-rules.dto.js';
+import { weatherForecastResultSchema } from '../dto/weather-forecast.dto.js';
 
 import {
   ChatTraceEvent,
@@ -39,10 +40,12 @@ const ADDRESS_TOOL_NAMES = new Set([
 const USER_INFORMATION_TOOL_NAME = 'get_my_information';
 const ORDER_FULFILLMENT_TOOL_NAME = 'get_my_order_fulfillment';
 const SHOPPING_RULES_TOOL_NAME = 'get_shopping_rules';
+const WEATHER_FORECAST_TOOL_NAME = 'get_weather_forecast';
 const DETAIL_QUERY_TOOL_NAMES = new Set([
   'get_product_skus',
   'get_my_preferences',
   ORDER_FULFILLMENT_TOOL_NAME,
+  WEATHER_FORECAST_TOOL_NAME,
 ]);
 const ORDER_STATUSES = new Set([
   'pending_payment',
@@ -255,7 +258,11 @@ function safeDetailArguments(
   value: unknown,
 ): Record<string, unknown> {
   // 履约查询参数包含订单号，trace 不能保留该业务引用。
-  if (name === ORDER_FULFILLMENT_TOOL_NAME) return {};
+  if (
+    name === ORDER_FULFILLMENT_TOOL_NAME ||
+    name === WEATHER_FORECAST_TOOL_NAME
+  )
+    return {};
   const source = parseToolValue(value);
   if (typeof source !== 'object' || source === null || Array.isArray(source))
     return {};
@@ -285,6 +292,12 @@ function safeDetailProjection(
   const source = parseToolValue(value);
   if (typeof source !== 'object' || source === null || Array.isArray(source))
     return {};
+  if (name === WEATHER_FORECAST_TOOL_NAME) {
+    const parsed = weatherForecastResultSchema.safeParse(source);
+    return parsed.success && parsed.data.ok
+      ? { ok: true, dayCount: Math.min(parsed.data.days.length, 3) }
+      : { ok: false, code: 'unavailable' };
+  }
   const input = source as Record<string, unknown>;
   if (input.ok === false) {
     const allowedCodes =
@@ -440,6 +453,19 @@ function sanitizeNestedDetailCalls(value: unknown): unknown {
     return {
       ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
       name: ORDER_FULFILLMENT_TOOL_NAME,
+      ...(call.type === 'tool_call' || call.type === 'invalid_tool_call'
+        ? { type: call.type }
+        : {}),
+      args: {},
+    };
+  }
+  if (
+    call.name === WEATHER_FORECAST_TOOL_NAME ||
+    functionName === WEATHER_FORECAST_TOOL_NAME
+  ) {
+    return {
+      ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+      name: WEATHER_FORECAST_TOOL_NAME,
       ...(call.type === 'tool_call' || call.type === 'invalid_tool_call'
         ? { type: call.type }
         : {}),

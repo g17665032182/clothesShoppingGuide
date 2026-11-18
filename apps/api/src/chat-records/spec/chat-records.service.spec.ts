@@ -52,6 +52,8 @@ function createService(
     failedReader?: 'preferences' | 'memory';
     tryOn?: ChatTryOnPort;
     modelFailure?: boolean;
+    weatherEnabled?: boolean;
+    weatherRequest?: boolean;
   } = {},
 ) {
   const persisted: unknown[] = [];
@@ -65,6 +67,7 @@ function createService(
   let detailOutcome: DetailRequest = 'none';
   const detailRequests = [...(options.detailRequests ?? [])];
   const informationRequests = [...(options.informationRequests ?? [])];
+  let shouldRequestWeather = options.weatherRequest ?? false;
   const invokeInformation = async (tools: unknown[]) => {
     detailOutcome = detailRequests.shift() ?? 'none';
     if (detailOutcome !== 'none') {
@@ -78,14 +81,23 @@ function createService(
       await query.invoke(skus ? { productExternalId: 'verified-shirt' } : {});
     }
     informationOutcome = informationRequests.shift() ?? 'none';
-    if (informationOutcome === 'none') return;
-    const query = tools.find(
-      (item) => (item as { name?: string }).name === 'get_my_information',
-    ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
-    assert.ok(query);
-    await query.invoke({
-      sections: [informationOutcome === 'photos' ? 'photos' : 'try_on_tasks'],
-    });
+    if (informationOutcome !== 'none') {
+      const query = tools.find(
+        (item) => (item as { name?: string }).name === 'get_my_information',
+      ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
+      assert.ok(query);
+      await query.invoke({
+        sections: [informationOutcome === 'photos' ? 'photos' : 'try_on_tasks'],
+      });
+    }
+    if (shouldRequestWeather) {
+      shouldRequestWeather = false;
+      const query = tools.find(
+        (item) => (item as { name?: string }).name === 'get_weather_forecast',
+      ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
+      assert.ok(query);
+      await query.invoke({ city: '上海' });
+    }
   };
   const traceEvents: unknown[] = [];
   const registeredToolNames: string[][] = [];
@@ -545,6 +557,13 @@ function createService(
                 },
         } as never)
       : undefined,
+    undefined,
+    options.weatherEnabled
+      ? ({
+          isEnabled: () => true,
+          getForecast: async () => ({ ok: false, code: 'unavailable' }),
+        } as never)
+      : undefined,
   );
 
   return {
@@ -655,6 +674,49 @@ test('JSON/SSE 规格和偏好查询各种结果均隔离整轮，下一普通�
       );
       assert.equal(fixture.memoryEnqueued.length, 1);
     }
+  }
+});
+
+test('JSON/SSE 天气预报查询隔离整轮且下一普通轮恢复', async () => {
+  for (const stream of [false, true]) {
+    const fixture = createService({
+      weatherEnabled: true,
+      weatherRequest: true,
+    });
+    const request = {
+      messages: [{ role: 'user', content: '查一下上海天气，今天穿什么' }],
+    };
+    if (stream) {
+      for await (const _event of await fixture.service.prepareStream(
+        { id: 'user-1' } as never,
+        request as never,
+      )) {
+        // 消费至完成，核实 JSON/SSE 共用来源隔离。
+      }
+    } else {
+      await fixture.service.chat({ id: 'user-1' } as never, request as never);
+    }
+    assert.ok(
+      fixture.registeredToolNames.at(-1)?.includes('get_weather_forecast'),
+    );
+    const excluded = fixture.persisted
+      .flat()
+      .filter((value): value is ChatMessage => value instanceof ChatMessage);
+    assert.equal(excluded.length, 2);
+    assert.ok(excluded.every((message) => !message.memoryExtractionEligible));
+    assert.equal(fixture.memoryEnqueued.length, 0);
+
+    await fixture.service.chat(
+      { id: 'user-1' } as never,
+      { messages: [{ role: 'user', content: '我喜欢宽松外套' }] } as never,
+    );
+    const messages = fixture.persisted
+      .flat()
+      .filter((value): value is ChatMessage => value instanceof ChatMessage);
+    assert.ok(
+      messages.slice(-2).every((message) => message.memoryExtractionEligible),
+    );
+    assert.equal(fixture.memoryEnqueued.length, 1);
   }
 });
 

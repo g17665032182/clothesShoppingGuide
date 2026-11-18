@@ -85,6 +85,146 @@ test('writer 递归掩码凭证字段并在事务中批量写入', async () => {
   assert.equal(state.flushCount, 1);
 });
 
+test('天气工具 trace 只保留安全结果投影并隐藏城市参数及 MCP 扩展字段', async () => {
+  const { writer, rows } = createWriter();
+  const rawResult = {
+    ok: true,
+    location: '上海',
+    days: [
+      {
+        date: '2026-11-18',
+        dayCondition: '多云',
+        nightCondition: '晴',
+        highC: 14,
+        lowC: 6,
+        precipitationMm: 0,
+        windDirection: '东',
+        windSpeedKmh: null,
+        windScale: 2,
+        humidityPercent: 83,
+      },
+    ],
+    updatedAt: '2026-11-18T08:00:00+08:00',
+    rawProviderResponse: 'private-mcp-content',
+  };
+
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'model',
+      content: '',
+      model: 'fake',
+      usage: null,
+      payload: {
+        toolCalls: [
+          {
+            id: 'weather-call',
+            name: 'get_weather_forecast',
+            args: { city: '上海', api_key: 'private-api-key' },
+          },
+        ],
+      },
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'model',
+      toolCallId: 'weather-call',
+      toolName: 'get_weather_forecast',
+      args: { city: '上海', api_key: 'private-api-key' },
+    },
+    {
+      sequence: 2,
+      type: 'tool_result',
+      messageId: 'weather-result',
+      toolCallId: 'weather-call',
+      toolName: 'get_weather_forecast',
+      content: JSON.stringify(rawResult),
+      payload: rawResult,
+      status: 'success',
+    },
+    {
+      sequence: 3,
+      type: 'tool_result',
+      messageId: 'valid-weather-result',
+      toolCallId: 'valid-weather-call',
+      toolName: 'get_weather_forecast',
+      content: JSON.stringify({
+        ok: true,
+        location: '上海',
+        days: [
+          {
+            date: '2026-11-18',
+            dayCondition: '多云',
+            nightCondition: '晴',
+            highC: 14,
+            lowC: 6,
+            precipitationMm: 0,
+            windDirection: '东',
+            windSpeedKmh: null,
+            windScale: 2,
+            humidityPercent: 83,
+          },
+        ],
+        updatedAt: null,
+      }),
+      payload: {
+        ok: true,
+        location: '上海',
+        days: [
+          {
+            date: '2026-11-18',
+            dayCondition: '多云',
+            nightCondition: '晴',
+            highC: 14,
+            lowC: 6,
+            precipitationMm: 0,
+            windDirection: '东',
+            windSpeedKmh: null,
+            windScale: 2,
+            humidityPercent: 83,
+          },
+        ],
+        updatedAt: null,
+      },
+      status: 'success',
+    },
+  ]);
+
+  assert.deepEqual(rows[0]?.payload, {
+    toolCalls: [
+      {
+        id: 'weather-call',
+        name: 'get_weather_forecast',
+        args: {},
+      },
+    ],
+  });
+  assert.deepEqual(rows[1]?.payload, {});
+  assert.deepEqual(JSON.parse(rows[2]?.content ?? '{}'), {
+    ok: false,
+    code: 'unavailable',
+  });
+  assert.deepEqual(rows[2]?.payload, {
+    ok: false,
+    code: 'unavailable',
+  });
+  assert.deepEqual(JSON.parse(rows[3]?.content ?? '{}'), {
+    ok: true,
+    dayCount: 1,
+  });
+  assert.deepEqual(rows[3]?.payload, {
+    ok: true,
+    dayCount: 1,
+  });
+  const serialized = JSON.stringify(rows);
+  assert.equal(serialized.includes('private'), false);
+  assert.equal(serialized.includes('上海'), false);
+  assert.equal(serialized.includes('private-api-key'), false);
+  assert.equal(serialized.includes('多云'), false);
+});
+
 test('同一事件重放幂等，不同内容复用序号时拒绝覆盖', async () => {
   const { writer, rows } = createWriter();
   const event = {
