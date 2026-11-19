@@ -453,13 +453,13 @@ function updateQuantity(value: string): void {
                 class="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
               >
                 <div class="min-w-0 flex-1">
-                  <p class="break-words text-sm font-medium">
+                  <p class="wrap-break-word text-sm font-medium">
                     {{ savedAddress.label || savedAddress.recipientName }}
                     <span class="font-normal text-muted-foreground">
                       · {{ savedAddress.phone }}
                     </span>
                   </p>
-                  <p class="break-words text-sm text-muted-foreground">
+                  <p class="wrap-break-word text-sm text-muted-foreground">
                     {{ savedAddress.address }}
                   </p>
                 </div>

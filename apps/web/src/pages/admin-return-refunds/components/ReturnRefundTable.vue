@@ -37,7 +37,7 @@ function formatDate(value: string): string {
 
 <template>
   <div class="overflow-x-auto rounded-md border">
-    <Table class="min-w-[820px]">
+    <Table class="min-w-205">
       <TableHeader>
         <TableRow>
           <TableHead>订单</TableHead>
