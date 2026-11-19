@@ -101,8 +101,9 @@ API 自动化测试，并在隔离 PostgreSQL 中验证迁移、管理员和测�
 
 ## 每次发布
 
-PR 合并到 `main` 后，GitHub Actions 会再次执行同一组检查；通过后 Render 才自动
-部署生产 API 和 Web。Render 生产服务的 Auto-Deploy 设置必须为 **After CI Checks
+PR 合并到 `main` 后，GitHub Actions 会运行格式/类型/构建校验、API 自动化测试、
+隔离 PostgreSQL 迁移和管理员 Seeder 验证。检查通过后，Render 自动部署生产
+API 和 Web。Render 生产服务的 Auto-Deploy 设置必须为 **After CI Checks
 Pass**，不能为 **On Commit**。现有生产服务不是由 Blueprint 管理的，需在两个生产
 服务的 Dashboard Settings 中分别确认此选项。这样迁移只会在生产 API 的检查通过后
 由其部署命令执行。为兼容 Render Free 计划（该计划不支持

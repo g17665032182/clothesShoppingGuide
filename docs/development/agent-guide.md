@@ -85,7 +85,7 @@ pages/chat → stores/chat → api/modules/chat.ts
 | 数据库与迁移专项   | 先读[验证规范](./validation.md)和[门控与隔离库计划](../testing/project-full-validation-plan.md)，再查对应 `spec/` 的真实变量和清理逻辑 |
 | 页面交互与外部服务 | 查看对应实施记录的覆盖范围；Web 当前没有项目内单元/组件或浏览器测试脚本，类型检查和构建不能代替交互验收                                |
 
-配置优先级为进程环境变量 > 根目录 `.env.dev` > 根目录 `.env`。`migration:fresh` 会删库重建，只用于已确认可销毁的数据库；不得据启动失败对日常库执行它。CI 执行 `pnpm check` 和 API 自动化测试，并在临时 PostgreSQL 上验证 `migration:fresh` 和测试商品 Seeder。需要独立数据库的业务测试仍受各自的 `RUN_*` 门控控制。
+配置优先级为进程环境变量 > 根目录 `.env.dev` > 根目录 `.env`。`migration:fresh` 会删库重建，只用于已确认可销毁的数据库；不得据启动失败对日常库执行它。CI 执行 `pnpm check` 和 API 自动化测试，并在临时 PostgreSQL 上验证 `migration:fresh`。仅 `codex/render-test-env` 分支额外验证测试商品 Seeder。需要独立数据库的业务测试仍受各自的 `RUN_*` 门控控制。
 
 以下是已有证据的阅读入口，不是本次重新执行的验收结论：
 

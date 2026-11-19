@@ -49,10 +49,13 @@ jobs:
         run: pnpm check
       - name: 运行 API 自动化测试
         run: pnpm --filter @clothes-shopping-guide/api test
-      - name: 验证迁移、管理员和测试商品 Seeder
+      - name: 验证数据库迁移和 Seeder
         run: |
           pnpm migration:fresh
-          pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built
+          # 仅测试环境分支在 CI 临时库中验证商品 Seeder。
+          if [ "$GITHUB_REF" = "refs/heads/codex/render-test-env" ]; then
+            pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built
+          fi
         env:
           DB_HOST: localhost
           DB_PORT: 5432

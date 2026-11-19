@@ -100,7 +100,7 @@ Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库
 自动导入测试商品；首次创建和部署步骤见部署手册。
 
 CI 在发往 `main` 的 PR、`main` 推送和 `codex/render-test-env` 推送时运行格式/类型/
-构建、API 自动化测试及临时 PostgreSQL 迁移和 Seeder 验证。`main` 要求 PR 和 `check` 状态
+构建、API 自动化测试及临时 PostgreSQL 迁移和管理员 Seeder 验证。`main` 要求 PR 和 `check` 状态
 通过；Render 测试与生产服务均只在 GitHub 检查通过后自动部署。测试验证通过后再
 通过 PR 合并到 `main`，测试数据库数据不会回灌生产库。
 
@@ -119,8 +119,8 @@ pnpm test:db:down
 
 ### 初始化测试商品
 
-默认 `DatabaseSeeder` 只创建管理员。GitHub Actions 的临时数据库和 Render 测试
-API 部署都会单独执行商品 Seeder。本地需要测试目录时运行：
+默认 `DatabaseSeeder` 只创建管理员。商品 Seeder 仅在 `codex/render-test-env`
+分支的 CI 临时库和 Render 测试 API 部署中自动运行。本地需要测试目录时运行：
 
 ```bash
 pnpm --filter @clothes-shopping-guide/api catalog:seed:test
