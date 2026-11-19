@@ -8,6 +8,10 @@ coverage/
 *.log
 apps/api/.local-private/
 
+# 仅跟踪默认开发库的迁移基线，忽略其他数据库生成的结构快照。
+/apps/api/src/database/migrations/.snapshot-*.json
+!/apps/api/src/database/migrations/.snapshot-clothes_guide.json
+
 # 保留环境变量示例，忽略实际凭据。
 .env
 .env.*
