@@ -221,7 +221,8 @@ export function useChatPage() {
       disposed ||
       chat.activeSessionKey !== sessionKey ||
       !conversationId ||
-      !chat.purchase.openFormRequested
+      !chat.purchase.openFormRequested ||
+      chat.isSending
     )
       return;
 
@@ -231,7 +232,8 @@ export function useChatPage() {
       chat.activeSessionKey !== sessionKey ||
       chat.activeConversationId !== conversationId ||
       auth.state.user?.id !== userId ||
-      !chat.purchase.openFormRequested
+      !chat.purchase.openFormRequested ||
+      chat.isSending
     )
       return;
 
@@ -245,7 +247,12 @@ export function useChatPage() {
   }
 
   watch(
-    () => [chat.activeSessionKey, chat.purchase.openFormRequested] as const,
+    () =>
+      [
+        chat.activeSessionKey,
+        chat.purchase.openFormRequested,
+        chat.status,
+      ] as const,
     ([sessionKey, requested]) => {
       if (sessionKey && requested) void openRequestedPurchaseForm(sessionKey);
     },

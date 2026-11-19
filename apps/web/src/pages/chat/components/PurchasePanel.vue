@@ -474,7 +474,14 @@ function updateQuantity(value: string): void {
               </li>
             </ul>
           </section>
-          <p v-if="isDirty" class="text-xs text-muted-foreground">
+          <p
+            v-if="isDirty && status === 'streaming'"
+            class="text-xs text-muted-foreground"
+            role="status"
+          >
+            助手仍在回复，当前填写暂存在表单中；回复完成后可保存信息并确认下单。
+          </p>
+          <p v-else-if="isDirty" class="text-xs text-muted-foreground">
             有未保存的购买信息变更；保存后才能确认下单。
           </p>
           <div v-if="draft.confirmation" class="flex flex-col gap-2 text-sm">
