@@ -54,6 +54,11 @@ import type {
   ConfirmedOrderSnapshot,
   OrderConfirmedCreationPort,
 } from '../port/order-confirmed-creation.port.js';
+import type {
+  OrderReturnRefundReaderPort,
+  ReturnRefundOrderCandidate,
+  ReturnRefundOrderSnapshot,
+} from '../port/order-return-refund-reader.port.js';
 
 type OrderPageQuery = CustomerOrderQueryDto | AdminOrderQueryDto;
 type CreateOrderResult = {
@@ -77,7 +82,10 @@ type CreationLine = {
 
 @Injectable()
 export class OrdersService
-  implements OrderCatalogImportPort, OrderConfirmedCreationPort
+  implements
+    OrderCatalogImportPort,
+    OrderConfirmedCreationPort,
+    OrderReturnRefundReaderPort
 {
   public constructor(
     @InjectRepository(Order)
@@ -369,6 +377,88 @@ export class OrdersService
     const order = await em.findOne(Order, { id: orderId, userId });
     if (!order) throw new NotFoundException('订单不存在');
     return this.detailProjection(em, order, false);
+  }
+
+  public async listReturnRefundOrdersForUser(
+    userId: string,
+  ): Promise<ReturnRefundOrderCandidate[]> {
+    const orders = await this.manager().find(
+      Order,
+      { userId },
+      {
+        orderBy: [{ createdAt: 'DESC' }, { id: 'DESC' }],
+        limit: 5,
+      },
+    );
+    if (!orders.length) return [];
+    const items = await this.manager().find(OrderItem, {
+      orderId: { $in: orders.map((order) => order.id) },
+    });
+    const counts = new Map<string, number>();
+    for (const item of items)
+      counts.set(item.orderId, (counts.get(item.orderId) ?? 0) + item.quantity);
+    return orders.map((order) => ({
+      id: order.id,
+      orderNo: order.orderNo,
+      status: order.status,
+      currency: order.currency,
+      completedAt: order.completedAt,
+      itemCount: counts.get(order.id) ?? 0,
+    }));
+  }
+
+  public async getReturnRefundOrderForUser(
+    userId: string,
+    orderId: string,
+  ): Promise<ReturnRefundOrderSnapshot | null> {
+    const em = this.manager();
+    return this.readReturnRefundOrder(em, userId, orderId, false);
+  }
+
+  public async getReturnRefundOrderInTransaction(
+    em: EntityManager,
+    userId: string,
+    orderId: string,
+  ): Promise<ReturnRefundOrderSnapshot | null> {
+    if (!em.getTransactionContext())
+      throw new Error('售后订单快照读取必须加入调用方事务');
+    return this.readReturnRefundOrder(em, userId, orderId, true);
+  }
+
+  private async readReturnRefundOrder(
+    em: EntityManager,
+    userId: string,
+    orderId: string,
+    lock: boolean,
+  ): Promise<ReturnRefundOrderSnapshot | null> {
+    const order = await em.findOne(
+      Order,
+      { id: orderId, userId },
+      lock ? { lockMode: LockMode.PESSIMISTIC_WRITE } : undefined,
+    );
+    if (!order) return null;
+    const items = await em.find(
+      OrderItem,
+      { orderId: order.id },
+      { orderBy: [{ skuId: 'ASC' }, { id: 'ASC' }] },
+    );
+    return {
+      id: order.id,
+      orderNo: order.orderNo,
+      status: order.status,
+      currency: order.currency,
+      completedAt: order.completedAt,
+      items: items.map((item) => ({
+        orderItemId: item.id,
+        productName: item.productName,
+        productExternalId: item.productExternalId,
+        color: item.color,
+        size: item.size,
+        imageUrl: item.imageUrl,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+      })),
+    };
   }
 
   public async simulatePayment(

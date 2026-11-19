@@ -23,6 +23,7 @@
 | 本人订单履约摘要                 | [设计](./chat-tool-order-fulfillment-design.md) | [契约](../../contracts/chat-tool-order-fulfillment-crud-contract.md) | [技术](./chat-tool-order-fulfillment-technical.md) | [实施](./chat-tool-order-fulfillment-implementation.md) |
 | 本站购物规则查询                 | [设计](./chat-tool-shopping-rules-design.md)    | [契约](../../contracts/chat-tool-shopping-rules-crud-contract.md)    | [技术](./chat-tool-shopping-rules-technical.md)    | [实施](./chat-tool-shopping-rules-implementation.md)    |
 | 近 3 天天气查询                  | [设计](./chat-tool-weather-design.md)           | [契约](../../contracts/chat-tool-weather-crud-contract.md)           | [技术](./chat-tool-weather-technical.md)           | [实施](./chat-tool-weather-implementation.md)           |
+| 退货退款申请工具                 | [设计](../returns/return-refund-design.md)      | [契约](../../contracts/return-refund-crud-contract.md)               | [技术](../returns/return-refund-technical.md)      | [实施](../returns/return-refund-implementation.md)      |
 
 ## 相关业务
 

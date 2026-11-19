@@ -99,6 +99,80 @@ test('天气查询调用及结果从后续模型历史隐藏', () => {
   assert.equal(JSON.stringify(messages).includes('weather-call'), false);
 });
 
+test('售后查询和创建工具的调用及结果从后续模型历史成对隐藏', () => {
+  const names = [
+    'list_my_return_refund_orders',
+    'get_my_return_refund_items',
+    'create_return_refund_application',
+  ];
+  const messages = mapTraceEventsToMessages([
+    {
+      eventType: 'model_response',
+      sequence: 1,
+      messageId: 'model',
+      content: '',
+      payload: {
+        invalid_tool_calls: [
+          {
+            id: 'refund-invalid',
+            name: 'create_return_refund_application',
+            args: '{"reason":"private-reason"}',
+          },
+        ],
+        toolCalls: [
+          ...names.map((name, index) => ({
+            id: `refund-call-${index}`,
+            name,
+            args: {
+              orderId: 'private-order-id',
+              reason: 'private-reason',
+            },
+          })),
+          { id: 'ordinary-call', name: 'ordinary_tool', args: { q: 'coat' } },
+        ],
+      },
+    },
+    ...names.flatMap((name, index) => [
+      {
+        eventType: 'tool_call' as const,
+        sequence: index + 2,
+        messageId: 'model',
+        toolCallId: `refund-call-${index}`,
+        toolName: name,
+        payload: { args: { reason: 'private-reason' } },
+      },
+      {
+        eventType: 'tool_result' as const,
+        sequence: index + 5,
+        messageId: `result-${index}`,
+        toolCallId: `refund-call-${index}`,
+        toolName: name,
+        content: '{"ok":true,"reason":"private-reason"}',
+        status: 'success' as const,
+      },
+    ]),
+    {
+      eventType: 'tool_result',
+      sequence: 10,
+      messageId: 'orphan-result',
+      toolCallId: 'orphan-refund-call',
+      toolName: 'create_return_refund_application',
+      content: '{"ok":true,"reason":"private-reason"}',
+      status: 'success',
+    },
+  ]);
+
+  assert.equal(messages.length, 1);
+  assert.deepEqual((messages[0]?.message as AIMessage).tool_calls, [
+    { id: 'ordinary-call', name: 'ordinary_tool', args: { q: 'coat' } },
+  ]);
+  const serialized = JSON.stringify(messages);
+  assert.equal(serialized.includes('private-reason'), false);
+  assert.equal(serialized.includes('private-order-id'), false);
+  assert.equal(serialized.includes('refund-call'), false);
+  assert.equal(serialized.includes('orphan-refund-call'), false);
+});
+
 test('旧聊天消息映射为普通 LangChain 消息', () => {
   const messages = mapLegacyMessagesToLangChain([
     { id: 'user-1', role: 'user', content: '你好' },

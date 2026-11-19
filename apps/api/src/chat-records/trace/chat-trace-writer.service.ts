@@ -15,6 +15,11 @@ import {
   shoppingRulesInputSchema,
   shoppingRulesResultSchema,
 } from '../dto/shopping-rules.dto.js';
+import {
+  createReturnRefundApplicationResultSchema,
+  getMyReturnRefundItemsResultSchema,
+  listMyReturnRefundOrdersResultSchema,
+} from '../dto/chat-return-refund.dto.js';
 import { weatherForecastResultSchema } from '../dto/weather-forecast.dto.js';
 
 import {
@@ -40,6 +45,14 @@ const ADDRESS_TOOL_NAMES = new Set([
 const USER_INFORMATION_TOOL_NAME = 'get_my_information';
 const ORDER_FULFILLMENT_TOOL_NAME = 'get_my_order_fulfillment';
 const SHOPPING_RULES_TOOL_NAME = 'get_shopping_rules';
+const RETURN_REFUND_ORDER_LIST_TOOL_NAME = 'list_my_return_refund_orders';
+const RETURN_REFUND_ITEMS_TOOL_NAME = 'get_my_return_refund_items';
+const RETURN_REFUND_CREATE_TOOL_NAME = 'create_return_refund_application';
+const RETURN_REFUND_TOOL_NAMES = new Set([
+  RETURN_REFUND_ORDER_LIST_TOOL_NAME,
+  RETURN_REFUND_ITEMS_TOOL_NAME,
+  RETURN_REFUND_CREATE_TOOL_NAME,
+]);
 const WEATHER_FORECAST_TOOL_NAME = 'get_weather_forecast';
 const DETAIL_QUERY_TOOL_NAMES = new Set([
   'get_product_skus',
@@ -379,6 +392,78 @@ function safeShoppingRulesProjection(value: unknown): Record<string, unknown> {
     version: parsed.data.version,
     itemCount: parsed.data.statements.length,
   };
+}
+
+function safeReturnRefundArguments(): Record<string, never> {
+  // 订单 ID、商品行、数量和自由文本原因均不属于 trace。
+  return {};
+}
+
+function safeReturnRefundProjection(
+  name: string,
+  value: unknown,
+): Record<string, unknown> {
+  const source = parseToolValue(value);
+  if (name === RETURN_REFUND_ORDER_LIST_TOOL_NAME) {
+    const parsed = listMyReturnRefundOrdersResultSchema.safeParse(source);
+    if (!parsed.success) return { ok: false, code: 'unavailable' };
+    return parsed.data.ok
+      ? { ok: true, itemCount: Math.min(parsed.data.items.length, 5) }
+      : { ok: false, code: parsed.data.code };
+  }
+  if (name === RETURN_REFUND_ITEMS_TOOL_NAME) {
+    const parsed = getMyReturnRefundItemsResultSchema.safeParse(source);
+    if (!parsed.success) return { ok: false, code: 'unavailable' };
+    return parsed.data.ok
+      ? {
+          ok: true,
+          itemCount: Math.min(parsed.data.order.items.length, 50),
+        }
+      : { ok: false, code: parsed.data.code };
+  }
+  const parsed = createReturnRefundApplicationResultSchema.safeParse(source);
+  if (!parsed.success) return { ok: false, code: 'unavailable' };
+  return parsed.data.ok
+    ? {
+        ok: true,
+        status: 'pending_user_submission',
+        itemCount: Math.min(parsed.data.items.length, 50),
+      }
+    : { ok: false, code: parsed.data.code };
+}
+
+function sanitizeNestedReturnRefundCalls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeNestedReturnRefundCalls);
+  if (typeof value !== 'object' || value === null) return value;
+  const call = value as Record<string, unknown>;
+  const functionValue =
+    typeof call.function === 'object' &&
+    call.function !== null &&
+    !Array.isArray(call.function)
+      ? (call.function as Record<string, unknown>)
+      : {};
+  const names = [call.name, functionValue.name].filter(
+    (name): name is string => typeof name === 'string',
+  );
+  const name = names.find((candidate) =>
+    RETURN_REFUND_TOOL_NAMES.has(candidate),
+  );
+  if (name) {
+    return {
+      ...(typeof call.id === 'string' ? { id: call.id.slice(0, 128) } : {}),
+      name,
+      ...(call.type === 'tool_call' || call.type === 'invalid_tool_call'
+        ? { type: call.type }
+        : {}),
+      args: {},
+    };
+  }
+  return Object.fromEntries(
+    Object.entries(call).map(([key, entry]) => [
+      key,
+      sanitizeNestedReturnRefundCalls(entry),
+    ]),
+  );
 }
 
 function sanitizeNestedShoppingRulesCalls(value: unknown): unknown {
@@ -1232,6 +1317,46 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
             ),
     };
   }
+  if (
+    event.type === 'tool_call' &&
+    event.toolName &&
+    RETURN_REFUND_TOOL_NAMES.has(event.toolName)
+  ) {
+    return {
+      ...base,
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      payload: normalizePayload(safeReturnRefundArguments()),
+    };
+  }
+  if (
+    event.type === 'tool_result' &&
+    event.toolName &&
+    RETURN_REFUND_TOOL_NAMES.has(event.toolName)
+  ) {
+    const projection =
+      event.status === 'failed'
+        ? { ok: false, code: 'unavailable' }
+        : safeReturnRefundProjection(event.toolName, event.content);
+    return {
+      ...base,
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      content: JSON.stringify(projection),
+      status:
+        event.status === 'success'
+          ? ChatTraceEventStatus.SUCCESS
+          : ChatTraceEventStatus.FAILED,
+      payload:
+        event.payload === undefined
+          ? null
+          : normalizePayload(
+              event.status === 'failed'
+                ? { ok: false, code: 'unavailable' }
+                : safeReturnRefundProjection(event.toolName, event.payload),
+            ),
+    };
+  }
 
   switch (event.type) {
     case 'input':
@@ -1241,15 +1366,17 @@ function normalizeEvent(event: LlmTraceEvent): NormalizedEvent {
         event.payload === undefined
           ? null
           : normalizePayload(
-              sanitizeNestedAddressFormCalls(
-                sanitizeNestedAddressCalls(
-                  sanitizeNestedInformationCalls(
-                    sanitizeNestedPurchaseCalls(
-                      sanitizeNestedPreferenceFormCalls(
-                        sanitizeNestedDynamicFormCalls(
-                          sanitizeNestedChatCardCalls(
-                            sanitizeNestedDetailCalls(
-                              sanitizeNestedShoppingRulesCalls(event.payload),
+              sanitizeNestedReturnRefundCalls(
+                sanitizeNestedAddressFormCalls(
+                  sanitizeNestedAddressCalls(
+                    sanitizeNestedInformationCalls(
+                      sanitizeNestedPurchaseCalls(
+                        sanitizeNestedPreferenceFormCalls(
+                          sanitizeNestedDynamicFormCalls(
+                            sanitizeNestedChatCardCalls(
+                              sanitizeNestedDetailCalls(
+                                sanitizeNestedShoppingRulesCalls(event.payload),
+                              ),
                             ),
                           ),
                         ),

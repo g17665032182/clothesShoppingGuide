@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { RefreshCw, X } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -16,7 +17,13 @@ import OrderActionDialog from '@/components/shared/orders/OrderActionDialog.vue'
 import OrderDetailDialog from '@/components/shared/orders/OrderDetailDialog.vue';
 import OrderList from '@/components/shared/orders/OrderList.vue';
 import type { OrderStatus } from '@/api/types/orders';
+import ReturnRefundApplicationDialog from './components/ReturnRefundApplicationDialog.vue';
+import ReturnRefundApplicationsPanel from './components/ReturnRefundApplicationsPanel.vue';
 import { useOrdersPage } from './page';
+
+const returnRefundDialogOpen = ref(false);
+const returnRefundOrderId = ref<string | null>(null);
+const returnRefundRefresh = ref(0);
 
 const statusLabels: Record<OrderStatus, string> = {
   pending_payment: '待支付',
@@ -46,6 +53,17 @@ const {
   confirmAction,
   retryDetail,
 } = useOrdersPage();
+
+function startReturnRefundApplication(): void {
+  if (!selectedOrder.value) return;
+  returnRefundOrderId.value = selectedOrder.value.id;
+  detailOpen.value = false;
+  returnRefundDialogOpen.value = true;
+}
+
+function onReturnRefundCreated(): void {
+  returnRefundRefresh.value += 1;
+}
 </script>
 
 <template>
@@ -138,11 +156,18 @@ const {
       @pay="requestPayment"
       @cancel="requestAction('cancel')"
       @receipt="requestAction('receipt')"
+      @return-refund="startReturnRefundApplication"
     />
     <OrderActionDialog
       v-model="actionDialogOpen"
       :action="actionType"
       @confirm="confirmAction"
+    />
+    <ReturnRefundApplicationsPanel :refresh-key="returnRefundRefresh" />
+    <ReturnRefundApplicationDialog
+      v-model="returnRefundDialogOpen"
+      :order-id="returnRefundOrderId"
+      @created="onReturnRefundCreated"
     />
   </section>
 </template>

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { PackageSearch, Truck, UsersRound } from '@lucide/vue';
+import { ClipboardCheck, PackageSearch, Truck, UsersRound } from '@lucide/vue';
 import { cn } from '@/lib/utils';
 
 const sections = [
   { name: 'admin-products', label: '商品目录', icon: PackageSearch },
   { name: 'admin-orders', label: '订单履约', icon: Truck },
+  { name: 'admin-return-refunds', label: '退货退款', icon: ClipboardCheck },
   { name: 'admin-users', label: '用户管理', icon: UsersRound },
 ] as const;
 </script>

@@ -35,6 +35,7 @@ const emit = defineEmits<{
   (event: 'update:modelValue', value: boolean): void;
   (event: 'retry'): void;
   (event: 'pay' | 'cancel' | 'receipt'): void;
+  (event: 'return-refund'): void;
 }>();
 const now = ref(Date.now());
 let paymentTimer: ReturnType<typeof setInterval> | undefined;
@@ -151,6 +152,14 @@ const actionsDisabled = computed(
               @click="emit('receipt')"
               ><CheckCircle2 data-icon="inline-start" />确认收货</Button
             >
+            <Button
+              v-if="order.items.length > 0"
+              variant="outline"
+              :disabled="actionsDisabled"
+              @click="emit('return-refund')"
+            >
+              申请退货退款
+            </Button>
           </div>
         </div>
         <Alert v-if="paymentExpired && order.status === 'pending_payment'"

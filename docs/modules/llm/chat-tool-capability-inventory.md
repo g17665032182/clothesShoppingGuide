@@ -3,7 +3,7 @@
 - 盘点日期：2026-11-19
 - 范围：普通用户聊天中由模型发起的工具调用，以及与工具相邻的前端操作。
 - 依据：当前源码和已确认业务契约。此文档记录能力现状与扩展候选，不代表候选能力已获准实施。
-- 扩展方案：[扩展设计](./chat-tool-expansion-design.md)、[增量契约](../../contracts/chat-tool-expansion-crud-contract.md)、[首期技术方案](./chat-tool-expansion-technical.md)及[实施记录](./chat-tool-expansion-implementation.md)均已确认；首期试穿任务查询已接入。第二阶段[设计](./chat-tool-phase-two-design.md)、[技术](./chat-tool-phase-two-technical.md)及[实施记录](./chat-tool-phase-two-implementation.md)也已确认，精确规格和本人偏好工具已注册；地址管理页导航工具已接入。2026-11-17 新增[本人订单本地履约摘要](./chat-tool-order-fulfillment-implementation.md)及[本站购物规则查询](./chat-tool-shopping-rules-implementation.md)。各阶段实际验证及缺口见对应记录，其他候选仍未实施。
+- 扩展方案：[扩展设计](./chat-tool-expansion-design.md)、[增量契约](../../contracts/chat-tool-expansion-crud-contract.md)、[首期技术方案](./chat-tool-expansion-technical.md)及[实施记录](./chat-tool-expansion-implementation.md)均已确认；首期试穿任务查询已接入。第二阶段[设计](./chat-tool-phase-two-design.md)、[技术](./chat-tool-phase-two-technical.md)及[实施记录](./chat-tool-phase-two-implementation.md)也已确认，精确规格和本人偏好工具已注册；地址管理页导航工具已接入。2026-11-17 新增[本人订单本地履约摘要](./chat-tool-order-fulfillment-implementation.md)及[本站购物规则查询](./chat-tool-shopping-rules-implementation.md)。退货退款工具与申请流程已接入，验证缺口见[实施记录](../returns/return-refund-implementation.md)。
 
 ## 工具调用原则
 
@@ -17,24 +17,27 @@
 
 以下工具由 [`ChatRecordsService`](../../../apps/api/src/chat-records/service/chat-records.service.ts) 在每轮聊天中组装。2026-11-19 新增 `get_weather_forecast`，经真实 XingYuWeather SSE smoke test 验证可返回近三天预报；自动化与构建结果见[天气实施记录](./chat-tool-weather-implementation.md)。
 
-| 工具                             | 当前能力                                                                                               | 边界                                                                                                                |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `search_local_clothing_products` | 按明确需求查询本地有效服装和鞋类，返回商品、尺码/颜色摘要、价格、有货状态和匹配理由。                  | 每轮最多查询一次，最多返回 3 件；商品事实只能来自工具结果。                                                         |
-| `get_product_skus`               | 用可信商品外部标识及可选颜色、尺码精确查询当前有效 CNY 规格、单价和预占后有货状态。                    | 完整过滤后分页，每页5条、页码1–10；不返回 SKU ID、图片或库存数量，不选择规格或授权购买。                            |
-| `get_my_preferences`             | 用户明确查询时读取本人有效且未删除的已保存偏好，可筛选九类之一。                                       | 每页5条、页码1–10；关闭返回 preferences_disabled，缺设置不补建；不写偏好或改开关。                                  |
-| `get_purchase_draft`             | 读取本人当前购买草稿、规格和缺失字段。                                                                 | 不向模型返回收件字段值。                                                                                            |
-| `update_purchase_draft`          | 按用户本轮明确提供的值更新本人未提交草稿。                                                             | 受字段、草稿版本和资源归属校验；信息有歧义时须先询问。                                                              |
-| `discard_purchase_draft`         | 放弃本人未提交的购买草稿。                                                                             | 不取消正式订单。                                                                                                    |
-| `request_purchase_form`          | 请求前端打开本人当前仍可编辑的购买草稿弹框。                                                           | 无参数、只用于 SSE；服务端重读并校验草稿，不创建或修改购买。                                                        |
-| `request_preference_form`        | 请求前端打开本人现有偏好管理页，可选预选一个偏好类别。                                                 | 仅用于 SSE；固定跳转 `account-memories?view=preferences`，不读取、预填或写入偏好，不接受 URL 或身份参数。           |
-| `request_address_form`           | 请求前端打开本人现有地址管理页。                                                                       | 仅用于 SSE；固定跳转 `account-addresses`，严格空对象输入，不读取、预填或写入地址，不接受 URL 或身份参数。           |
-| `list_my_orders`                 | 查询最多 5 笔本人订单摘要；待付款筛选可返回服务端确认的取消候选。                                      | 只读；不提供收件信息，不执行取消、支付或收货。                                                                      |
-| `get_my_order_fulfillment`       | 按明确订单号查询本人本地订单状态、发货和完成时间，固定声明无实时物流。                                 | JSON/SSE 共用只读查询；不返回承运商、任何物流单号或收件信息，不推断运输或签收，不执行订单动作。                     |
-| `get_shopping_rules`             | 按运费、付款、取消、履约或售后主题读取本站当前系统规则，返回固定来源与发布版本。                       | 仅现有已确认契约的静态目录；不读取个人数据、不提供真实店铺政策或售后办理，JSON/SSE 共用，失败不补造规则。           |
-| `get_weather_forecast`           | 按用户明确指定城市查询 XingYuWeather 近 3 天预报，作为当轮穿搭参考。                                   | 仅远程工具开关启用时注册；结果经过白名单投影，不是实时实况；查询轮排除记忆/摘要，不使用自动定位。                   |
-| `get_my_information`             | 查询本人地址引用、订单摘要、已保存图片元数据，或显式请求的试穿任务摘要；下单缺地址时启动地址选择流程。 | 省略 sections 仍为原三类；试穿只返回本人未删除任务，每页5条、最多10页，不返回图片/结果ID/存储键，不触发生成或下载。 |
-| `request_dynamic_form`           | 请求前端渲染服务端注册的动态表单；目前购买收件信息使用 `purchase_recipient`。                          | 工具只发出表单定义和安全引用；不能读取或提交用户填写值。                                                            |
-| `display_chat_card`              | 展示本轮已查询并登记的商品卡或只读订单卡。                                                             | 只接受可信查询结果的引用，不接受模型编写的商品、订单事实。                                                          |
+| 工具                               | 当前能力                                                                                               | 边界                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `search_local_clothing_products`   | 按明确需求查询本地有效服装和鞋类，返回商品、尺码/颜色摘要、价格、有货状态和匹配理由。                  | 每轮最多查询一次，最多返回 3 件；商品事实只能来自工具结果。                                                         |
+| `get_product_skus`                 | 用可信商品外部标识及可选颜色、尺码精确查询当前有效 CNY 规格、单价和预占后有货状态。                    | 完整过滤后分页，每页5条、页码1–10；不返回 SKU ID、图片或库存数量，不选择规格或授权购买。                            |
+| `get_my_preferences`               | 用户明确查询时读取本人有效且未删除的已保存偏好，可筛选九类之一。                                       | 每页5条、页码1–10；关闭返回 preferences_disabled，缺设置不补建；不写偏好或改开关。                                  |
+| `get_purchase_draft`               | 读取本人当前购买草稿、规格和缺失字段。                                                                 | 不向模型返回收件字段值。                                                                                            |
+| `update_purchase_draft`            | 按用户本轮明确提供的值更新本人未提交草稿。                                                             | 受字段、草稿版本和资源归属校验；信息有歧义时须先询问。                                                              |
+| `discard_purchase_draft`           | 放弃本人未提交的购买草稿。                                                                             | 不取消正式订单。                                                                                                    |
+| `request_purchase_form`            | 请求前端打开本人当前仍可编辑的购买草稿弹框。                                                           | 无参数、只用于 SSE；服务端重读并校验草稿，不创建或修改购买。                                                        |
+| `request_preference_form`          | 请求前端打开本人现有偏好管理页，可选预选一个偏好类别。                                                 | 仅用于 SSE；固定跳转 `account-memories?view=preferences`，不读取、预填或写入偏好，不接受 URL 或身份参数。           |
+| `request_address_form`             | 请求前端打开本人现有地址管理页。                                                                       | 仅用于 SSE；固定跳转 `account-addresses`，严格空对象输入，不读取、预填或写入地址，不接受 URL 或身份参数。           |
+| `list_my_orders`                   | 查询最多 5 笔本人订单摘要；待付款筛选可返回服务端确认的取消候选。                                      | 只读；不提供收件信息，不执行取消、支付或收货。                                                                      |
+| `get_my_order_fulfillment`         | 按明确订单号查询本人本地订单状态、发货和完成时间，固定声明无实时物流。                                 | JSON/SSE 共用只读查询；不返回承运商、任何物流单号或收件信息，不推断运输或签收，不执行订单动作。                     |
+| `get_shopping_rules`               | 按运费、付款、取消、履约或售后主题读取本站当前系统规则，返回固定来源与发布版本。                       | 仅现有已确认契约的静态目录；不读取个人数据、不提供真实店铺政策或售后办理，JSON/SSE 共用，失败不补造规则。           |
+| `list_my_return_refund_orders`     | 用户提出退货退款时查询本人最近订单摘要，协助确定订单。                                                 | 最多 5 笔；不返回收件/发货物流信息；查询轮退出自动记忆和摘要来源。                                                  |
+| `get_my_return_refund_items`       | 查询本人订单商品快照、单价和未退款数量。                                                               | 只读初筛，不判断商家或法律资格，不接收 userId。                                                                     |
+| `create_return_refund_application` | 用户确认订单、商品、数量、金额和原因摘要后，创建待用户提交申请草稿。                                   | 必须经已注册工具；不正式提交、审核或实际退款；工具原因和输入输出从 trace/activity/history 投影中隐藏。              |
+| `get_weather_forecast`             | 按用户明确指定城市查询 XingYuWeather 近 3 天预报，作为当轮穿搭参考。                                   | 仅远程工具开关启用时注册；结果经过白名单投影，不是实时实况；查询轮排除记忆/摘要，不使用自动定位。                   |
+| `get_my_information`               | 查询本人地址引用、订单摘要、已保存图片元数据，或显式请求的试穿任务摘要；下单缺地址时启动地址选择流程。 | 省略 sections 仍为原三类；试穿只返回本人未删除任务，每页5条、最多10页，不返回图片/结果ID/存储键，不触发生成或下载。 |
+| `request_dynamic_form`             | 请求前端渲染服务端注册的动态表单；目前购买收件信息使用 `purchase_recipient`。                          | 工具只发出表单定义和安全引用；不能读取或提交用户填写值。                                                            |
+| `display_chat_card`                | 展示本轮已查询并登记的商品卡或只读订单卡。                                                             | 只接受可信查询结果的引用，不接受模型编写的商品、订单事实。                                                          |
 
 商品搜索和订单查询的工具实现分别位于 [`product-search.tool.ts`](../../../apps/api/src/product-catalog/tool/product-search.tool.ts) 与 [`list-user-orders.tool.ts`](../../../apps/api/src/orders/tool/list-user-orders.tool.ts)。购买草稿工具、购买弹框请求工具、用户信息工具、动态表单工具和卡片工具分别位于 [`purchase-tools.ts`](../../../apps/api/src/chat-purchase/tool/purchase-tools.ts)、[`request-purchase-form.tool.ts`](../../../apps/api/src/chat-purchase/tool/request-purchase-form.tool.ts)、[`chat-user-information.tool.ts`](../../../apps/api/src/chat-records/tools/chat-user-information.tool.ts)、[`request-dynamic-form.tool.ts`](../../../apps/api/src/llm/tools/request-dynamic-form.tool.ts) 和 [`chat-card-display.tool.ts`](../../../apps/api/src/chat-records/display/chat-card-display.tool.ts)。
 
@@ -63,7 +66,7 @@
 ### 需先确认数据与权限
 
 - **实时物流或承运商字段扩展**：`get_my_order_fulfillment` 已按[设计](./chat-tool-order-fulfillment-design.md)、[契约](../../contracts/chat-tool-order-fulfillment-crud-contract.md)、[技术](./chat-tool-order-fulfillment-technical.md)和[实施文档](./chat-tool-order-fulfillment-implementation.md)接入本地摘要，只重用已公开的订单状态和时间，不返回承运商或任何单号。实时物流仍未接入，需要另行确定来源和字段权限，不能把本地发货记录当作承运商轨迹。
-- **真实店铺政策/售后知识扩展**：本站系统规则已由 `get_shopping_rules` 提供固定目录，范围见[设计](./chat-tool-shopping-rules-design.md)、[契约](../../contracts/chat-tool-shopping-rules-crud-contract.md)、[技术](./chat-tool-shopping-rules-technical.md)和[实施记录](./chat-tool-shopping-rules-implementation.md)。真实商家的退换条件、退款进度、费用及售后流程仍缺少确认来源和业务 API，不因本工具接入而可查询或办理。
+- **真实商家政策/资金退款扩展**：本站退货退款申请流程已经接入，但不接商家售后 API、不判断商家政策，不执行真实资金退款。`get_shopping_rules` 仍只返回本站固定系统能力说明。
 
 ## 保留为明确用户操作
 
@@ -81,7 +84,7 @@
 
 ## 不纳入当前工具范围
 
-- 已付款订单取消、真实支付、退款、退货和换货：当前没有相应业务能力，不能只靠增加工具实现。
+- 已付款订单取消、真实支付/资金退款和换货：当前没有相应业务能力。退货退款申请通过专用工具创建待提交草稿，不能由普通文本创建。
 - 完整收件信息、付款凭证、图片内容、对象存储键、长期签名 URL：不作为模型工具输入、输出或 trace 数据。
 - 任意 URL 抓取、任意 SQL/数据库查询、模型指定用户 ID、动态生成校验代码或未注册表单：不开放。
 - 管理员跨用户查询和操作：不通过普通用户聊天工具提供。
