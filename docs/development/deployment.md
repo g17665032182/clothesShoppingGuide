@@ -71,8 +71,8 @@ Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App
 
 1. 在 Neon 创建与生产项目隔离的测试项目或分支，并准备专用数据库用户。不要复制
    生产连接变量或把生产连接串用于测试。
-2. 在 Render 选择 New > Blueprint，连接本仓库及 `main` 分支，Blueprint Path 填
-   `render.test.yaml`，确认只创建 `clothes-shopping-guide-test-api` 和
+2. 在 Render 选择 New > Blueprint，连接本仓库及 `codex/render-test-env` 分支，
+   Blueprint Path 填 `render.test.yaml`，确认只创建 `clothes-shopping-guide-test-api` 和
    `clothes-shopping-guide-test-web`。
 3. 为测试 API 填入 Neon 测试库的 `DB_HOST`、`DB_USER`、`DB_PASSWORD`、
    `DB_NAME`，并设置独立的 `SEED_ADMIN_EMAIL`、`SEED_ADMIN_PASSWORD` 和
@@ -87,15 +87,17 @@ Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App
    重新部署现有构建。虚拟试穿保持关闭，不填写七牛或真实试穿凭据。
 5. 部署完成后确认 API 健康检查通过，再验证测试 Web 的登录及目标业务流程。
 
-API 构建命令在 API 构建成功后，对该 API 服务配置的数据库执行增量迁移和默认
-管理员 Seeder。确认 Render API 环境变量仅含测试库凭据后，才可首次部署或手动
-触发部署。测试库不会由此自动导入商品；仅在需要商品数据时通过受控流程导入测试
-数据。测试环境的 API 和 Web 目前使用 Render 默认子域名，Web API 地址在
-`render.test.yaml` 中指向 `clothes-shopping-guide-test-api.onrender.com`。
+测试 API 在构建成功后，先执行 `pnpm deploy:prepare:built` 完成增量迁移和管理员
+初始化，再执行 `pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built`
+导入测试商品。任一步骤失败都会阻止该次 API 发布。确认 Render API 环境变量仅含
+测试库凭据后，才可首次部署或手动触发部署。重复部署会更新对应测试商品与 SKU，
+包括库存；当种子库存低于当前预占量时，商品 Seeder 会拒绝写入并使该次部署失败。
+Web API 地址在 `render.test.yaml` 中指向 `clothes-shopping-guide-test-api.onrender.com`。
 
 向 `codex/render-test-env` 推送后，GitHub Actions 依次执行格式/类型/构建校验、
-API 自动化测试和隔离 PostgreSQL 迁移/Seeder 验证。所有检查通过后，Render 自动
-部署测试 API 和 Web；API 健康检查路径为 `/api/health`。失败时 Render 不会自动部署。
+API 自动化测试，并在隔离 PostgreSQL 中验证迁移、管理员和测试商品 Seeder。所有
+检查通过后，Render 自动部署测试 API 和 Web；API 健康检查路径为 `/api/health`。
+检查失败时 Render 不会自动部署。
 
 ## 每次发布
 

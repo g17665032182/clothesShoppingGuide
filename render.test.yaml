@@ -6,7 +6,12 @@ services:
     plan: free
     branch: codex/render-test-env
     autoDeployTrigger: checksPass
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/api build && pnpm deploy:prepare:built
+    # 仅测试 API 在增量迁移和管理员初始化成功后导入测试商品。
+    buildCommand: >-
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @clothes-shopping-guide/api build &&
+      pnpm deploy:prepare:built &&
+      pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built
     startCommand: pnpm start:prod
     healthCheckPath: /api/health
     envVars:

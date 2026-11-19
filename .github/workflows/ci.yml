@@ -49,8 +49,10 @@ jobs:
         run: pnpm check
       - name: 运行 API 自动化测试
         run: pnpm --filter @clothes-shopping-guide/api test
-      - name: 重建数据库并执行 Seeder
-        run: pnpm migration:fresh
+      - name: 验证迁移、管理员和测试商品 Seeder
+        run: |
+          pnpm migration:fresh
+          pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built
         env:
           DB_HOST: localhost
           DB_PORT: 5432

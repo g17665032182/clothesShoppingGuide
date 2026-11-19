@@ -65,7 +65,7 @@ export class Migration20261119100000 extends Migration {
             and "return_carrier" is null and "return_tracking_no" is null)
         ),
       constraint "return_refund_applications_idempotency_unique"
-        unique ("user_id", "idempotency_key)
+        unique ("user_id", "idempotency_key")
     );`);
     this.addSql(`create index "return_refund_applications_user_created_index"
       on "return_refund_applications" ("user_id", "created_at", "id");`);

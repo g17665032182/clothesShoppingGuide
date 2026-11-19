@@ -21,7 +21,8 @@
     "catalog:hydrate-local-try-on-images": "node --import=@swc-node/register/esm-register src/scripts/hydrate-local-test-try-on-images.ts",
     "seeder:create": "pnpm build && node ./scripts/seeder-create.mjs",
     "catalog:import": "node --import=@swc-node/register/esm-register src/scripts/import-product-catalog.ts",
-    "catalog:seed:test": "pnpm build && mikro-orm seeder:run --class=ProductCatalogTestSeeder --config ./dist/mikro-orm.config.js",
+    "catalog:seed:test": "pnpm build && pnpm catalog:seed:test:built",
+    "catalog:seed:test:built": "mikro-orm seeder:run --class=ProductCatalogTestSeeder --config ./dist/mikro-orm.config.js",
     "seed": "pnpm build && mikro-orm seeder:run --config ./dist/mikro-orm.config.js"
   },
   "dependencies": {
