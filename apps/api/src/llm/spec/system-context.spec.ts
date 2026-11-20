@@ -13,7 +13,10 @@ test('系统上下文包含选购和退换货工作流程', () => {
   );
   assert.match(SYSTEM_CONTEXT, /正式订单动作由用户按钮执行/);
   assert.match(SYSTEM_CONTEXT, /支付仅为模拟/);
-  assert.match(SYSTEM_CONTEXT, /售后尚未接入/);
+  assert.match(
+    SYSTEM_CONTEXT,
+    /退货退款申请只能按“退\/换货流程”调用已注册的售后工具创建，或引导用户直接到订单页申请/u,
+  );
   assert.match(SYSTEM_CONTEXT, /不从旧摘要恢复收货信息/);
   assert.match(
     SYSTEM_CONTEXT,

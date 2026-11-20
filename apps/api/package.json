@@ -21,12 +21,15 @@
     "catalog:hydrate-local-try-on-images": "node --import=@swc-node/register/esm-register src/scripts/hydrate-local-test-try-on-images.ts",
     "seeder:create": "pnpm build && node ./scripts/seeder-create.mjs",
     "catalog:import": "node --import=@swc-node/register/esm-register src/scripts/import-product-catalog.ts",
-    "catalog:seed:test": "pnpm build && mikro-orm seeder:run --class=ProductCatalogTestSeeder --config ./dist/mikro-orm.config.js",
+    "catalog:seed:test": "pnpm build && pnpm catalog:seed:test:built",
+    "catalog:seed:test:built": "mikro-orm seeder:run --class=ProductCatalogTestSeeder --config ./dist/mikro-orm.config.js",
     "seed": "pnpm build && mikro-orm seeder:run --config ./dist/mikro-orm.config.js"
   },
   "dependencies": {
+    "@date-fns/tz": "1.5.0",
     "@langchain/core": "^1.3.0",
     "@langchain/langgraph": "^1.5.2",
+    "@langchain/mcp-adapters": "^2.0.3",
     "@langchain/openai": "^1.7.0",
     "@mikro-orm/core": "7.2.5",
     "@mikro-orm/decorators": "7.2.5",
@@ -42,6 +45,7 @@
     "@nestjs/swagger": "^12.0.4",
     "@nestjs/throttler": "6.8.0",
     "bcryptjs": "3.0.2",
+    "date-fns": "4.4.0",
     "dotenv": "17.2.2",
     "helmet": "^8.3.0",
     "js-tiktoken": "^1.0.21",
@@ -52,6 +56,7 @@
     "rxjs": "7.8.2",
     "sharp": "^0.35.5",
     "svg-captcha": "1.4.0",
+    "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

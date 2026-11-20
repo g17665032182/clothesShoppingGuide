@@ -95,6 +95,11 @@ export const router = createRouter({
           name: 'admin-orders',
           component: () => import('@/pages/admin-orders/index.vue'),
         },
+        {
+          path: 'return-refunds',
+          name: 'admin-return-refunds',
+          component: () => import('@/pages/admin-return-refunds/index.vue'),
+        },
       ],
     },
   ],

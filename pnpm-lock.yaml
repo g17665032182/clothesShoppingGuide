@@ -200,12 +200,18 @@ importers:
 
   apps/api:
     dependencies:
+      '@date-fns/tz':
+        specifier: 1.5.0
+        version: 1.5.0
       '@langchain/core':
         specifier: ^1.3.0
         version: 1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7))
       '@langchain/langgraph':
         specifier: ^1.5.2
         version: 1.5.2(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(zod@4.6.7)
+      '@langchain/mcp-adapters':
+        specifier: ^2.0.3
+        version: 2.0.3(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(@langchain/langgraph@1.5.2(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(zod@4.6.7))
       '@langchain/openai':
         specifier: ^1.7.0
         version: 1.7.0(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(undici@8.12.3)
@@ -251,6 +257,9 @@ importers:
       bcryptjs:
         specifier: 3.0.2
         version: 3.0.2
+      date-fns:
+        specifier: 4.4.0
+        version: 4.4.0
       dotenv:
         specifier: 17.2.2
         version: 17.2.2
@@ -281,6 +290,9 @@ importers:
       svg-captcha:
         specifier: 1.4.0
         version: 1.4.0
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -587,6 +599,9 @@ packages:
     engines: {node: '>=20.0.0'}
     peerDependencies:
       vue: ^3.0.0
+
+  '@date-fns/tz@1.5.0':
+    resolution: {integrity: sha512-lwYN/vDPeNRULcepoE/LO2Pgx+7/RV+S9ARfbc9lr2DtGkOD7pAiruHvbR1RX3Qyf6ja47EWJDMsNK5vK08DJg==}
 
   '@dotenvx/dotenvx@2.38.2':
     resolution: {integrity: sha512-+tjy8o//H+ZkRfRWLh08UkLHCw/e74uIV27QOZ3RxKwXvGrxjEcQMfUvQJzkvK/qNTk/OsE1MlGiDB6iL+1X0g==}
@@ -1411,6 +1426,13 @@ packages:
       '@langchain/core': ^1.1.48
       zod: ^3.25.32 || ^4.2.0
 
+  '@langchain/mcp-adapters@2.0.3':
+    resolution: {integrity: sha512-DQ75p5pQIzscmxp18uDxMRZJ4d9kDJQ/uFpfd5xcMvdmrQn0xKnF//fOdu3FKCejAHNa/Qi3j2ZpMeJ+n8+EHA==}
+    engines: {node: '>=20.10.0'}
+    peerDependencies:
+      '@langchain/core': ^1.2.6
+      '@langchain/langgraph': ^1.4.18
+
   '@langchain/openai@1.7.0':
     resolution: {integrity: sha512-ne5vZme5yZaC0VcNu2SJrYa8kqJ++dTZlvPmq4lNMyp+oupl5vsEb7YXPHtGgzBU21C44+I5ToEFYbJrXieSkA==}
     engines: {node: '>=22'}
@@ -1488,6 +1510,14 @@ packages:
     engines: {node: '>= 22.17.0'}
     peerDependencies:
       '@mikro-orm/core': 7.2.5
+
+  '@modelcontextprotocol/client@2.4.0':
+    resolution: {integrity: sha512-LgrD2OphHuG12vfKFKz6SOnq7bKHQmhGJIAYdD+MZBn2npHEyry6uD8zvktodtl5CQM85MO0anUyD9JwmUmxww==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/core@2.4.0':
+    resolution: {integrity: sha512-z8QBKqdfXLPzkLQuG4xp8hrVEMm1PZ1IgxMN2sMbJiFiAKOWXnAzogXn2W4aqIBlP1ea6U5yiqVquvUNM1Cj6Q==}
+    engines: {node: '>=20'}
 
   '@modelcontextprotocol/sdk@1.32.2':
     resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
@@ -3125,6 +3155,9 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  date-fns@4.4.0:
+    resolution: {integrity: sha512-+1UMbeh68lH1SegH83CGWwpb6OHHbpSgr3+s5Eww5M4CAgswBpoWS0AjTOfEJ33HiYKz1hdj/KTFprzXHmq/6w==}
 
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
@@ -5590,6 +5623,11 @@ packages:
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   yargs-parser@21.1.1:
     resolution: {integrity: sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw==}
     engines: {node: '>=12'}
@@ -5886,6 +5924,8 @@ snapshots:
       vue: 3.5.44(typescript@5.9.3)
     transitivePeerDependencies:
       - supports-color
+
+  '@date-fns/tz@1.5.0': {}
 
   '@dotenvx/dotenvx@2.38.2':
     dependencies:
@@ -6518,6 +6558,14 @@ snapshots:
       - react
       - react-dom
 
+  '@langchain/mcp-adapters@2.0.3(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(@langchain/langgraph@1.5.2(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(zod@4.6.7))':
+    dependencies:
+      '@langchain/core': 1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7))
+      '@langchain/langgraph': 1.5.2(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(zod@4.6.7)
+      '@modelcontextprotocol/client': 2.4.0
+      '@modelcontextprotocol/core': 2.4.0
+      zod: 4.6.7
+
   '@langchain/openai@1.7.0(@langchain/core@1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7)))(undici@8.12.3)':
     dependencies:
       '@langchain/core': 1.3.0(openai@7.43.0(undici@8.12.3)(zod@4.6.7))
@@ -6591,6 +6639,20 @@ snapshots:
     dependencies:
       '@mikro-orm/core': 7.2.5
       kysely: 0.29.6
+
+  '@modelcontextprotocol/client@2.4.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.4.0
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      jose: 6.2.13
+      pkce-challenge: 5.0.1
+      zod: 4.6.7
+
+  '@modelcontextprotocol/core@2.4.0':
+    dependencies:
+      zod: 4.6.7
 
   '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
     dependencies:
@@ -8029,6 +8091,8 @@ snapshots:
   cssesc@3.0.0: {}
 
   csstype@3.2.3: {}
+
+  date-fns@4.4.0: {}
 
   dateformat@4.6.3: {}
 
@@ -10801,6 +10865,8 @@ snapshots:
   y18n@5.0.8: {}
 
   yallist@3.1.1: {}
+
+  yaml@2.9.1: {}
 
   yargs-parser@21.1.1: {}
 

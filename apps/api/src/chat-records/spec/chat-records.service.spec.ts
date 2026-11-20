@@ -52,6 +52,9 @@ function createService(
     failedReader?: 'preferences' | 'memory';
     tryOn?: ChatTryOnPort;
     modelFailure?: boolean;
+    weatherEnabled?: boolean;
+    weatherRequest?: boolean;
+    returnRefundRequest?: boolean;
   } = {},
 ) {
   const persisted: unknown[] = [];
@@ -65,6 +68,8 @@ function createService(
   let detailOutcome: DetailRequest = 'none';
   const detailRequests = [...(options.detailRequests ?? [])];
   const informationRequests = [...(options.informationRequests ?? [])];
+  let shouldRequestWeather = options.weatherRequest ?? false;
+  let shouldRequestReturnRefund = options.returnRefundRequest ?? false;
   const invokeInformation = async (tools: unknown[]) => {
     detailOutcome = detailRequests.shift() ?? 'none';
     if (detailOutcome !== 'none') {
@@ -78,14 +83,52 @@ function createService(
       await query.invoke(skus ? { productExternalId: 'verified-shirt' } : {});
     }
     informationOutcome = informationRequests.shift() ?? 'none';
-    if (informationOutcome === 'none') return;
-    const query = tools.find(
-      (item) => (item as { name?: string }).name === 'get_my_information',
-    ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
-    assert.ok(query);
-    await query.invoke({
-      sections: [informationOutcome === 'photos' ? 'photos' : 'try_on_tasks'],
-    });
+    if (informationOutcome !== 'none') {
+      const query = tools.find(
+        (item) => (item as { name?: string }).name === 'get_my_information',
+      ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
+      assert.ok(query);
+      await query.invoke({
+        sections: [informationOutcome === 'photos' ? 'photos' : 'try_on_tasks'],
+      });
+    }
+    if (shouldRequestWeather) {
+      shouldRequestWeather = false;
+      const query = tools.find(
+        (item) => (item as { name?: string }).name === 'get_weather_forecast',
+      ) as { invoke: (input: unknown) => Promise<unknown> } | undefined;
+      assert.ok(query);
+      await query.invoke({ city: '上海' });
+    }
+    if (shouldRequestReturnRefund) {
+      shouldRequestReturnRefund = false;
+      for (const [name, input] of [
+        ['list_my_return_refund_orders', {}],
+        [
+          'get_my_return_refund_items',
+          { orderId: '33333333-3333-4333-8333-333333333333' },
+        ],
+        [
+          'create_return_refund_application',
+          {
+            orderId: '33333333-3333-4333-8333-333333333333',
+            items: [
+              {
+                orderItemId: '44444444-4444-4444-8444-444444444444',
+                quantity: 1,
+              },
+            ],
+            reason: '尺码不合适',
+          },
+        ],
+      ] as const) {
+        const registered = tools.find(
+          (item) => (item as { name?: string }).name === name,
+        ) as { invoke: (value: unknown) => Promise<unknown> } | undefined;
+        assert.ok(registered, `应注册工具 ${name}`);
+        await registered.invoke(input);
+      }
+    }
   };
   const traceEvents: unknown[] = [];
   const registeredToolNames: string[][] = [];
@@ -545,6 +588,61 @@ function createService(
                 },
         } as never)
       : undefined,
+    undefined,
+    options.weatherEnabled
+      ? ({
+          isEnabled: () => true,
+          getForecast: async () => ({ ok: false, code: 'unavailable' }),
+        } as never)
+      : undefined,
+    options.returnRefundRequest
+      ? ({
+          listOrdersForChat: async () => [
+            {
+              id: '33333333-3333-4333-8333-333333333333',
+              orderNo: 'ORDER-1',
+              status: 'completed',
+              completedAt: '2026-11-18T08:00:00.000Z',
+              currency: 'CNY',
+              itemCount: 1,
+            },
+          ],
+          getOrderOptionsForChat: async () => ({
+            orderId: '33333333-3333-4333-8333-333333333333',
+            orderNo: 'ORDER-1',
+            status: 'completed',
+            completedAt: '2026-11-18T08:00:00.000Z',
+            currency: 'CNY',
+            items: [
+              {
+                orderItemId: '44444444-4444-4444-8444-444444444444',
+                productName: '夹克',
+                productExternalId: 'jacket-1',
+                color: '黑色',
+                size: 'M',
+                imageUrl: null,
+                unitPrice: '99.00',
+                quantity: 1,
+                availableQuantity: 1,
+              },
+            ],
+          }),
+        } as never)
+      : undefined,
+    options.returnRefundRequest
+      ? ({
+          createDraftFromChat: async () => ({
+            applicationId: '55555555-5555-4555-8555-555555555555',
+            orderNo: 'ORDER-1',
+            status: 'pending_user_submission',
+            currency: 'CNY',
+            refundAmount: '99.00',
+            items: [
+              { productName: '夹克', color: '黑色', size: 'M', quantity: 1 },
+            ],
+          }),
+        } as never)
+      : undefined,
   );
 
   return {
@@ -655,6 +753,92 @@ test('JSON/SSE 规格和偏好查询各种结果均隔离整轮，下一普通�
       );
       assert.equal(fixture.memoryEnqueued.length, 1);
     }
+  }
+});
+
+test('JSON/SSE 天气预报查询隔离整轮且下一普通轮恢复', async () => {
+  for (const stream of [false, true]) {
+    const fixture = createService({
+      weatherEnabled: true,
+      weatherRequest: true,
+    });
+    const request = {
+      messages: [{ role: 'user', content: '查一下上海天气，今天穿什么' }],
+    };
+    if (stream) {
+      for await (const _event of await fixture.service.prepareStream(
+        { id: 'user-1' } as never,
+        request as never,
+      )) {
+        // 消费至完成，核实 JSON/SSE 共用来源隔离。
+      }
+    } else {
+      await fixture.service.chat({ id: 'user-1' } as never, request as never);
+    }
+    assert.ok(
+      fixture.registeredToolNames.at(-1)?.includes('get_weather_forecast'),
+    );
+    const excluded = fixture.persisted
+      .flat()
+      .filter((value): value is ChatMessage => value instanceof ChatMessage);
+    assert.equal(excluded.length, 2);
+    assert.ok(excluded.every((message) => !message.memoryExtractionEligible));
+    assert.equal(fixture.memoryEnqueued.length, 0);
+
+    await fixture.service.chat(
+      { id: 'user-1' } as never,
+      { messages: [{ role: 'user', content: '我喜欢宽松外套' }] } as never,
+    );
+    const messages = fixture.persisted
+      .flat()
+      .filter((value): value is ChatMessage => value instanceof ChatMessage);
+    assert.ok(
+      messages.slice(-2).every((message) => message.memoryExtractionEligible),
+    );
+    assert.equal(fixture.memoryEnqueued.length, 1);
+  }
+});
+
+test('JSON/SSE 退货退款工具查询和创建均隔离整轮来源', async () => {
+  for (const stream of [false, true]) {
+    const fixture = createService({ returnRefundRequest: true });
+    const request = {
+      messages: [
+        { role: 'user', content: '我确认创建退货退款申请，我不喜欢尺码' },
+      ],
+    };
+    if (stream) {
+      for await (const _event of await fixture.service.prepareStream(
+        { id: 'user-1' } as never,
+        request as never,
+      )) {
+        // 消费至 done，核实写工具和查询工具都排除整轮来源。
+      }
+    } else {
+      await fixture.service.chat({ id: 'user-1' } as never, request as never);
+    }
+    const tools = fixture.registeredToolNames.at(-1) ?? [];
+    assert.ok(tools.includes('list_my_return_refund_orders'));
+    assert.ok(tools.includes('get_my_return_refund_items'));
+    assert.ok(tools.includes('create_return_refund_application'));
+    const excluded = fixture.persisted
+      .flat()
+      .filter((value): value is ChatMessage => value instanceof ChatMessage);
+    assert.equal(excluded.length, 2);
+    assert.ok(excluded.every((message) => !message.memoryExtractionEligible));
+    assert.equal(fixture.memoryEnqueued.length, 0);
+
+    await fixture.service.chat(
+      { id: 'user-1' } as never,
+      { messages: [{ role: 'user', content: '推荐一件外套' }] } as never,
+    );
+    const messages = fixture.persisted
+      .flat()
+      .filter((value): value is ChatMessage => value instanceof ChatMessage);
+    assert.ok(
+      messages.slice(-2).every((message) => message.memoryExtractionEligible),
+    );
+    assert.equal(fixture.memoryEnqueued.length, 1);
   }
 });
 

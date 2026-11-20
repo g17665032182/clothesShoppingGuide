@@ -102,11 +102,25 @@ import { createChatPreferencesTool } from '../tools/chat-preferences.tool.js';
 import { createChatOrderFulfillmentTool } from '../tools/chat-order-fulfillment.tool.js';
 import { createChatShoppingRulesTool } from '../tools/chat-shopping-rules.tool.js';
 import {
+  createGetMyReturnRefundItemsTool,
+  createListMyReturnRefundOrdersTool,
+  createReturnRefundApplicationTool,
+} from '../tools/chat-return-refund.tools.js';
+import { createChatWeatherForecastTool } from '../tools/chat-weather-forecast.tool.js';
+import {
+  WEATHER_MCP_PORT,
+  type WeatherMcpPort,
+} from '../../llm/weather-mcp/weather-mcp.port.js';
+import {
   createRequestPreferenceFormTool,
   preferenceFormCategorySchema,
 } from '../tools/request-preference-form.tool.js';
 import { createRequestAddressFormTool } from '../tools/request-address-form.tool.js';
 import type { z } from 'zod';
+import {
+  ReturnRefundQueryService,
+  ReturnRefundService,
+} from '../../return-refund/index.js';
 
 type PreferenceFormCategory = z.infer<typeof preferenceFormCategorySchema>;
 
@@ -283,6 +297,13 @@ export class ChatRecordsService {
     @Optional()
     @Inject(OrderFulfillmentReaderService)
     private readonly orderFulfillmentReader?: OrderFulfillmentReaderService,
+    @Optional()
+    @Inject(WEATHER_MCP_PORT)
+    private readonly weatherMcp?: WeatherMcpPort,
+    @Optional()
+    private readonly returnRefundQuery?: ReturnRefundQueryService,
+    @Optional()
+    private readonly returnRefundService?: ReturnRefundService,
   ) {}
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
@@ -1073,6 +1094,14 @@ export class ChatRecordsService {
         // 系统规则只供本轮回答，不应提取为用户的长期偏好或摘要来源。
         prepared.detailQueryRequested = true;
       }),
+      ...(this.weatherMcp?.isEnabled()
+        ? [
+            createChatWeatherForecastTool(this.weatherMcp, () => {
+              // 天气预报仅用于当前轮，不作为长期记忆或摘要来源。
+              prepared.detailQueryRequested = true;
+            }),
+          ]
+        : []),
       ...(this.orderFulfillmentReader
         ? [
             createChatOrderFulfillmentTool(
@@ -1145,6 +1174,37 @@ export class ChatRecordsService {
         prepared.persistedConversation.userId,
         (orders) => cardSources.registerOrders(orders),
       ),
+      ...(this.returnRefundQuery
+        ? [
+            createListMyReturnRefundOrdersTool(
+              this.returnRefundQuery,
+              prepared.persistedConversation.userId,
+              () => {
+                prepared.detailQueryRequested = true;
+              },
+            ),
+            createGetMyReturnRefundItemsTool(
+              this.returnRefundQuery,
+              prepared.persistedConversation.userId,
+              () => {
+                prepared.detailQueryRequested = true;
+              },
+            ),
+          ]
+        : []),
+      ...(this.returnRefundService
+        ? [
+            createReturnRefundApplicationTool(
+              this.returnRefundService,
+              prepared.persistedConversation.userId,
+              prepared.persistedConversation.id,
+              () => {
+                // 申请原因和订单操作意图仅用于当前轮，不进入长期记忆/摘要来源。
+                prepared.detailQueryRequested = true;
+              },
+            ),
+          ]
+        : []),
       createChatCardDisplayTool(cardSources, (card) =>
         this.displayService.stageCard(display, card),
       ),

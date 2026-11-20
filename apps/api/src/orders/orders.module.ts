@@ -12,6 +12,7 @@ import { OrderFulfillmentReaderService } from './service/order-fulfillment-reade
 import { OrdersService } from './service/orders.service.js';
 import { ORDER_CATALOG_IMPORT_PORT } from './port/order-catalog-import.port.js';
 import { ORDER_CONFIRMED_CREATION_PORT } from './port/order-confirmed-creation.port.js';
+import { ORDER_RETURN_REFUND_READER } from './port/order-return-refund-reader.port.js';
 
 @Module({
   imports: [
@@ -31,12 +32,17 @@ import { ORDER_CONFIRMED_CREATION_PORT } from './port/order-confirmed-creation.p
       provide: ORDER_CONFIRMED_CREATION_PORT,
       useExisting: OrdersService,
     },
+    {
+      provide: ORDER_RETURN_REFUND_READER,
+      useExisting: OrdersService,
+    },
   ],
   exports: [
     OrdersService,
     OrderFulfillmentReaderService,
     ORDER_CATALOG_IMPORT_PORT,
     ORDER_CONFIRMED_CREATION_PORT,
+    ORDER_RETURN_REFUND_READER,
   ],
 })
 export class OrdersModule {}

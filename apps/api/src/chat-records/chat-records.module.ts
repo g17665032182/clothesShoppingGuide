@@ -22,6 +22,7 @@ import { OrdersModule } from '../orders/index.js';
 import { VirtualTryOnModule } from '../virtual-try-on/virtual-try-on.module.js';
 import { ChatDynamicFormModule } from '../chat-dynamic-form/index.js';
 import { ChatUserInformationModule } from '../chat-user-information/index.js';
+import { ReturnRefundModule } from '../return-refund/index.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { ChatUserInformationModule } from '../chat-user-information/index.js';
     VirtualTryOnModule,
     ChatDynamicFormModule,
     ChatUserInformationModule,
+    ReturnRefundModule,
   ],
   controllers: [
     ChatRecordsController,

@@ -2,8 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - codex/render-test-env
   pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 # 校验任务只需要读取仓库内容。
 permissions:
@@ -16,7 +21,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17-alpine
@@ -42,11 +47,19 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: 校验代码
         run: pnpm check
-      - name: 重建数据库并执行 Seeder
-        run: pnpm migration:fresh
+      - name: 运行 API 自动化测试
+        run: pnpm --filter @clothes-shopping-guide/api test
+      - name: 验证数据库迁移和 Seeder
+        run: |
+          pnpm migration:fresh
+          # 仅测试环境分支在 CI 临时库中验证商品 Seeder。
+          if [ "$GITHUB_REF" = "refs/heads/codex/render-test-env" ]; then
+            pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built
+          fi
         env:
           DB_HOST: localhost
           DB_PORT: 5432
           DB_USER: clothes
           DB_PASSWORD: clothes
           DB_NAME: clothes_guide
+          DB_SSL: 'false'

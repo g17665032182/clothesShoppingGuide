@@ -1,0 +1,70 @@
+# Render 测试环境 Blueprint。数据库使用单独的 Neon 测试项目/分支，不连接生产库。
+services:
+  - type: web
+    name: clothes-shopping-guide-test-api
+    runtime: node
+    plan: free
+    branch: codex/render-test-env
+    autoDeployTrigger: checksPass
+    # 仅测试 API 在增量迁移和管理员初始化成功后导入测试商品。
+    buildCommand: >-
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @clothes-shopping-guide/api build &&
+      pnpm deploy:prepare:built &&
+      pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built
+    startCommand: pnpm start:prod
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: '5432'
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: PGSSLMODE
+        value: require
+      - key: PGCHANNELBINDING
+        value: require
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PRODUCT_QUERY_CURSOR_SECRET
+        generateValue: true
+      - key: LLM_PROVIDER
+        value: openai-compatible
+      - key: LLM_API_KEY
+        value: test-disabled-no-provider-key
+      - key: LLM_MODEL
+        value: gpt-4o-mini
+      - key: TRY_ON_STORAGE_DRIVER
+        value: qiniu
+      - key: TRY_ON_ENABLED
+        value: 'false'
+      - key: TRY_ON_REAL_PHOTOS_ENABLED
+        value: 'false'
+      - key: SEED_ADMIN_EMAIL
+        value: test-admin@example.invalid
+      - key: SEED_ADMIN_PASSWORD
+        generateValue: true
+      - key: SEED_ADMIN_DISPLAY_NAME
+        value: 测试管理员
+
+  - type: web
+    name: clothes-shopping-guide-test-web
+    runtime: static
+    branch: codex/render-test-env
+    autoDeployTrigger: checksPass
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build
+    staticPublishPath: apps/web/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://clothes-shopping-guide-test-api.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

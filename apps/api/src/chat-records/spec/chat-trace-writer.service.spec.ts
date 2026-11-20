@@ -85,6 +85,298 @@ test('writer 递归掩码凭证字段并在事务中批量写入', async () => {
   assert.equal(state.flushCount, 1);
 });
 
+test('退货退款工具 trace 丢弃全部输入和业务数据，只保留安全计数', async () => {
+  const { writer, rows } = createWriter();
+  const calls = [
+    {
+      name: 'list_my_return_refund_orders',
+      id: 'list-call',
+      args: {},
+      result: {
+        ok: true,
+        items: [
+          {
+            id: '33333333-3333-4333-8333-333333333333',
+            orderNo: 'PRIVATE-ORDER',
+            status: 'completed',
+            completedAt: '2026-11-18T08:00:00.000Z',
+            currency: 'CNY',
+            itemCount: 1,
+          },
+        ],
+      },
+    },
+    {
+      name: 'get_my_return_refund_items',
+      id: 'items-call',
+      args: { orderId: '33333333-3333-4333-8333-333333333333' },
+      result: {
+        ok: true,
+        order: {
+          orderId: '33333333-3333-4333-8333-333333333333',
+          orderNo: 'PRIVATE-ORDER',
+          status: 'completed',
+          completedAt: '2026-11-18T08:00:00.000Z',
+          currency: 'CNY',
+          items: [
+            {
+              orderItemId: '44444444-4444-4444-8444-444444444444',
+              productName: '夹克',
+              productExternalId: 'private-product-id',
+              color: '黑色',
+              size: 'M',
+              imageUrl: null,
+              unitPrice: '99.00',
+              quantity: 1,
+              availableQuantity: 1,
+            },
+          ],
+        },
+      },
+    },
+    {
+      name: 'create_return_refund_application',
+      id: 'create-call',
+      args: {
+        orderId: '33333333-3333-4333-8333-333333333333',
+        items: [
+          { orderItemId: '44444444-4444-4444-8444-444444444444', quantity: 1 },
+        ],
+        reason: 'PRIVATE-REASON',
+      },
+      result: {
+        ok: true,
+        applicationId: '55555555-5555-4555-8555-555555555555',
+        orderNo: 'PRIVATE-ORDER',
+        status: 'pending_user_submission',
+        currency: 'CNY',
+        refundAmount: '99.00',
+        items: [{ productName: '夹克', color: '黑色', size: 'M', quantity: 1 }],
+      },
+    },
+  ];
+
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'model',
+      content: '',
+      model: 'fake',
+      usage: null,
+      payload: {
+        toolCalls: calls.map(({ name, id, args }) => ({ name, id, args })),
+        invalid_tool_calls: [
+          {
+            id: 'invalid-call',
+            name: 'create_return_refund_application',
+            args: '{"reason":"PRIVATE-REASON"}',
+          },
+        ],
+        nested: {
+          name: 'ordinary-wrapper',
+          function: {
+            name: 'create_return_refund_application',
+            arguments: { reason: 'PRIVATE-NESTED-REASON' },
+          },
+        },
+      },
+    },
+    ...calls.flatMap(({ name, id, args, result }, index) => [
+      {
+        sequence: index * 2 + 1,
+        type: 'tool_call' as const,
+        messageId: 'model',
+        toolCallId: id,
+        toolName: name,
+        args,
+      },
+      {
+        sequence: index * 2 + 2,
+        type: 'tool_result' as const,
+        messageId: `result-${index}`,
+        toolCallId: id,
+        toolName: name,
+        content: JSON.stringify(result),
+        payload: result,
+        status: 'success' as const,
+      },
+    ]),
+  ]);
+
+  const serialized = JSON.stringify(rows);
+  for (const privateValue of [
+    'PRIVATE-ORDER',
+    'PRIVATE-REASON',
+    'PRIVATE-NESTED-REASON',
+    'private-product-id',
+    'orderItemId',
+    'applicationId',
+    'refundAmount',
+  ]) {
+    assert.equal(serialized.includes(privateValue), false, privateValue);
+  }
+  const resultRows = rows.filter(
+    (row) =>
+      row.eventType === 'tool_result' &&
+      row.status === ChatTraceEventStatus.SUCCESS,
+  );
+  assert.deepEqual(
+    resultRows.map((row) => JSON.parse(row.content ?? '{}')),
+    [
+      { ok: true, itemCount: 1 },
+      { ok: true, itemCount: 1 },
+      { ok: true, status: 'pending_user_submission', itemCount: 1 },
+    ],
+  );
+  assert.deepEqual(
+    rows
+      .filter((row) => row.eventType === 'tool_call')
+      .map((row) => row.payload),
+    [{}, {}, {}],
+  );
+});
+
+test('天气工具 trace 只保留安全结果投影并隐藏城市参数及 MCP 扩展字段', async () => {
+  const { writer, rows } = createWriter();
+  const rawResult = {
+    ok: true,
+    location: '上海',
+    days: [
+      {
+        date: '2026-11-18',
+        dayCondition: '多云',
+        nightCondition: '晴',
+        highC: 14,
+        lowC: 6,
+        precipitationMm: 0,
+        windDirection: '东',
+        windSpeedKmh: null,
+        windScale: 2,
+        humidityPercent: 83,
+      },
+    ],
+    updatedAt: '2026-11-18T08:00:00+08:00',
+    rawProviderResponse: 'private-mcp-content',
+  };
+
+  await writer.writeEvents(context, [
+    {
+      sequence: 0,
+      type: 'model_response',
+      messageId: 'model',
+      content: '',
+      model: 'fake',
+      usage: null,
+      payload: {
+        toolCalls: [
+          {
+            id: 'weather-call',
+            name: 'get_weather_forecast',
+            args: { city: '上海', api_key: 'private-api-key' },
+          },
+        ],
+      },
+    },
+    {
+      sequence: 1,
+      type: 'tool_call',
+      messageId: 'model',
+      toolCallId: 'weather-call',
+      toolName: 'get_weather_forecast',
+      args: { city: '上海', api_key: 'private-api-key' },
+    },
+    {
+      sequence: 2,
+      type: 'tool_result',
+      messageId: 'weather-result',
+      toolCallId: 'weather-call',
+      toolName: 'get_weather_forecast',
+      content: JSON.stringify(rawResult),
+      payload: rawResult,
+      status: 'success',
+    },
+    {
+      sequence: 3,
+      type: 'tool_result',
+      messageId: 'valid-weather-result',
+      toolCallId: 'valid-weather-call',
+      toolName: 'get_weather_forecast',
+      content: JSON.stringify({
+        ok: true,
+        location: '上海',
+        days: [
+          {
+            date: '2026-11-18',
+            dayCondition: '多云',
+            nightCondition: '晴',
+            highC: 14,
+            lowC: 6,
+            precipitationMm: 0,
+            windDirection: '东',
+            windSpeedKmh: null,
+            windScale: 2,
+            humidityPercent: 83,
+          },
+        ],
+        updatedAt: null,
+      }),
+      payload: {
+        ok: true,
+        location: '上海',
+        days: [
+          {
+            date: '2026-11-18',
+            dayCondition: '多云',
+            nightCondition: '晴',
+            highC: 14,
+            lowC: 6,
+            precipitationMm: 0,
+            windDirection: '东',
+            windSpeedKmh: null,
+            windScale: 2,
+            humidityPercent: 83,
+          },
+        ],
+        updatedAt: null,
+      },
+      status: 'success',
+    },
+  ]);
+
+  assert.deepEqual(rows[0]?.payload, {
+    toolCalls: [
+      {
+        id: 'weather-call',
+        name: 'get_weather_forecast',
+        args: {},
+      },
+    ],
+  });
+  assert.deepEqual(rows[1]?.payload, {});
+  assert.deepEqual(JSON.parse(rows[2]?.content ?? '{}'), {
+    ok: false,
+    code: 'unavailable',
+  });
+  assert.deepEqual(rows[2]?.payload, {
+    ok: false,
+    code: 'unavailable',
+  });
+  assert.deepEqual(JSON.parse(rows[3]?.content ?? '{}'), {
+    ok: true,
+    dayCount: 1,
+  });
+  assert.deepEqual(rows[3]?.payload, {
+    ok: true,
+    dayCount: 1,
+  });
+  const serialized = JSON.stringify(rows);
+  assert.equal(serialized.includes('private'), false);
+  assert.equal(serialized.includes('上海'), false);
+  assert.equal(serialized.includes('private-api-key'), false);
+  assert.equal(serialized.includes('多云'), false);
+});
+
 test('同一事件重放幂等，不同内容复用序号时拒绝覆盖', async () => {
   const { writer, rows } = createWriter();
   const event = {

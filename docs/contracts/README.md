@@ -15,13 +15,14 @@
 
 ## 商品、订单与运营
 
-| 契约                                                      | 范围                                   |
-| --------------------------------------------------------- | -------------------------------------- |
-| [商品目录](./product-catalog-crud-contract.md)            | 商品/SKU、导入、推荐及订单库存协作     |
-| [订单](./order-crud-contract.md)                          | 下单、模拟支付、库存、履约和查询       |
-| [管理员运营](./admin-management-crud-contract.md)         | 管理员商品、库存、订单查询和整单发货   |
-| [虚拟试穿](./virtual-try-on-crud-contract.md)             | 照片资产、后台任务、本人结果与隐私边界 |
-| [商品试穿配置](./product-try-on-setting-crud-contract.md) | 商品试穿开关、资格和图片配置           |
+| 契约                                                      | 范围                                     |
+| --------------------------------------------------------- | ---------------------------------------- |
+| [商品目录](./product-catalog-crud-contract.md)            | 商品/SKU、导入、推荐及订单库存协作       |
+| [订单](./order-crud-contract.md)                          | 下单、模拟支付、库存、履约和查询         |
+| [退货退款](./return-refund-crud-contract.md)              | 本人退货退款申请、订单页流程与管理员审核 |
+| [管理员运营](./admin-management-crud-contract.md)         | 管理员商品、库存、订单查询和整单发货     |
+| [虚拟试穿](./virtual-try-on-crud-contract.md)             | 照片资产、后台任务、本人结果与隐私边界   |
+| [商品试穿配置](./product-try-on-setting-crud-contract.md) | 商品试穿开关、资格和图片配置             |
 
 ## 聊天与交互
 
@@ -45,6 +46,7 @@
 | [地址管理界面请求](./chat-tool-address-form-crud-contract.md)      | 请求打开固定本人地址管理页                       |
 | [本人订单履约摘要](./chat-tool-order-fulfillment-crud-contract.md) | 本地订单状态和时间，无实时物流                   |
 | [本站购物规则查询](./chat-tool-shopping-rules-crud-contract.md)    | 既有系统规则、固定来源和版本                     |
+| [聊天天气查询](./chat-tool-weather-crud-contract.md)               | 按用户指定城市查询近 3 天预报的模型工具          |
 
 对应设计、技术与实施记录见 [LLM 文档索引](../modules/llm/README.md)。
 

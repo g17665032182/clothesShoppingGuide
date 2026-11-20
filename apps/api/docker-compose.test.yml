@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clothes_test
+      POSTGRES_PASSWORD: clothes_test
+      POSTGRES_DB: clothes_guide_test
+    ports:
+      - '55435:5432'
+    volumes:
+      - clothes-shopping-guide-test-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U clothes_test -d clothes_guide_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  clothes-shopping-guide-test-postgres:

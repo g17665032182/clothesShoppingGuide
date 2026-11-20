@@ -453,13 +453,13 @@ function updateQuantity(value: string): void {
                 class="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
               >
                 <div class="min-w-0 flex-1">
-                  <p class="break-words text-sm font-medium">
+                  <p class="wrap-break-word text-sm font-medium">
                     {{ savedAddress.label || savedAddress.recipientName }}
                     <span class="font-normal text-muted-foreground">
                       · {{ savedAddress.phone }}
                     </span>
                   </p>
-                  <p class="break-words text-sm text-muted-foreground">
+                  <p class="wrap-break-word text-sm text-muted-foreground">
                     {{ savedAddress.address }}
                   </p>
                 </div>
@@ -474,7 +474,14 @@ function updateQuantity(value: string): void {
               </li>
             </ul>
           </section>
-          <p v-if="isDirty" class="text-xs text-muted-foreground">
+          <p
+            v-if="isDirty && status === 'streaming'"
+            class="text-xs text-muted-foreground"
+            role="status"
+          >
+            助手仍在回复，当前填写暂存在表单中；回复完成后可保存信息并确认下单。
+          </p>
+          <p v-else-if="isDirty" class="text-xs text-muted-foreground">
             有未保存的购买信息变更；保存后才能确认下单。
           </p>
           <div v-if="draft.confirmation" class="flex flex-col gap-2 text-sm">

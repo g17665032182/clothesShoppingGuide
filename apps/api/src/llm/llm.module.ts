@@ -14,12 +14,19 @@ import { createConfiguredTools } from './tools/tool-registry.js';
 import { LLM_MODEL_NAME } from './port/structured-text-generation.tokens.js';
 import { StructuredTextGenerationService } from './port/structured-text-generation.service.js';
 import { STRUCTURED_TEXT_GENERATION_PORT } from './port/structured-text-generation.port.js';
+import { WEATHER_MCP_PORT } from './weather-mcp/weather-mcp.port.js';
+import { WeatherMcpService } from './weather-mcp/weather-mcp.service.js';
 
 @Module({
   imports: [ConfigModule],
   controllers: [],
   providers: [
     ChatModelFactory,
+    WeatherMcpService,
+    {
+      provide: WEATHER_MCP_PORT,
+      useExisting: WeatherMcpService,
+    },
     {
       provide: LLM_CHAT_MODEL,
       inject: [ChatModelFactory],
@@ -56,6 +63,11 @@ import { STRUCTURED_TEXT_GENERATION_PORT } from './port/structured-text-generati
       useExisting: StructuredTextGenerationService,
     },
   ],
-  exports: [LlmService, STRUCTURED_TEXT_GENERATION_PORT, LLM_GRAPH_FACTORY],
+  exports: [
+    LlmService,
+    STRUCTURED_TEXT_GENERATION_PORT,
+    LLM_GRAPH_FACTORY,
+    WEATHER_MCP_PORT,
+  ],
 })
 export class LlmModule {}

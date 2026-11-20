@@ -2,6 +2,7 @@
 import {
   BookOpen,
   ChevronDown,
+  ClipboardCheck,
   LogOut,
   PackageSearch,
   Shirt,
@@ -101,6 +102,12 @@ function signOut() {
                 <RouterLink :to="{ name: 'admin-orders' }">
                   <Truck />
                   订单履约
+                </RouterLink>
+              </DropdownMenuItem>
+              <DropdownMenuItem as-child>
+                <RouterLink :to="{ name: 'admin-return-refunds' }">
+                  <ClipboardCheck />
+                  退货退款
                 </RouterLink>
               </DropdownMenuItem>
               <DropdownMenuItem as-child>

@@ -35,7 +35,8 @@ Neon 连接信息按下表填写到 API 服务：
 | `DB_NAME`     | `PGDATABASE`                   |
 
 `PGSSLMODE=require` 和 `PGCHANNELBINDING=require` 可保留在 Render 环境中，便于
-CLI 或诊断工具使用。API 的 MikroORM 配置已启用 PostgreSQL TLS。
+CLI 或诊断工具使用。API 的 MikroORM 配置默认启用 PostgreSQL TLS；只有隔离的本地
+或 CI PostgreSQL 可显式设置 `DB_SSL=false`，Render/Neon 环境不得关闭 TLS。
 
 不要把 Neon 连接串、密码或其他密钥写入 `render.yaml`、README、Issue 或 Git
 提交。Blueprint 中的 `sync: false` 变量需要在 Render Dashboard 首次创建服务时
@@ -59,9 +60,53 @@ CLI 或诊断工具使用。API 的 MikroORM 配置已启用 PostgreSQL TLS。
 - API：`https://clothes-shopping-guide-api.onrender.com`
 - Web：`https://clothes-shopping-guide-web.onrender.com`
 
+## 测试环境
+
+测试环境使用仓库根目录的 [`render.test.yaml`](../../render.test.yaml)，资源名称与
+生产服务不同。创建测试 Blueprint 时在 Render Dashboard 的 Branch 填
+`codex/render-test-env`，Blueprint Path 填 `render.test.yaml`。测试 API/Web 只跟踪
+该分支，并设置为 GitHub Actions 检查通过后自动部署；测试部署不会修改生产服务。
+Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App 被暂停，Render
+无法接收提交和 CI 状态更新，自动部署将停止。
+
+1. 在 Neon 创建与生产项目隔离的测试项目或分支，并准备专用数据库用户。不要复制
+   生产连接变量或把生产连接串用于测试。
+2. 在 Render 选择 New > Blueprint，连接本仓库及 `codex/render-test-env` 分支，
+   Blueprint Path 填 `render.test.yaml`，确认只创建 `clothes-shopping-guide-test-api` 和
+   `clothes-shopping-guide-test-web`。
+3. 为测试 API 填入 Neon 测试库的 `DB_HOST`、`DB_USER`、`DB_PASSWORD`、
+   `DB_NAME`，并设置独立的 `SEED_ADMIN_EMAIL`、`SEED_ADMIN_PASSWORD` 和
+   `SEED_ADMIN_DISPLAY_NAME`。Render 会生成独立的 `JWT_SECRET` 和
+   `PRODUCT_QUERY_CURSOR_SECRET`。
+4. 默认测试 API 使用无效的 LLM 占位 Key，仅用于通过模块启动校验；聊天请求不会
+   成功。若需测试聊天，须单独授权后为测试 API 配置专用的 `LLM_API_KEY`、
+   `LLM_BASE_URL` 和 `LLM_MODEL`，不得复用生产或本地密钥。同时按供应商实际模型
+   设置 `LLM_CONTEXT_WINDOW_TOKENS`（正整数）和匹配的 `LLM_TOKEN_ENCODING`。
+   窗口缺失或非法时，聊天接口会在调用模型前返回 `503`；只补窗口不会使占位 Key
+   生效。可在测试 API 的 Environment 页面一起设置这些变量，并用 **Save and deploy**
+   重新部署现有构建。虚拟试穿保持关闭，不填写七牛或真实试穿凭据。
+5. 部署完成后确认 API 健康检查通过，再验证测试 Web 的登录及目标业务流程。
+
+测试 API 在构建成功后，先执行 `pnpm deploy:prepare:built` 完成增量迁移和管理员
+初始化，再执行 `pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built`
+导入测试商品。任一步骤失败都会阻止该次 API 发布。确认 Render API 环境变量仅含
+测试库凭据后，才可首次部署或手动触发部署。重复部署会更新对应测试商品与 SKU，
+包括库存；当种子库存低于当前预占量时，商品 Seeder 会拒绝写入并使该次部署失败。
+Web API 地址在 `render.test.yaml` 中指向 `clothes-shopping-guide-test-api.onrender.com`。
+
+向 `codex/render-test-env` 推送后，GitHub Actions 依次执行格式/类型/构建校验、
+API 自动化测试，并在隔离 PostgreSQL 中验证迁移、管理员和测试商品 Seeder。所有
+检查通过后，Render 自动部署测试 API 和 Web；API 健康检查路径为 `/api/health`。
+检查失败时 Render 不会自动部署。
+
 ## 每次发布
 
-推送到 `main` 后由 Render 自动构建。为兼容 Render Free 计划（该计划不支持
+PR 合并到 `main` 后，GitHub Actions 会运行格式/类型/构建校验、API 自动化测试、
+隔离 PostgreSQL 迁移和管理员 Seeder 验证。检查通过后，Render 自动部署生产
+API 和 Web。Render 生产服务的 Auto-Deploy 设置必须为 **After CI Checks
+Pass**，不能为 **On Commit**。现有生产服务不是由 Blueprint 管理的，需在两个生产
+服务的 Dashboard Settings 中分别确认此选项。这样迁移只会在生产 API 的检查通过后
+由其部署命令执行。为兼容 Render Free 计划（该计划不支持
 `preDeployCommand`），API 的构建命令在编译成功后继续执行迁移和 Seeder。发布顺序
 固定为：
 
@@ -87,6 +132,11 @@ pnpm migration:fresh
 ```
 
 它会删除并重建数据库，只能用于明确可销毁的本地或 CI 数据库。
+
+GitHub 仓库 `main` 分支需将 `CI / check` 设为必需状态检查，避免未通过 CI 的 PR
+合并。Render 的 **After CI Checks Pass** 是部署门控，GitHub 分支保护则是合并门控；
+二者都需开启。Render 将 GitHub Actions 的 `success`、`neutral` 和 `skipped` 结论
+视为检查通过，因此必需的 `check` Job 保持无条件运行，不要以 job-level `if` 跳过。
 
 ## 手工执行迁移或 Seeder
 

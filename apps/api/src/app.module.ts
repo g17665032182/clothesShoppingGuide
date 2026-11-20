@@ -18,6 +18,7 @@ import { UserPreferencesModule } from './user-preferences/index.js';
 import { OrderCatalogCoordinationModule } from './order-catalog-coordination/order-catalog-coordination.module.js';
 import { VirtualTryOnModule } from './virtual-try-on/virtual-try-on.module.js';
 import { UserAddressesModule } from './user-addresses/index.js';
+import { ReturnRefundModule } from './return-refund/index.js';
 import { parseRateLimitConfig } from './common/rate-limit/rate-limit.config.js';
 
 @Module({
@@ -85,6 +86,7 @@ import { parseRateLimitConfig } from './common/rate-limit/rate-limit.config.js';
     AuthModule,
     LlmModule,
     ChatRecordsModule,
+    ReturnRefundModule,
     VirtualTryOnModule,
     UserAddressesModule,
     HealthModule,

@@ -47,6 +47,12 @@ const DYNAMIC_FORM_TOOL_NAMES = new Set(['request_dynamic_form']);
 const PREFERENCE_FORM_TOOL_NAMES = new Set(['request_preference_form']);
 const ADDRESS_FORM_TOOL_NAMES = new Set(['request_address_form']);
 const SHOPPING_RULES_TOOL_NAME = 'get_shopping_rules';
+const WEATHER_FORECAST_TOOL_NAME = 'get_weather_forecast';
+const RETURN_REFUND_TOOL_NAMES = new Set([
+  'list_my_return_refund_orders',
+  'get_my_return_refund_items',
+  'create_return_refund_application',
+]);
 const HIDDEN_USER_INFORMATION_TOOL_NAMES = new Set([
   'get_my_information',
   'get_product_skus',
@@ -54,6 +60,7 @@ const HIDDEN_USER_INFORMATION_TOOL_NAMES = new Set([
   'get_my_order_fulfillment',
   'list_my_shipping_addresses',
   'select_my_shipping_address',
+  ...RETURN_REFUND_TOOL_NAMES,
 ]);
 
 function isPurchaseTool(name: string): boolean {
@@ -67,6 +74,7 @@ function isHiddenTool(name: string): boolean {
     PREFERENCE_FORM_TOOL_NAMES.has(name) ||
     ADDRESS_FORM_TOOL_NAMES.has(name) ||
     name === SHOPPING_RULES_TOOL_NAME ||
+    name === WEATHER_FORECAST_TOOL_NAME ||
     HIDDEN_USER_INFORMATION_TOOL_NAMES.has(name)
   );
 }
@@ -93,7 +101,16 @@ function collectNestedPrivateToolCallIds(
       name === 'get_my_order_fulfillment' ||
       functionName === 'get_my_order_fulfillment' ||
       name === SHOPPING_RULES_TOOL_NAME ||
-      functionName === SHOPPING_RULES_TOOL_NAME)
+      functionName === SHOPPING_RULES_TOOL_NAME ||
+      name === WEATHER_FORECAST_TOOL_NAME ||
+      functionName === WEATHER_FORECAST_TOOL_NAME)
+  ) {
+    hiddenCallIds.add(id);
+  }
+  if (
+    id &&
+    ((name !== null && RETURN_REFUND_TOOL_NAMES.has(name)) ||
+      (functionName !== null && RETURN_REFUND_TOOL_NAMES.has(functionName)))
   ) {
     hiddenCallIds.add(id);
   }
@@ -146,7 +163,7 @@ export function mapTraceEventsToMessages(
   for (const event of sorted) {
     if (event.eventType === 'model_response') {
       const record = asRecord(event.payload);
-      // 地址导航、履约和规则查询额外识别嵌套及非法调用，避免恢复对应结果。
+      // 地址导航、履约、规则和天气查询额外识别嵌套及非法调用。
       for (const key of ['toolCalls', 'tool_calls', 'invalid_tool_calls']) {
         const calls = record[key];
         if (!Array.isArray(calls)) continue;

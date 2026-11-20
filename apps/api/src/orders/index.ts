@@ -26,3 +26,11 @@ export {
   type OrderCatalogImportPort,
   type UnavailableOrderLockSet,
 } from './port/order-catalog-import.port.js';
+export {
+  ORDER_RETURN_REFUND_READER,
+  type OrderReturnRefundReaderPort,
+  type ReturnRefundOrderCandidate,
+  type ReturnRefundOrderItemSnapshot,
+  type ReturnRefundOrderSnapshot,
+  type ReturnRefundOrderStatus,
+} from './port/order-return-refund-reader.port.js';

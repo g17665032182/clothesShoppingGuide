@@ -5,6 +5,7 @@ services:
     name: clothes-shopping-guide-api
     runtime: node
     branch: main
+    autoDeployTrigger: checksPass
     # Free 计划不支持 preDeployCommand，因此在编译完成后执行增量迁移和幂等 Seeder。
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/api build && pnpm deploy:prepare:built
     startCommand: pnpm start:prod
@@ -65,6 +66,7 @@ services:
     name: clothes-shopping-guide-web
     runtime: static
     branch: main
+    autoDeployTrigger: checksPass
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build
     staticPublishPath: apps/web/dist
     envVars:
