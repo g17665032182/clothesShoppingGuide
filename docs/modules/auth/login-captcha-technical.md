@@ -89,7 +89,7 @@ apps/web/src/
 
 存储方案：
 
-- `CAPTCHA_STORAGE=memory`（默认）继续使用认证模块私有、带容量上限的内存存储，适用于本地和现有单实例 Render。
+- `CAPTCHA_STORAGE=memory`（默认）继续使用认证模块私有、带容量上限的内存存储，仅适用于本地开发和不涉及多实例的测试。
 - `CAPTCHA_STORAGE=redis` 时使用 `CAPTCHA_REDIS_URL` 和至少 32 字符的 `CAPTCHA_HMAC_SECRET`。答案以绑定挑战 ID 的 HMAC 摘要存储，不保存明文；写入使用 `SET NX EX 300`，消费使用 Redis 6.2+ 的 `GETDEL` 原子读取并删除。
 - Redis 连接或命令失败统一映射为 `503`，不回退到进程内存或放行登录；无效、过期、错误和已消费挑战继续使用现有验证码错误。所有 API 副本必须使用同一 HMAC 密钥。
 - 登录和验证码接口本阶段不增加服务端频率限制，后续作为独立安全能力评估。
@@ -111,7 +111,8 @@ apps/web/src/
 - 挑战 ID 使用密码学安全随机数生成；答案比较采用恒定时间比较，或先对答案做带服务端随机盐的摘要后比较。
 - 新增错误日志仅记录错误类别和请求关联信息，不记录答案、图像内容、凭据或验证码输入。
 - 生产部署若采用共享状态，需确认挑战 key TTL、原子消费能力、故障降级和访问凭据管理；不将验证码答案明文持久化。
-- Kubernetes API Deployment 必须显式使用 `CAPTCHA_STORAGE=redis`，并为 Redis 和 HMAC 密钥创建独立的环境 Secret；生产、测试不能共用。
+- Render 测试/生产和 Kubernetes API Deployment 必须显式使用 `CAPTCHA_STORAGE=redis`，
+  并为 Redis 和 HMAC 密钥创建独立的环境 Secret；生产、测试不能共用。
 
 ## 测试方案
 

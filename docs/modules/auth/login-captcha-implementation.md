@@ -60,7 +60,8 @@
 - 确认登录页当前未提交修改，保留已完成的登录成功跳转 `/chat`。
 - 确认验证码答案、输入和 Token 不写入日志。
 - 确认单实例内存存储限制写入技术注释和部署说明，不伪装成多实例方案。
-- 确认 Kubernetes 环境提供 `CAPTCHA_REDIS_URL` 和共享的 `CAPTCHA_HMAC_SECRET`，不把 Redis 凭据写入清单。
+- 确认 Render 测试/生产或 Kubernetes 环境提供 `CAPTCHA_REDIS_URL` 和独立的
+  `CAPTCHA_HMAC_SECRET`，不把 Redis 凭据写入仓库清单。
 
 ## 主代理集成任务
 

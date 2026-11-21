@@ -43,18 +43,8 @@ kubectl kustomize deploy/k8s/staging
 kubectl kustomize deploy/k8s/production
 ```
 
-`.github/workflows/kubernetes-release.yml` 的发布关系固定为：
-
-- `codex/render-test-env` 的 CI 成功后，可发布到测试命名空间
-  `clothes-guide-staging`。
-- `main` 的 CI 成功后，复用同一批 SHA 镜像先发布测试；测试发布成功并通过
-  `production` Environment 审批后，再发布到 `clothes-guide-production`。
-- `K8S_STAGING_ENABLED` 和 `K8S_PRODUCTION_ENABLED` 默认未设置，均为关闭状态；
-  staging 开关关闭时不会构建或推送 GHCR 镜像，也不会连接外部集群。
-- 生产晋升依赖同一批测试镜像，因此启用生产时也必须保持
-  `K8S_STAGING_ENABLED=true`。
-- 镜像标签包含 Git SHA、workflow run ID 和 attempt；同一运行的测试、生产部署使用
-  完全相同的镜像标签，重跑会生成新标签。
+当前没有自动 Kubernetes/GHCR 发布 workflow。测试和生产继续由 Render Blueprint 发布；
+这些 overlay 仅用于后续明确迁移到外部 Kubernetes 时的手动验收。
 
 启用前，在两个命名空间分别创建 `clothes-guide-api-env` 和 `ghcr-pull`。两个环境
 必须使用不同的数据库、Redis、JWT/游标签名密钥、验证码 HMAC 密钥和第三方凭据。
