@@ -10,15 +10,21 @@ interface CaptchaChallengeEntry {
 const MAX_CHALLENGES = 10_000;
 const CHALLENGE_TTL_MS = 5 * 60 * 1_000;
 
+export interface CaptchaChallengeStorePort {
+  createId(): string;
+  save(challengeId: string, answer: string): Promise<void>;
+  consume(challengeId: string, answer: string): Promise<boolean>;
+}
+
 @Injectable()
-export class CaptchaChallengeStore {
+export class CaptchaChallengeStore implements CaptchaChallengeStorePort {
   private readonly challenges = new Map<string, CaptchaChallengeEntry>();
 
   public createId(): string {
     return randomBytes(24).toString('base64url');
   }
 
-  public save(challengeId: string, answer: string): void {
+  public async save(challengeId: string, answer: string): Promise<void> {
     this.removeExpired();
     if (this.challenges.size >= MAX_CHALLENGES) {
       const oldestChallengeId = this.challenges.keys().next().value;
@@ -33,7 +39,7 @@ export class CaptchaChallengeStore {
     });
   }
 
-  public consume(challengeId: string, answer: string): boolean {
+  public async consume(challengeId: string, answer: string): Promise<boolean> {
     const challenge = this.challenges.get(challengeId);
     if (!challenge) return false;
 

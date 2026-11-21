@@ -138,6 +138,54 @@ GitHub 仓库 `main` 分支需将 `CI / check` 设为必需状态检查，避免
 二者都需开启。Render 将 GitHub Actions 的 `success`、`neutral` 和 `skipped` 结论
 视为检查通过，因此必需的 `check` Job 保持无条件运行，不要以 job-level `if` 跳过。
 
+## Kubernetes 测试与生产发布（默认关闭）
+
+Docker/Kubernetes 资源位于 [`deploy/`](../../deploy/)，现行 Render 发布不受影响。
+`.github/workflows/kubernetes-release.yml` 在测试固定分支
+`codex/render-test-env` 或 `main` 的 `CI` 检查成功后构建并推送 GHCR 镜像。测试
+发布只有把仓库变量 `K8S_STAGING_ENABLED` 设为 `true` 后才会构建/推送镜像并连接测试集群；生产
+发布还要求 `K8S_PRODUCTION_ENABLED=true`（因此生产晋升也必须保持 staging 开关开启），
+并由 `production` Environment 的审批规则控制。未配置这些变量时不会执行 Kubernetes
+部署。
+
+对应环境固定为：
+
+| 用途 | 分支/触发                                                 | Kustomize overlay       | Namespace                  |
+| ---- | --------------------------------------------------------- | ----------------------- | -------------------------- |
+| 测试 | `codex/render-test-env` 的 CI 成功；`main` 也会先经过测试 | `deploy/k8s/staging`    | `clothes-guide-staging`    |
+| 生产 | `main` 的测试发布成功且通过生产环境审批                   | `deploy/k8s/production` | `clothes-guide-production` |
+
+启用前，在两个命名空间分别准备：
+
+1. `clothes-guide-api-env`：Neon `DB_*`、JWT/游标签名密钥、LLM/Seeder 配置，以及
+   `CAPTCHA_STORAGE=redis`、`CAPTCHA_REDIS_URL` 和至少 32 字符的
+   `CAPTCHA_HMAC_SECRET`。测试与生产不得共用数据库、Redis 或密钥。
+2. `ghcr-pull`：读取 GHCR 私有镜像的 `kubernetes.io/dockerconfigjson` Secret。
+3. GitHub Environment `staging` / `production`：`KUBE_CONFIG_DATA` 为 Base64 编码的
+   只允许对应命名空间操作的最小权限 kubeconfig。Namespace 需由集群管理员预先
+   创建；Gateway、HTTPRoute、TLS 和外部 Redis 由环境管理员创建，不写入仓库。
+   `K8S_STAGING_ENABLED`、`K8S_PRODUCTION_ENABLED` 是 GitHub 仓库变量；production
+   Environment 应设置必需审批人，并限制仅 `main` 可部署。
+
+先将本次部署配置合入 `main`，再把 `main` 同步到 `codex/render-test-env`，确保测试分支
+包含相同的 Dockerfile、Kustomize overlay 和发布 workflow。发布仍默认关闭；启用前
+必须确认各环境凭据、GHCR 拉取权限、Gateway/域名/TLS 和独立 Neon/Redis 已就绪。
+当前 Render 服务仍自动发布，因此在 Kubernetes 真实切流前不要启用对应 K8s 开关，
+以免两套部署同时接收发布。
+
+发布顺序为：测试分支或 `main` 提交构建 API runtime、API migration 和 Web 镜像 →
+测试命名空间运行同一迁移镜像的增量 `migration:up` Job → Job 成功后更新测试
+Deployment → `main` 的测试发布通过后等待生产审批 → 使用同一批镜像运行生产迁移
+并更新生产 Deployment。API/Web 标签由提交 SHA、workflow run ID 和 attempt 组成；
+同一运行内测试与生产复用标签，重跑会得到新标签，不使用漂移的 `latest`。
+Kubernetes 迁移失败不会继续更新 Deployment；数据库不随应用回滚。现有 Render
+仍作为切换前的回退入口。
+
+本地验证可直接使用 `kind-clothes-guide-dev` 集群和
+[`deploy/k8s/local/README.md`](../../deploy/k8s/local/README.md)。本地 namespace 为
+`clothes-guide-dev`，数据库使用临时 `emptyDir`，删除集群会清空数据；它不读取生产
+Neon、Render 或 GHCR 凭据。
+
 ## 手工执行迁移或 Seeder
 
 优先使用 Render 的 API Shell，并确认当前 Shell 属于 API 服务。手工脚本会先构建

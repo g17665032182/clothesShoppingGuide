@@ -48,6 +48,8 @@ AGENTS.md              开发与验证约定
 
 较大功能采用 Agent Team 协作：主代理负责需求边界、拆分、集成和最终验证；团队代理按模块或文件承担相互独立的设计、实现或审查任务。小型或强耦合改动可由主代理直接完成。派发任务时明确文件所有权与验收标准；共享数据库、端口和构建目录等资源应隔离或串行使用。主代理审阅并验证集成结果后，才能报告整体完成。具体开发约定见 [`AGENTS.md`](./AGENTS.md)。
 
+分支协作、CI/CD、Docker + Kubernetes 迁移及 Redis 验证码见[多人协作与 Kubernetes 发布设计](./docs/development/ci-cd-kubernetes-design.md)。第一阶段已实现，生产切换待确认；现行部署仍以 Render 手册为准。
+
 ## 本地启动
 
 安装依赖并创建后端配置；已有配置时保留原文件：
@@ -99,10 +101,13 @@ Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库
 复用生产 Render 服务或数据库。测试 API 部署时，在增量迁移和管理员初始化通过后
 自动导入测试商品；首次创建和部署步骤见部署手册。
 
-CI 在发往 `main` 的 PR、`main` 推送和 `codex/render-test-env` 推送时运行格式/类型/
-构建、API 自动化测试及临时 PostgreSQL 迁移和管理员 Seeder 验证。`main` 要求 PR 和 `check` 状态
-通过；Render 测试与生产服务均只在 GitHub 检查通过后自动部署。测试验证通过后再
-通过 PR 合并到 `main`，测试数据库数据不会回灌生产库。
+CI 在发往 `main` 的 PR、`main`、`codex/feature/*`、`codex/test/*` 和
+`codex/render-test-env` 推送时运行格式/类型/构建、API 自动化测试及临时 PostgreSQL
+迁移和管理员 Seeder 验证，并为显式 Redis 集成测试准备隔离服务。`main` 要求 PR 和
+`check` 状态通过；Render 测试与生产服务仍只在 GitHub 检查通过后自动部署。可选的
+Kubernetes 发布工作流在 `main` 或 `codex/render-test-env` 的 CI 成功后才发布 GHCR
+镜像；未启用仓库变量时不会构建、推送镜像或连接集群。测试验证通过后再通过 PR
+合并到 `main`，测试数据库数据不会回灌生产库。
 
 ### 本地隔离测试环境
 

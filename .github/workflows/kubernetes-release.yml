@@ -1,0 +1,229 @@
+name: Kubernetes Release
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+      - codex/render-test-env
+
+# 发布只读取仓库内容并向 GHCR 写入镜像；集群凭据仅从受保护 Environment 注入。
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: kubernetes-release
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      vars.K8S_STAGING_ENABLED == 'true' &&
+      (github.event.workflow_run.head_branch == 'main' ||
+       github.event.workflow_run.head_branch == 'codex/render-test-env')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_owner: ${{ steps.meta.outputs.image_owner }}
+    steps:
+      - name: 检出通过 CI 的提交
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 计算本次流水线唯一镜像标签
+        id: meta
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image_owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "image_tag=sha-${RELEASE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: 构建并推送 API 运行镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/api.Dockerfile
+          target: runtime
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.image_owner }}/clothes-guide-api:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=api-runtime
+          cache-to: type=gha,mode=max,scope=api-runtime
+      - name: 构建并推送 API 迁移镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/api.Dockerfile
+          target: migration
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.image_owner }}/clothes-guide-api-migration:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=api-migration
+          cache-to: type=gha,mode=max,scope=api-migration
+      - name: 构建并推送 Web 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/web.Dockerfile
+          target: runtime
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.image_owner }}/clothes-guide-web:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=gha,scope=web-runtime
+          cache-to: type=gha,mode=max,scope=web-runtime
+
+  deploy-staging:
+    needs: publish
+    if: >-
+      needs.publish.result == 'success' &&
+      vars.K8S_STAGING_ENABLED == 'true' &&
+      (github.event.workflow_run.head_branch == 'main' ||
+       github.event.workflow_run.head_branch == 'codex/render-test-env')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      K8S_NAMESPACE: clothes-guide-staging
+      IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
+      IMAGE_OWNER: ${{ needs.publish.outputs.image_owner }}
+    steps:
+      - name: 检出发布清单
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+      - name: 配置 kubectl
+        uses: azure/setup-kubectl@v4
+      - name: 写入集群凭据
+        shell: bash
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_DATA"
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG_DATA" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: 运行同一提交的数据库迁移
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/migration-job.yaml"
+          sed "s#ghcr.io/g17665032182/clothes-guide-api-migration:latest#ghcr.io/${IMAGE_OWNER}/clothes-guide-api-migration:${IMAGE_TAG}#" \
+            deploy/k8s/migration-job.yaml > "$tmp"
+          job_name="$(kubectl create -n "$K8S_NAMESPACE" -f "$tmp" -o jsonpath='{.metadata.name}')"
+          kubectl wait -n "$K8S_NAMESPACE" --for=condition=complete --timeout=10m "job/$job_name"
+      - name: 渲染不可变镜像并更新测试环境
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/k8s"
+          cp -R deploy/k8s "$work"
+          sed -i.bak "s/newTag: latest/newTag: ${IMAGE_TAG}/g; s#ghcr.io/g17665032182/#ghcr.io/${IMAGE_OWNER}/#g" "$work/base/kustomization.yaml"
+          kubectl apply -k "$work/staging"
+          kubectl rollout status -n "$K8S_NAMESPACE" deployment/clothes-guide-api --timeout=10m
+          kubectl rollout status -n "$K8S_NAMESPACE" deployment/clothes-guide-web --timeout=10m
+      - name: 验证测试 API 健康检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl port-forward -n "$K8S_NAMESPACE" service/clothes-guide-api 3000:80 \
+            > "$RUNNER_TEMP/staging-port-forward.log" 2>&1 &
+          forward_pid=$!
+          trap 'kill "$forward_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/staging-port-forward.log"
+          exit 1
+
+  deploy-production:
+    needs:
+      - publish
+      - deploy-staging
+    if: >-
+      needs.publish.result == 'success' &&
+      needs.deploy-staging.result == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      vars.K8S_PRODUCTION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      K8S_NAMESPACE: clothes-guide-production
+      IMAGE_TAG: ${{ needs.publish.outputs.image_tag }}
+      IMAGE_OWNER: ${{ needs.publish.outputs.image_owner }}
+    steps:
+      - name: 检出发布清单
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+      - name: 配置 kubectl
+        uses: azure/setup-kubectl@v4
+      - name: 写入集群凭据
+        shell: bash
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBE_CONFIG_DATA"
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG_DATA" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: 运行同一提交的数据库迁移
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/migration-job.yaml"
+          sed "s#ghcr.io/g17665032182/clothes-guide-api-migration:latest#ghcr.io/${IMAGE_OWNER}/clothes-guide-api-migration:${IMAGE_TAG}#" \
+            deploy/k8s/migration-job.yaml > "$tmp"
+          job_name="$(kubectl create -n "$K8S_NAMESPACE" -f "$tmp" -o jsonpath='{.metadata.name}')"
+          kubectl wait -n "$K8S_NAMESPACE" --for=condition=complete --timeout=10m "job/$job_name"
+      - name: 渲染不可变镜像并更新生产环境
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/k8s"
+          cp -R deploy/k8s "$work"
+          sed -i.bak "s/newTag: latest/newTag: ${IMAGE_TAG}/g; s#ghcr.io/g17665032182/#ghcr.io/${IMAGE_OWNER}/#g" "$work/base/kustomization.yaml"
+          kubectl apply -k "$work/production"
+          kubectl rollout status -n "$K8S_NAMESPACE" deployment/clothes-guide-api --timeout=10m
+          kubectl rollout status -n "$K8S_NAMESPACE" deployment/clothes-guide-web --timeout=10m
+      - name: 验证生产 API 健康检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl port-forward -n "$K8S_NAMESPACE" service/clothes-guide-api 3000:80 \
+            > "$RUNNER_TEMP/production-port-forward.log" 2>&1 &
+          forward_pid=$!
+          trap 'kill "$forward_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/production-port-forward.log"
+          exit 1

@@ -5,13 +5,16 @@ import {
   type CaptchaChallenge,
   type CaptchaProvider,
 } from '../captcha-provider.js';
-import { CaptchaChallengeStore } from './captcha-challenge.store.js';
+import {
+  CaptchaChallengeStore,
+  type CaptchaChallengeStorePort,
+} from './captcha-challenge.store.js';
 
 @Injectable()
 export class ImageCaptchaProvider implements CaptchaProvider {
   public constructor(
     @Inject(CaptchaChallengeStore)
-    private readonly challenges: CaptchaChallengeStore,
+    private readonly challenges: CaptchaChallengeStorePort,
   ) {}
 
   public async issueChallenge(): Promise<CaptchaChallenge> {
@@ -23,7 +26,7 @@ export class ImageCaptchaProvider implements CaptchaProvider {
       background: '#ffffff',
     });
     const challengeId = this.challenges.createId();
-    this.challenges.save(challengeId, captcha.text);
+    await this.challenges.save(challengeId, captcha.text);
 
     return {
       challengeId,

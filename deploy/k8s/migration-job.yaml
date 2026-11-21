@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: clothes-guide-migration-
+  labels:
+    app.kubernetes.io/name: clothes-guide-migration
+    app.kubernetes.io/part-of: clothes-shopping-guide
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clothes-guide-migration
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: ghcr.io/g17665032182/clothes-guide-api-migration:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: clothes-guide-api-env
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL

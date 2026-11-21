@@ -2,7 +2,7 @@
 
 ## 状态与上下文
 
-- 状态：已实现
+- 状态：已实现；Redis 共享存储适配器已加入，Kubernetes 通过环境变量启用
 - 关联设计：[登录验证码设计文档](./login-captcha-design.md)
 - 关联契约：[用户与认证业务契约](../../contracts/user-crud-contract.md)
 - 所属模块：`apps/api/src/auth`、`apps/web/src/pages/auth`
@@ -29,6 +29,7 @@ apps/api/src/auth/
       captcha.service.ts
       image-captcha.provider.ts
       captcha-challenge.store.ts
+      redis-captcha-challenge.store.ts
     dto/
       captcha-response.dto.ts
   controller/
@@ -48,7 +49,7 @@ apps/web/src/
 
 ## 依赖和官方文档
 
-- 本地依赖检查未发现验证码生成器、缓存模块或 Redis 客户端可复用。
+- 本地依赖检查未发现可复用的 Redis 客户端；已新增固定版本 `redis@6.3.1`，仅使用 node-redis 的基础连接、`SET` 和 `GETDEL` 命令。
 - 拟采用 `svg-captcha` 生成图片，不让该库管理登录会话或验证码状态。其上游 README 说明 `create()` 返回 SVG 数据和验证码文本，生成图像使用 SVG，不需要 C++ 图形插件：[svg-captcha 上游文档](https://github.com/produck/svg-captcha)。
 - 维护风险：上游仓库长期缺少活跃维护。该库只作为可替换的 SVG 渲染器使用；实施前需复核锁定版本、依赖树、许可证和安全扫描。若项目不接受此维护状态，应先选定替代包再进入实施。
 - NestJS、Vue 与现有 API 层均复用当前依赖，不需新增验证码相关前端依赖。
@@ -88,9 +89,9 @@ apps/web/src/
 
 存储方案：
 
-- 单 API 进程时可用认证模块私有、带容量上限的内存存储，按 TTL 清理并在校验时同步消费。
-- 内存存储无法在多个 API 副本间共享挑战状态；若生产环境水平扩容，用户可能在不同副本取图和登录而被误判，且单进程限流无法形成全局限制。
-- 仓库当前未发现 Redis 或共享缓存依赖/本地服务定义；本阶段确认按单 API 实例部署，不增加共享存储。
+- `CAPTCHA_STORAGE=memory`（默认）继续使用认证模块私有、带容量上限的内存存储，适用于本地和现有单实例 Render。
+- `CAPTCHA_STORAGE=redis` 时使用 `CAPTCHA_REDIS_URL` 和至少 32 字符的 `CAPTCHA_HMAC_SECRET`。答案以绑定挑战 ID 的 HMAC 摘要存储，不保存明文；写入使用 `SET NX EX 300`，消费使用 Redis 6.2+ 的 `GETDEL` 原子读取并删除。
+- Redis 连接或命令失败统一映射为 `503`，不回退到进程内存或放行登录；无效、过期、错误和已消费挑战继续使用现有验证码错误。所有 API 副本必须使用同一 HMAC 密钥。
 - 登录和验证码接口本阶段不增加服务端频率限制，后续作为独立安全能力评估。
 
 ## DTO、校验和错误映射
@@ -110,6 +111,7 @@ apps/web/src/
 - 挑战 ID 使用密码学安全随机数生成；答案比较采用恒定时间比较，或先对答案做带服务端随机盐的摘要后比较。
 - 新增错误日志仅记录错误类别和请求关联信息，不记录答案、图像内容、凭据或验证码输入。
 - 生产部署若采用共享状态，需确认挑战 key TTL、原子消费能力、故障降级和访问凭据管理；不将验证码答案明文持久化。
+- Kubernetes API Deployment 必须显式使用 `CAPTCHA_STORAGE=redis`，并为 Redis 和 HMAC 密钥创建独立的环境 Secret；生产、测试不能共用。
 
 ## 测试方案
 
@@ -119,6 +121,7 @@ apps/web/src/
 - Controller/DTO：公开路由、DTO 非空/长度校验、Swagger 元数据和错误映射。
 - Web：首次进入不获取、手动获取与冷却、提交中、验证码失败后立即手动获取新挑战、本地校验不解除冷却、登录成功及获取失败状态。
 - 测试使用确定性 Provider/Store 替身，不访问外部验证码服务、不使用真实密钥或生产服务。
+- Redis 集成测试在显式提供 `REDIS_CAPTCHA_TEST_URL` 时运行，使用两个独立 Store 验证跨实例读取和一次性消费；未提供时按跳过统计，不把跳过记为通过。
 
 ## 验证命令
 
@@ -138,11 +141,12 @@ pnpm check
 
 - [x] 使用 `svg-captcha` 作为图片验证码生成器，并保留 Provider/适配器替换入口。
 - [x] 挑战有效期 5 分钟，提交即一次性消费，答案比较不区分大小写。
-- [x] 使用认证模块私有内存存储，当前按单 API 实例部署。
+- [x] 单实例默认使用认证模块私有内存存储；Kubernetes 多副本使用 Redis 共享存储。
 - [x] 本阶段不增加验证码与登录服务端限流。
 - [x] `GET /auth/captcha` 返回 SVG data URI，登录字段为 `captchaChallengeId`、`captchaAnswer`。
 - [x] 首次进入不加载图片，仅用户点击获取或刷新成功后倒计时 60 秒，页面卸载时清理并重置状态。
 
-## 下一阶段
+## 实施记录
 
-- 按[登录验证码实施文档](./login-captcha-implementation.md)完成并验证。
+- 内存 Store、Redis Store、Provider 接线和自动化测试已实现。
+- Redis 集成测试仅在显式提供临时 Redis 地址时运行；真实 Kubernetes/Redis 验收仍需在目标环境执行。

@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 状态：已实施；验证码仅在测试、生产环境启用
+- 状态：已实施；验证码仅在测试、生产环境启用，Redis 共享存储已接入但默认不启用
 - 实施依据：用户已确认本实施文档。
 
 ## 开发流程总览
@@ -30,6 +30,7 @@
 - `apps/api/package.json`、`pnpm-lock.yaml`：新增并锁定 `svg-captcha` 依赖。
 - `apps/api/src/auth/captcha/captcha-provider.ts`：验证码 Provider 合约。
 - `apps/api/src/auth/captcha/service/captcha-challenge.store.ts`：带 TTL、容量上限和一次性消费的内存存储。
+- `apps/api/src/auth/captcha/service/redis-captcha-challenge.store.ts`：Redis `SET NX EX`、`GETDEL`、HMAC 摘要和故障映射。
 - `apps/api/src/auth/captcha/service/image-captcha.provider.ts`：调用 `svg-captcha` 生成 SVG，并保存答案摘要。
 - `apps/api/src/auth/captcha/service/captcha.service.ts`：编排生成、校验和统一错误。
 - `apps/api/src/auth/captcha/dto/captcha-response.dto.ts`：验证码响应模型。
@@ -38,6 +39,7 @@
 - `apps/api/src/auth/dto/login.dto.ts`：增加验证码字段及校验。
 - `apps/api/src/auth/service/auth.service.ts`、`apps/api/src/auth/auth.module.ts`：接入验证码校验能力。
 - `apps/api/src/auth/spec/`：验证码和登录流程测试。
+- `apps/api/src/auth/spec/redis-captcha-challenge.store.spec.ts`：显式 Redis 集成测试。
 
 前端文件：
 
@@ -58,6 +60,7 @@
 - 确认登录页当前未提交修改，保留已完成的登录成功跳转 `/chat`。
 - 确认验证码答案、输入和 Token 不写入日志。
 - 确认单实例内存存储限制写入技术注释和部署说明，不伪装成多实例方案。
+- 确认 Kubernetes 环境提供 `CAPTCHA_REDIS_URL` 和共享的 `CAPTCHA_HMAC_SECRET`，不把 Redis 凭据写入清单。
 
 ## 主代理集成任务
 
@@ -96,6 +99,7 @@
 - 先运行认证模块测试和前端类型检查，再运行构建与全仓库检查。
 - 有可用 API 和数据库时执行登录验证码 Smoke Test；不使用真实第三方密钥。
 - 检查 OpenAPI 元数据包含验证码路由和登录字段。
+- 在可销毁的临时 Redis 上运行跨实例一次性消费测试；Redis 不可用时记录为未执行，不改用生产或开发 Redis。
 
 ## 验收标准
 
@@ -107,10 +111,11 @@
 - [x] 注册、刷新 Token、退出登录和用户资料流程不受影响。
 - [x] Provider 边界允许未来接入第三方验证码，不要求修改 `AuthService` 的核心认证流程。
 - [x] 测试不访问真实第三方服务，不记录验证码答案或用户凭据。
+- [x] Redis 模式下存储故障返回 `503`，不回退到本地内存。
 
 ## 风险和停止条件
 
 - `svg-captcha` 依赖审查或安装失败时停止实现，先重新确认替代库，不手写 SVG 生成器。
-- 若部署要求多 API 副本，停止使用内存 Store，回到技术设计阶段确认共享存储。
+- 若部署要求多 API 副本，必须使用 Redis Store；未配置 Redis 或 HMAC 密钥时停止部署，不回退到内存。
 - 若需要服务端限流、第三方 Provider 或注册验证码，回到设计文档重新确认范围。
 - 若全局检查因 `.agents/`、`.agent/` 等文档目录产生误报，保留原始错误并调整检查配置，而不是修改业务代码或删除文档。

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clothes-guide-api
+spec:
+  template:
+    spec:
+      imagePullSecrets: []
+      containers:
+        - name: api
+          imagePullPolicy: Never
+          env:
+            - name: DB_HOST
+              value: clothes-guide-postgres
+            - name: DB_PORT
+              value: '5432'
+            - name: DB_SSL
+              value: 'false'
+            - name: CAPTCHA_REDIS_URL
+              value: redis://clothes-guide-redis:6379
+            - name: LOG_LEVEL
+              value: info
