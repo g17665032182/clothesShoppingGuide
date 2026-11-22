@@ -28,6 +28,8 @@ import {
   getDynamicForm,
   submitDynamicForm,
 } from '@/api/modules/chat-dynamic-form';
+import { submitRecommendationFeedback } from '@/api/modules/fashion-recommendation';
+import type { RecommendationFeedbackPayload } from '@/api/types/fashion-recommendation';
 
 export function useChatPage() {
   const chat = useChatStore();
@@ -65,6 +67,21 @@ export function useChatPage() {
   let disposed = false;
   const dynamicFormSubmitting = ref<Record<string, boolean>>({});
   const dynamicFormErrors = ref<Record<string, string>>({});
+  const recommendationFeedbackStates = ref<
+    Record<
+      string,
+      {
+        status:
+          | 'idle'
+          | 'submitting'
+          | 'accepted'
+          | 'duplicate'
+          | 'disabled'
+          | 'error';
+        error: string;
+      }
+    >
+  >({});
   const dynamicFormControllers = new Map<string, AbortController>();
   const preferenceFormRequestsInFlight = new Set<string>();
   const addressFormRequestsInFlight = new Set<string>();
@@ -203,6 +220,7 @@ export function useChatPage() {
       dynamicFormControllers.clear();
       dynamicFormSubmitting.value = {};
       dynamicFormErrors.value = {};
+      recommendationFeedbackStates.value = {};
       replacementDialogOpen.value = false;
       replacementProductId.value = null;
       if (candidateCancellationSessionKey.value !== null) {
@@ -542,6 +560,87 @@ export function useChatPage() {
 
   function loadMoreProducts(messageId: string, resultIndex: number) {
     void chat.loadMoreProducts(messageId, resultIndex);
+  }
+
+  function recommendationFeedbackKey(targetRef: string): string {
+    return targetRef;
+  }
+
+  function recommendationFeedbackStatus(
+    targetRef: string,
+  ): 'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error' {
+    return (
+      recommendationFeedbackStates.value[recommendationFeedbackKey(targetRef)]
+        ?.status ?? 'idle'
+    );
+  }
+
+  function recommendationFeedbackError(targetRef: string): string {
+    return (
+      recommendationFeedbackStates.value[recommendationFeedbackKey(targetRef)]
+        ?.error ?? ''
+    );
+  }
+
+  async function submitRecommendationFeedbackFromCard(
+    payload: RecommendationFeedbackPayload,
+  ): Promise<void> {
+    const token = auth.state.token;
+    const conversationId = chat.activeConversationId;
+    const sessionKey = chat.activeSessionKey;
+    const userId = auth.state.user?.id;
+    if (
+      !token ||
+      !conversationId ||
+      payload.conversationId !== conversationId ||
+      recommendationFeedbackStatus(payload.targetRef) === 'submitting'
+    )
+      return;
+
+    const key = recommendationFeedbackKey(payload.targetRef);
+    const currentState = recommendationFeedbackStates.value[key];
+    if (
+      currentState?.status === 'accepted' ||
+      currentState?.status === 'disabled'
+    )
+      return;
+    recommendationFeedbackStates.value = {
+      ...recommendationFeedbackStates.value,
+      [key]: { status: 'submitting', error: '' },
+    };
+    try {
+      const result = await submitRecommendationFeedback(token, payload);
+      if (
+        disposed ||
+        sessionKey !== chat.activeSessionKey ||
+        userId !== auth.state.user?.id ||
+        conversationId !== chat.activeConversationId
+      )
+        return;
+      recommendationFeedbackStates.value = {
+        ...recommendationFeedbackStates.value,
+        [key]: {
+          status: result.accepted ? 'accepted' : 'disabled',
+          error: '',
+        },
+      };
+    } catch (error) {
+      if (
+        disposed ||
+        sessionKey !== chat.activeSessionKey ||
+        userId !== auth.state.user?.id ||
+        conversationId !== chat.activeConversationId
+      )
+        return;
+      recommendationFeedbackStates.value = {
+        ...recommendationFeedbackStates.value,
+        [key]: {
+          status: 'error',
+          error:
+            error instanceof Error ? error.message : '反馈提交失败，请稍后重试',
+        },
+      };
+    }
   }
 
   function buyProduct(externalId: string): void {
@@ -900,6 +999,9 @@ export function useChatPage() {
     dynamicFormSubmitting: (formId: string) =>
       Boolean(dynamicFormSubmitting.value[formId]),
     dynamicFormError: (formId: string) => dynamicFormErrors.value[formId] ?? '',
+    recommendationFeedbackStatus,
+    recommendationFeedbackError,
+    submitRecommendationFeedback: submitRecommendationFeedbackFromCard,
     submitDynamicForm: submitDynamicFormFromCard,
     cancelDynamicForm: cancelDynamicFormFromCard,
     retryPurchaseAddresses: loadPurchaseAddresses,

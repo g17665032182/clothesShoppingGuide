@@ -19,6 +19,7 @@ import type {
   ChatMessage,
   ChatTryOnAction,
 } from '@/api/types/chat';
+import type { RecommendationFeedbackPayload } from '@/api/types/fashion-recommendation';
 import type {
   ChatDynamicForm,
   DynamicFormValues,
@@ -41,6 +42,11 @@ const props = withDefaults(
     addressSelectionError?: (draftId: string, draftVersion: number) => string;
     dynamicFormSubmitting?: (formId: string) => boolean;
     dynamicFormError?: (formId: string) => string;
+    recommendationFeedbackStatus?: (
+      targetRef: string,
+    ) =>
+      'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error';
+    recommendationFeedbackError?: (targetRef: string) => string;
   }>(),
   {
     hasEarlierMessages: false,
@@ -48,6 +54,8 @@ const props = withDefaults(
     historyError: '',
     dynamicFormSubmitting: () => false,
     dynamicFormError: () => '',
+    recommendationFeedbackStatus: () => 'idle' as const,
+    recommendationFeedbackError: () => '',
   },
 );
 
@@ -67,6 +75,10 @@ const emit = defineEmits<{
     values: DynamicFormValues,
   ): void;
   (event: 'cancelDynamicForm', form: ChatDynamicForm): void;
+  (
+    event: 'recommendationFeedback',
+    payload: RecommendationFeedbackPayload,
+  ): void;
 }>();
 
 const sessionGapMs = 5 * 60 * 1000;
@@ -175,6 +187,8 @@ function formatSessionTime(createdAt: string): string {
               :address-selection-error="addressSelectionError"
               :dynamic-form-submitting="dynamicFormSubmitting"
               :dynamic-form-error="dynamicFormError"
+              :recommendation-feedback-status="recommendationFeedbackStatus"
+              :recommendation-feedback-error="recommendationFeedbackError"
               :stream-duration="
                 isSending && message.id === messages.at(-1)?.id
                   ? streamDuration
@@ -198,6 +212,9 @@ function formatSessionTime(createdAt: string): string {
                 (form, values) => emit('submitDynamicForm', form, values)
               "
               @cancel-dynamic-form="(form) => emit('cancelDynamicForm', form)"
+              @recommendation-feedback="
+                (payload) => emit('recommendationFeedback', payload)
+              "
             />
           </MessageScrollerItem>
           <MessageScrollerItem

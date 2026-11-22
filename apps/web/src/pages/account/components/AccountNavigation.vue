@@ -6,6 +6,7 @@ import {
   ShoppingBag,
   Shirt,
   MapPin,
+  Sparkles,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
@@ -42,6 +43,26 @@ const isPreferencesView = computed(
         >
           <UserRound aria-hidden="true" class="size-4" />
           个人资料
+        </a>
+      </RouterLink>
+      <RouterLink
+        v-slot="{ isActive, href, navigate }"
+        :to="{ name: 'account-recommendation-settings' }"
+        custom
+      >
+        <a
+          :aria-current="isActive ? 'page' : undefined"
+          :class="
+            cn(
+              'flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm transition-colors hover:bg-muted',
+              isActive && 'bg-muted font-medium text-foreground',
+            )
+          "
+          :href="href"
+          @click="navigate"
+        >
+          <Sparkles aria-hidden="true" class="size-4" />
+          推荐学习
         </a>
       </RouterLink>
       <RouterLink

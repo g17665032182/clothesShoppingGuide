@@ -24,6 +24,8 @@ import { ProductTryOnImageProcessingService } from './service/product-try-on-ima
 import { LocalProductTryOnImageStoreService } from './service/local-product-try-on-image-store.service.js';
 import { QiniuProductTryOnImageStoreService } from './service/qiniu-product-try-on-image-store.service.js';
 import { PRODUCT_TRY_ON_IMAGE_STORE } from './port/product-try-on-image-store.port.js';
+import { ProductCatalogRecommendationService } from './service/product-catalog-recommendation.service.js';
+import { PRODUCT_CATALOG_RECOMMENDATION_PORT } from './service/product-catalog-recommendation.port.js';
 
 @Module({
   imports: [MikroOrmModule.forFeature([Product, ProductSku])],
@@ -35,6 +37,7 @@ import { PRODUCT_TRY_ON_IMAGE_STORE } from './port/product-try-on-image-store.po
   ],
   providers: [
     ProductCatalogService,
+    ProductCatalogRecommendationService,
     ProductSkuReaderService,
     ProductCatalogImportService,
     ProductCatalogOrderService,
@@ -81,9 +84,14 @@ import { PRODUCT_TRY_ON_IMAGE_STORE } from './port/product-try-on-image-store.po
       provide: PRODUCT_CATALOG_ORDER_PORT,
       useExisting: ProductCatalogOrderService,
     },
+    {
+      provide: PRODUCT_CATALOG_RECOMMENDATION_PORT,
+      useExisting: ProductCatalogRecommendationService,
+    },
   ],
   exports: [
     ProductCatalogService,
+    PRODUCT_CATALOG_RECOMMENDATION_PORT,
     ProductSkuReaderService,
     ProductCatalogImportService,
     PRODUCT_CATALOG_ORDER_PORT,

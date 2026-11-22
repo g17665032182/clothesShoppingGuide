@@ -220,6 +220,21 @@ export class ChatDisplayService {
       }
     }
     if (
+      event.type === 'tool-result' &&
+      event.toolName === 'search_fashion_recommendations' &&
+      event.status === 'success'
+    ) {
+      try {
+        const output = JSON.parse(event.output ?? '');
+        const card = output?.card;
+        if (card && restoreChatCard(card)?.name === 'outfit_recommendation') {
+          return { type: 'card', card: restoreChatCard(card)! };
+        }
+      } catch {
+        // 推荐工具失败时只保留工具活动，不把原始 JSON 回显给用户。
+      }
+    }
+    if (
       event.type === 'tool-call' &&
       event.toolName === 'search_local_clothing_products'
     ) {

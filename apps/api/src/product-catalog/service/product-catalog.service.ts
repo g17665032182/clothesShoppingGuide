@@ -418,6 +418,32 @@ export class ProductCatalogService {
     };
   }
 
+  /**
+   * 为推荐公开已登记的风格标签；商品属性仍由商品目录模块独占读取。
+   */
+  public async getRecommendationAttributes(
+    externalIds: string[],
+  ): Promise<
+    Map<string, { styles: string[]; occasions: string[]; fits: string[] }>
+  > {
+    const ids = [...new Set(externalIds)].slice(0, 24);
+    if (ids.length === 0) return new Map();
+    const products = await this.products.find(
+      { externalId: { $in: ids }, isActive: true },
+      { fields: ['externalId', 'styles', 'occasions', 'fits'] },
+    );
+    return new Map(
+      products.map((product) => [
+        product.externalId,
+        {
+          styles: [...product.styles],
+          occasions: [...product.occasions],
+          fits: [...product.fits],
+        },
+      ]),
+    );
+  }
+
   public getNextPage(
     query: ProductSearchQuery,
     cursor: string,

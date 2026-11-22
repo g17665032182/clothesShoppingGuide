@@ -5,6 +5,7 @@ import type {
   ChatCard,
   ChatProductCard,
 } from '@/api/types/chat';
+import type { RecommendationFeedbackPayload } from '@/api/types/fashion-recommendation';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
 import ChatCardTemplate from './ChatCardTemplate.vue';
 
@@ -13,6 +14,11 @@ const props = defineProps<{
   cards: ChatCard[];
   disabled?: boolean;
   conversationId: string | null;
+  assistantMessageId: string;
+  recommendationFeedbackStatus?: (
+    targetRef: string,
+  ) => 'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error';
+  recommendationFeedbackError?: (targetRef: string) => string;
   addressSelectionStatus?: (
     draftId: string,
     draftVersion: number,
@@ -25,6 +31,10 @@ const emit = defineEmits<{
   (event: 'selectAddress', request: ChatAddressSelectionRequest): void;
   (event: 'refreshPurchaseDraft', conversationId: string): void;
   (event: 'tryOn', product: ChatProductCard): void;
+  (
+    event: 'recommendationFeedback',
+    payload: RecommendationFeedbackPayload,
+  ): void;
 }>();
 
 // 卡片由独立服务端投影传入，Markdown 正文始终只交给开启净化的通用渲染器。
@@ -48,6 +58,9 @@ const emit = defineEmits<{
         :card="card"
         :disabled="props.disabled"
         :conversation-id="props.conversationId"
+        :assistant-message-id="props.assistantMessageId"
+        :recommendation-feedback-status="props.recommendationFeedbackStatus"
+        :recommendation-feedback-error="props.recommendationFeedbackError"
         :address-selection-status="props.addressSelectionStatus"
         :address-selection-error="props.addressSelectionError"
         @buy-product="(externalId) => emit('buyProduct', externalId)"
@@ -56,6 +69,9 @@ const emit = defineEmits<{
           (conversationId) => emit('refreshPurchaseDraft', conversationId)
         "
         @try-on="(product) => emit('tryOn', product)"
+        @recommendation-feedback="
+          (payload) => emit('recommendationFeedback', payload)
+        "
       />
     </section>
   </div>

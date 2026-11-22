@@ -116,11 +116,18 @@ import {
   preferenceFormCategorySchema,
 } from '../tools/request-preference-form.tool.js';
 import { createRequestAddressFormTool } from '../tools/request-address-form.tool.js';
+import { createFashionRecommendationTool } from '../tools/fashion-recommendation.tool.js';
 import type { z } from 'zod';
 import {
   ReturnRefundQueryService,
   ReturnRefundService,
 } from '../../return-refund/index.js';
+import {
+  FASHION_RECOMMENDATION_PORT,
+  type FashionRecommendationPort,
+} from '../../fashion-personalization/index.js';
+import type { RecommendationIntent } from '../../fashion-personalization/context/recommendation-intent.schema.js';
+import type { RecommendationRequestScope } from '../../fashion-personalization/service/recommendation-source-registry.service.js';
 
 type PreferenceFormCategory = z.infer<typeof preferenceFormCategorySchema>;
 
@@ -228,6 +235,11 @@ type PreparedChat = {
   addressFormEventSent: boolean;
   purchaseReferencedDraftId?: string;
   pendingDynamicForms: DynamicFormDefinition[];
+  recommendationScope: RecommendationRequestScope;
+  recommendationProfile: Awaited<
+    ReturnType<FashionRecommendationPort['getProfileSignals']>
+  >;
+  recommendationIntentSnapshot: RecommendationIntent | null;
   tryOnAction?: TryOnActionInput;
 };
 
@@ -305,6 +317,10 @@ export class ChatRecordsService {
     @Optional()
     private readonly returnRefundService?: ReturnRefundService,
   ) {}
+
+  @Optional()
+  @Inject(FASHION_RECOMMENDATION_PORT)
+  private readonly fashionRecommendation?: FashionRecommendationPort;
 
   public async chat(user: User, dto: ChatInput): Promise<PersistedChatOutput> {
     const prepared = await this.prepareChat(user, dto);
@@ -679,6 +695,17 @@ export class ChatRecordsService {
         userId: user.id,
         title: this.generateConversationTitle(currentUserMessage.content),
       });
+    let recommendationProfile: Awaited<
+      ReturnType<FashionRecommendationPort['getProfileSignals']>
+    > = {};
+    if (this.fashionRecommendation) {
+      try {
+        recommendationProfile =
+          await this.fashionRecommendation.getProfileSignals(user.id);
+      } catch {
+        this.logger.warn('RECOMMENDATION_PROFILE_UNAVAILABLE');
+      }
+    }
     return {
       conversation,
       persistedConversation,
@@ -702,6 +729,15 @@ export class ChatRecordsService {
       pendingAddressFormRequest: false,
       addressFormEventSent: false,
       pendingDynamicForms: [],
+      recommendationScope: this.fashionRecommendation?.createRequestScope() ?? {
+        recommendationId: randomUUID(),
+        requestRef: randomUUID(),
+        items: [],
+        outfits: [],
+        targets: [],
+      },
+      recommendationProfile,
+      recommendationIntentSnapshot: null,
       ...(dto.tryOnAction ? { tryOnAction: dto.tryOnAction } : {}),
     };
   }
@@ -1080,6 +1116,25 @@ export class ChatRecordsService {
       createProductSearchTool(this.productCatalog, (results) =>
         cardSources.registerProducts(results),
       ),
+      ...(this.fashionRecommendation
+        ? [
+            createFashionRecommendationTool(
+              this.fashionRecommendation,
+              prepared.recommendationScope,
+              prepared.recommendationProfile,
+              (card, intent) => {
+                // 推荐请求本身只用于当前轮，不能自动进入 Markdown 长期记忆。
+                prepared.detailQueryRequested = true;
+                prepared.recommendationIntentSnapshot = intent;
+                this.displayService.stageCard(display, card);
+              },
+              () => {
+                // 即使来源暂不可用，也不能把本轮推荐请求提取为长期记忆。
+                prepared.detailQueryRequested = true;
+              },
+            ),
+          ]
+        : []),
       createChatProductSkusTool(this.productSkuReader, () => {
         prepared.detailQueryRequested = true;
       }),
@@ -1400,6 +1455,21 @@ export class ChatRecordsService {
           assistantMessageId: assistantMessage.id,
           data: display.data,
         });
+        if (
+          prepared.recommendationIntentSnapshot &&
+          this.fashionRecommendation
+        ) {
+          await this.fashionRecommendation.persistInTransaction(
+            transactionalEntityManager,
+            {
+              userId: persistedConversation.userId,
+              conversationId: persistedConversation.id,
+              assistantMessageId: assistantMessage.id,
+              scope: prepared.recommendationScope,
+              intentSnapshot: prepared.recommendationIntentSnapshot,
+            },
+          );
+        }
       }
       const taskInput = {
         userId: persistedConversation.userId,

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { ChatCard } from '@/api/types/chat';
+import type { RecommendationFeedbackPayload } from '@/api/types/fashion-recommendation';
 import ChatOrderCardList from './cards/ChatOrderCardList.vue';
 import ChatAddressSelectionCard from './cards/ChatAddressSelectionCard.vue';
+import ChatOutfitRecommendationCard from './cards/ChatOutfitRecommendationCard.vue';
 import ChatProductCardList from './cards/ChatProductCardList.vue';
 import type {
   ChatAddressSelectionActionStatus,
@@ -12,6 +14,11 @@ const props = defineProps<{
   card: ChatCard;
   disabled?: boolean;
   conversationId: string | null;
+  assistantMessageId: string;
+  recommendationFeedbackStatus?: (
+    targetRef: string,
+  ) => 'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error';
+  recommendationFeedbackError?: (targetRef: string) => string;
   addressSelectionStatus?: (
     draftId: string,
     draftVersion: number,
@@ -26,6 +33,10 @@ const emit = defineEmits<{
   (
     event: 'tryOn',
     product: Extract<ChatCard, { name: 'product' }>['data']['items'][number],
+  ): void;
+  (
+    event: 'recommendationFeedback',
+    payload: RecommendationFeedbackPayload,
   ): void;
 }>();
 
@@ -65,5 +76,15 @@ const emit = defineEmits<{
     @refresh-draft="
       (conversationId) => emit('refreshPurchaseDraft', conversationId)
     "
+  />
+  <ChatOutfitRecommendationCard
+    v-else-if="props.card.name === 'outfit_recommendation'"
+    :card="props.card"
+    :conversation-id="props.conversationId"
+    :assistant-message-id="props.assistantMessageId"
+    :disabled="props.disabled"
+    :feedback-status="props.recommendationFeedbackStatus"
+    :feedback-error="props.recommendationFeedbackError"
+    @feedback="(payload) => emit('recommendationFeedback', payload)"
   />
 </template>

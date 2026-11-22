@@ -15,6 +15,10 @@ import type {
   ChatTryOnResult,
   ChatTryOnStatus,
 } from '@/api/types/chat';
+import type {
+  FashionRecommendationCard,
+  RecommendationSlot,
+} from '@/api/types/fashion-recommendation';
 import type { PurchaseReference } from '@/api/types/chat-purchase';
 import type { PreferenceCategory } from '@/api/types/preferences';
 import { getDynamicForm } from './chat-dynamic-form';
@@ -1024,6 +1028,7 @@ function isNullableDateTime(value: unknown, nullable: boolean): boolean {
 }
 
 function isChatCard(value: unknown): value is ChatCard {
+  if (isFashionRecommendationCard(value)) return true;
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, ['type', 'name', 'data']) ||
@@ -1042,6 +1047,147 @@ function isChatCard(value: unknown): value is ChatCard {
   return (
     value.name === 'order' && value.data.items.every(isChatOrderCardSummary)
   );
+}
+
+function isRecommendationSlot(value: unknown): value is RecommendationSlot {
+  return ['tops', 'bottoms', 'dresses', 'outerwear', 'shoes'].includes(
+    String(value),
+  );
+}
+
+function isFashionRecommendationItem(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      'targetRef',
+      'sourceId',
+      'sourceType',
+      'sourceName',
+      'externalId',
+      'slot',
+      'name',
+      'brand',
+      'imageUrl',
+      'productUrl',
+      'price',
+      'currency',
+      'inStock',
+      'observedAt',
+      'matchReasons',
+    ])
+  )
+    return false;
+  return (
+    hasString(value, 'targetRef') &&
+    value.targetRef.length <= 160 &&
+    hasString(value, 'sourceId') &&
+    value.sourceId.length <= 80 &&
+    ['local_catalog', 'online_api', 'mcp'].includes(String(value.sourceType)) &&
+    hasString(value, 'sourceName') &&
+    value.sourceName.length <= 120 &&
+    hasString(value, 'externalId') &&
+    value.externalId.length <= 160 &&
+    isRecommendationSlot(value.slot) &&
+    hasString(value, 'name') &&
+    value.name.length <= 200 &&
+    (value.brand === null ||
+      (typeof value.brand === 'string' && value.brand.length <= 100)) &&
+    isPublicHttpUrl(value.imageUrl) &&
+    isPublicHttpUrl(value.productUrl) &&
+    (value.price === null ||
+      (typeof value.price === 'string' &&
+        /^\d{1,10}\.\d{2}$/u.test(value.price))) &&
+    (value.currency === null || value.currency === 'CNY') &&
+    typeof value.inStock === 'boolean' &&
+    typeof value.observedAt === 'string' &&
+    isIsoDateTime(value.observedAt) &&
+    Array.isArray(value.matchReasons) &&
+    value.matchReasons.length <= 9 &&
+    value.matchReasons.every(
+      (reason) => typeof reason === 'string' && reason.length <= 80,
+    )
+  );
+}
+
+function isFashionRecommendationCard(
+  value: unknown,
+): value is FashionRecommendationCard {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ['type', 'name', 'data']) ||
+    value.type !== 'card' ||
+    value.name !== 'outfit_recommendation' ||
+    !isRecord(value.data) ||
+    !hasOnlyKeys(value.data, [
+      'version',
+      'recommendationId',
+      'mode',
+      'styleSummary',
+      'items',
+      'outfits',
+    ]) ||
+    value.data.version !== 1 ||
+    !isUuid(value.data.recommendationId) ||
+    !['item', 'outfit', 'both'].includes(String(value.data.mode)) ||
+    !hasString(value.data, 'styleSummary') ||
+    value.data.styleSummary.length > 500 ||
+    !Array.isArray(value.data.items) ||
+    value.data.items.length > 6 ||
+    !value.data.items.every(isFashionRecommendationItem) ||
+    !Array.isArray(value.data.outfits) ||
+    value.data.outfits.length > 2
+  )
+    return false;
+
+  const itemRefs = new Set<string>();
+  if (
+    value.data.items.some((item) => {
+      if (itemRefs.has(item.targetRef)) return true;
+      itemRefs.add(item.targetRef);
+      return false;
+    })
+  )
+    return false;
+
+  return value.data.outfits.every((outfit) => {
+    if (
+      !isRecord(outfit) ||
+      !hasOnlyKeys(outfit, [
+        'outfitRef',
+        'styleSummary',
+        'items',
+        'total',
+        'missingSlots',
+      ]) ||
+      !hasString(outfit, 'outfitRef') ||
+      outfit.outfitRef.length > 160 ||
+      !hasString(outfit, 'styleSummary') ||
+      outfit.styleSummary.length > 500 ||
+      !Array.isArray(outfit.items) ||
+      outfit.items.length < 1 ||
+      outfit.items.length > 4 ||
+      !Array.isArray(outfit.missingSlots) ||
+      outfit.missingSlots.length > 5 ||
+      !outfit.missingSlots.every(isRecommendationSlot) ||
+      !(
+        outfit.total === null ||
+        (isRecord(outfit.total) &&
+          hasOnlyKeys(outfit.total, ['amount', 'currency']) &&
+          hasString(outfit.total, 'amount') &&
+          /^\d{1,10}\.\d{2}$/u.test(outfit.total.amount) &&
+          outfit.total.currency === 'CNY')
+      )
+    )
+      return false;
+    return outfit.items.every(
+      (entry) =>
+        isRecord(entry) &&
+        hasOnlyKeys(entry, ['slot', 'targetRef', 'item']) &&
+        isRecommendationSlot(entry.slot) &&
+        hasString(entry, 'targetRef') &&
+        isFashionRecommendationItem(entry.item),
+    );
+  });
 }
 
 function projectChatCards(value: unknown): ChatCard[] {
