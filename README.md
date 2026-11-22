@@ -48,6 +48,8 @@ AGENTS.md              开发与验证约定
 
 较大功能采用 Agent Team 协作：主代理负责需求边界、拆分、集成和最终验证；团队代理按模块或文件承担相互独立的设计、实现或审查任务。小型或强耦合改动可由主代理直接完成。派发任务时明确文件所有权与验收标准；共享数据库、端口和构建目录等资源应隔离或串行使用。主代理审阅并验证集成结果后，才能报告整体完成。具体开发约定见 [`AGENTS.md`](./AGENTS.md)。
 
+分支协作、CI/CD、Render、Docker 及 Redis 验证码见[多人协作与 Kubernetes 发布设计](./docs/development/ci-cd-kubernetes-design.md)。当前 Render 是测试和生产的主部署平台，Kubernetes 仅作为后续可选迁移方案。
+
 ## 本地启动
 
 安装依赖并创建后端配置；已有配置时保留原文件：
@@ -89,20 +91,24 @@ Web 开发服务器将 `/api` 代理到本机 3000 端口。前端路由使用 h
 
 `pnpm migration:fresh` 内置 `--drop-db --seed`，会删除并重建目标数据库。只在明确可销毁的本地或 CI 数据库中使用；保留数据的环境使用增量迁移并先审查、备份。
 
-Render 与 Neon 的固定部署配置、环境变量映射、迁移/Seeder 顺序和故障处理见
-[Render 与 Neon 部署手册](./docs/development/deployment.md)。提交到 `main` 后，
+Render、Neon 与 Redis 的固定部署配置、环境变量映射、迁移/Seeder 顺序和故障处理见
+[部署手册](./docs/development/deployment.md)。提交到 `main` 后，
 Render 按仓库根目录 [`render.yaml`](./render.yaml) 自动构建 API 和 Web；生产环境
-发布前只执行增量 `migration:up` 和幂等 `seed`。
+发布前只执行增量 `migration:up` 和幂等 `seed`。Web 版本号以
+`apps/web/package.json` 为准，版本递增和发布标签规则见部署手册。
 
 测试环境使用独立的 [`render.test.yaml`](./render.test.yaml)，创建时在 Render
 Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库和测试密钥。它不
 复用生产 Render 服务或数据库。测试 API 部署时，在增量迁移和管理员初始化通过后
 自动导入测试商品；首次创建和部署步骤见部署手册。
 
-CI 在发往 `main` 的 PR、`main` 推送和 `codex/render-test-env` 推送时运行格式/类型/
-构建、API 自动化测试及临时 PostgreSQL 迁移和管理员 Seeder 验证。`main` 要求 PR 和 `check` 状态
-通过；Render 测试与生产服务均只在 GitHub 检查通过后自动部署。测试验证通过后再
-通过 PR 合并到 `main`，测试数据库数据不会回灌生产库。
+CI 在发往 `main` 的 PR、`main`、`codex/feature/*`、`codex/test/*` 和
+`codex/render-test-env` 推送时运行格式/类型/构建、API 自动化测试及临时 PostgreSQL
+迁移和管理员 Seeder 验证，并为显式 Redis 集成测试准备隔离服务。`main` 要求 PR 和
+`check` 状态通过；Render 测试与生产服务在 GitHub 检查通过后自动部署，且测试和生产
+各自使用 Redis Key Value。当前没有自动 Kubernetes/GHCR 发布 workflow；Kubernetes
+清单仅用于本地 kind 和未来手动迁移。测试验证通过后再通过 PR 合并到 `main`，
+测试数据库数据不会回灌生产库。
 
 ### 本地隔离测试环境
 

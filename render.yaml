@@ -1,9 +1,18 @@
-# Render Blueprint：从仓库根目录构建 pnpm Monorepo 的 API 和 Web。
-# 真实密钥全部通过 sync: false 在 Render Dashboard 中填写，不写入仓库。
+# Render Blueprint：从仓库根目录部署 API、Web 和验证码 Key Value。
+# 生产 Key Value 仅允许 Render 私网连接；应用密钥由 Render 管理，不提交到仓库。
 services:
+  - type: keyvalue
+    name: clothes-shopping-guide-redis
+    region: singapore
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+    persistenceMode: off
+
   - type: web
     name: clothes-shopping-guide-api
     runtime: node
+    region: singapore
     branch: main
     autoDeployTrigger: checksPass
     # Free 计划不支持 preDeployCommand，因此在编译完成后执行增量迁移和幂等 Seeder。
@@ -31,6 +40,15 @@ services:
         sync: false
       - key: PRODUCT_QUERY_CURSOR_SECRET
         sync: false
+      - key: CAPTCHA_STORAGE
+        value: redis
+      - key: CAPTCHA_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: clothes-shopping-guide-redis
+          property: connectionString
+      - key: CAPTCHA_HMAC_SECRET
+        generateValue: true
       - key: LLM_PROVIDER
         value: openai-compatible
       - key: LLM_API_KEY

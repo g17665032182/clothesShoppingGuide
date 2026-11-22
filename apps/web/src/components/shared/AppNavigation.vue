@@ -25,6 +25,7 @@ import {
 
 const router = useRouter();
 const isAdmin = auth.isAdmin;
+const appVersion = __APP_VERSION__;
 
 function signOut() {
   auth.signOut();
@@ -37,6 +38,9 @@ function signOut() {
     <RouterLink class="brand" to="/">
       <span class="brand-icon"><Shirt :size="18" /></span>
       <span>衣橱指南</span>
+      <span class="app-version" :aria-label="`版本号 ${appVersion}`">
+        v{{ appVersion }}
+      </span>
     </RouterLink>
     <div class="header-actions">
       <RouterLink v-if="auth.state.user" class="text-link" to="/chat">

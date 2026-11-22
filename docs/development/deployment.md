@@ -1,25 +1,33 @@
-# Render 与 Neon 部署
+# Render、Neon 与 Redis 部署
 
 [返回开发文档索引](./README.md) · [返回项目文档总览](../README.md)
 
-核对日期：2026-11-18。当前生产部署使用 GitHub 仓库
+核对日期：2026-11-22。当前生产部署使用 GitHub 仓库
 `https://github.com/g17665032182/clothesShoppingGuide.git`，由 Render
-运行 API Web Service 和 Web Static Site，数据库使用外部 Neon PostgreSQL。
+运行 API Web Service、Web Static Site 和生产 Key Value，数据库使用外部 Neon
+PostgreSQL。Kubernetes 清单仅作为后续可选迁移方案，当前不参与发布。
 
 ## 固定配置
 
 仓库根目录的 [`render.yaml`](../../render.yaml) 是部署配置的唯一维护入口：
 
-| 服务                         | Render 类型      | 构建                                                                                | 启动/发布                |
-| ---------------------------- | ---------------- | ----------------------------------------------------------------------------------- | ------------------------ |
-| `clothes-shopping-guide-api` | Node Web Service | 安装依赖、构建 API、执行 `deploy:prepare:built`                                     | 启动 `pnpm start:prod`   |
-| `clothes-shopping-guide-web` | Static Site      | `pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build` | 发布目录 `apps/web/dist` |
+| 服务                           | Render 类型      | 构建                                                                                | 启动/发布                |
+| ------------------------------ | ---------------- | ----------------------------------------------------------------------------------- | ------------------------ |
+| `clothes-shopping-guide-api`   | Node Web Service | 安装依赖、构建 API、执行 `deploy:prepare:built`                                     | 启动 `pnpm start:prod`   |
+| `clothes-shopping-guide-web`   | Static Site      | `pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build` | 发布目录 `apps/web/dist` |
+| `clothes-shopping-guide-redis` | Key Value        | Render 托管 Redis 兼容服务                                                          | 仅允许私网连接           |
 
 API 健康检查固定为 `/api/health`。Web 配置了 `/* -> /index.html` 回退，以支持
 Vue Router 的 history 路由。
 
 两个服务都从仓库根目录构建，不设置 `rootDir`。这样 Render 可以读取根目录
 `pnpm-workspace.yaml`、`package.json` 和 `pnpm-lock.yaml`。
+
+当前 API 保留 Render Native Node runtime，Web 保留 Static Site。Blueprint 在构建
+阶段执行 API 增量迁移、管理员 Seeder 和测试商品 Seeder。Render Free 不支持
+`preDeployCommand`；直接改成 Docker runtime 会把迁移移到容器启动阶段，并可能在
+每次重启时重复执行测试商品 Seeder。因此当前 Render 服务不切换为 Docker runtime；
+Docker 镜像仍供本地 kind 使用，或在另行设计迁移/Seeder 作业后再用于 Render。
 
 ## Neon 配置
 
@@ -42,15 +50,31 @@ CLI 或诊断工具使用。API 的 MikroORM 配置默认启用 PostgreSQL TLS�
 提交。Blueprint 中的 `sync: false` 变量需要在 Render Dashboard 首次创建服务时
 填写。
 
+## Redis 与验证码
+
+生产和测试各自使用一个 Render Key Value，`ipAllowList: []` 只允许 Render 私网
+连接；两套服务不共享数据、连接串或 HMAC 密钥。API 的 Blueprint 自动设置：
+
+```text
+CAPTCHA_STORAGE=redis
+CAPTCHA_REDIS_URL=<对应环境 Key Value 的私网 connectionString>
+CAPTCHA_HMAC_SECRET=<Render 为该环境生成的独立密钥>
+```
+
+不要把 `CAPTCHA_REDIS_URL` 或 `CAPTCHA_HMAC_SECRET` 写进仓库。Render Key Value
+必须与 API 位于同一 region，避免应用通过公网访问验证码存储。
+
 ## 首次创建
 
 1. 在 Render 新建 Blueprint，选择 GitHub 仓库
    `g17665032182/clothesShoppingGuide` 和 `main` 分支。
-2. Render 读取仓库根目录的 `render.yaml`，确认会创建 API 和 Web 两个服务。
+2. Render 读取仓库根目录的 `render.yaml`，确认会创建 API、Web 和生产 Key Value
+   三个服务。
 3. 为 API 服务填写所有 `sync: false` 变量。至少包括：
    `DB_HOST`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`、`JWT_SECRET`、
    `PRODUCT_QUERY_CURSOR_SECRET`、`LLM_API_KEY`、`LLM_BASE_URL`、
-   `LLM_MODEL` 和 `SEED_ADMIN_*`。
+   `LLM_MODEL` 和 `SEED_ADMIN_*`。`CAPTCHA_STORAGE`、`CAPTCHA_REDIS_URL` 和
+   `CAPTCHA_HMAC_SECRET` 由 Blueprint 自动配置，不要手动改成内存模式。
 4. 如果启用七牛试穿，再填写 `QINIU_*`，并按业务契约补齐试穿供应商配置；
    默认 `TRY_ON_ENABLED=false`，不会开启真实试穿。
 5. 部署完成后确认 API 健康检查通过，再打开 Web 地址。
@@ -72,12 +96,13 @@ Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App
 1. 在 Neon 创建与生产项目隔离的测试项目或分支，并准备专用数据库用户。不要复制
    生产连接变量或把生产连接串用于测试。
 2. 在 Render 选择 New > Blueprint，连接本仓库及 `codex/render-test-env` 分支，
-   Blueprint Path 填 `render.test.yaml`，确认只创建 `clothes-shopping-guide-test-api` 和
-   `clothes-shopping-guide-test-web`。
+   Blueprint Path 填 `render.test.yaml`，确认只创建测试 API、测试 Web 和
+   `clothes-shopping-guide-test-redis`。
 3. 为测试 API 填入 Neon 测试库的 `DB_HOST`、`DB_USER`、`DB_PASSWORD`、
    `DB_NAME`，并设置独立的 `SEED_ADMIN_EMAIL`、`SEED_ADMIN_PASSWORD` 和
    `SEED_ADMIN_DISPLAY_NAME`。Render 会生成独立的 `JWT_SECRET` 和
-   `PRODUCT_QUERY_CURSOR_SECRET`。
+   `PRODUCT_QUERY_CURSOR_SECRET`、`CAPTCHA_HMAC_SECRET`；Blueprint 会把测试
+   Key Value 的私网连接串写入 `CAPTCHA_REDIS_URL`。
 4. 默认测试 API 使用无效的 LLM 占位 Key，仅用于通过模块启动校验；聊天请求不会
    成功。若需测试聊天，须单独授权后为测试 API 配置专用的 `LLM_API_KEY`、
    `LLM_BASE_URL` 和 `LLM_MODEL`，不得复用生产或本地密钥。同时按供应商实际模型
@@ -100,6 +125,30 @@ API 自动化测试，并在隔离 PostgreSQL 中验证迁移、管理员和测�
 检查失败时 Render 不会自动部署。
 
 ## 每次发布
+
+### Web 版本号与发布
+
+Web 使用语义化版本 `MAJOR.MINOR.PATCH`，唯一版本来源是
+[`apps/web/package.json`](../../apps/web/package.json) 的 `version` 字段；Vite 构建时
+将其写入前端，顶栏负责添加 `v` 前缀。根目录和 API 的包版本不随 Web 版本变更。
+`0.0.0` 是占位值，Web 正式版本从 `0.1.0` 开始。
+
+进入 `1.0.0` 前属于初始开发阶段，版本保持 `0.MINOR.PATCH`：修复问题递增
+`PATCH`，新增功能递增 `MINOR`；此阶段若有不兼容变化，也递增 `MINOR`，并在 PR
+中明确标记影响。达到 `1.0.0` 并承诺稳定兼容后，按常规规则递增：不兼容变更递增
+`MAJOR`，向后兼容的新功能递增 `MINOR`，缺陷修复、安全修复和不改变行为的调整递增
+`PATCH`。每次只按最高影响级别递增一次；不要为普通开发提交逐次改号。
+
+发布步骤：
+
+1. 准备发布 PR 时，根据上述规则更新 Web 包的 `version`，并在 PR 描述列出版本号和
+   变更摘要；该版本随候选提交部署到测试环境并完成业务验收。
+2. 验收通过后合并到 `main`。Render 在 CI 通过后自动部署生产 API 和 Web；生产
+   Web 部署完成后确认顶栏显示的版本与 `apps/web/package.json` 一致。
+3. 确认生产部署成功后，在对应生产部署提交上创建 `web-vX.Y.Z` Git 标签，例如
+   `web-v0.1.0`。标签只标记已发布版本，不触发或替代 Render 部署。
+4. 已发布版本不可复用。若发布后发现问题，修复并递增 `PATCH`，再按完整流程验收和
+   发布；回滚部署到旧版本时也保留原版本号及其标签。
 
 PR 合并到 `main` 后，GitHub Actions 会运行格式/类型/构建校验、API 自动化测试、
 隔离 PostgreSQL 迁移和管理员 Seeder 验证。检查通过后，Render 自动部署生产
@@ -137,6 +186,28 @@ GitHub 仓库 `main` 分支需将 `CI / check` 设为必需状态检查，避免
 合并。Render 的 **After CI Checks Pass** 是部署门控，GitHub 分支保护则是合并门控；
 二者都需开启。Render 将 GitHub Actions 的 `success`、`neutral` 和 `skipped` 结论
 视为检查通过，因此必需的 `check` Job 保持无条件运行，不要以 job-level `if` 跳过。
+
+## 可选 Kubernetes 迁移（默认关闭）
+
+Docker/Kubernetes 资源位于 [`deploy/`](../../deploy/)，当前 Render 是唯一启用的
+测试/生产发布入口。自动 Kubernetes/GHCR release workflow 已移除，不需要
+`KUBE_CONFIG_DATA`，也不会影响 Render 的 CI/CD。
+
+如果未来明确迁移到外部 Kubernetes 集群，再单独设计部署身份、镜像发布、namespace
+级权限、独立 Redis 和生产审批；Render 本身不是 Kubernetes 集群，也不提供
+`kubectl` kubeconfig。
+
+Dockerfile 继续用于本地构建、kind 验收和未来迁移，不改变当前 Render API 的
+迁移/Seeder 顺序。
+
+Render 发布顺序为：分支 CI 通过 → 测试 Blueprint 自动部署并执行迁移、Seeder 和
+测试商品 Seeder → 测试验收 → PR 合并 `main` → 生产 Blueprint 在 GitHub 检查通过后
+自动部署。API/Web 使用 Render 当前构建，验证码使用对应环境的 Key Value。
+
+本地 Docker/kind 验证可直接使用 `kind-clothes-guide-dev` 集群和
+[`deploy/k8s/local/README.md`](../../deploy/k8s/local/README.md)。本地 namespace 为
+`clothes-guide-dev`，数据库使用临时 `emptyDir`，删除集群会清空数据；它不读取生产
+Neon、Render 或 GHCR 凭据。
 
 ## 手工执行迁移或 Seeder
 
