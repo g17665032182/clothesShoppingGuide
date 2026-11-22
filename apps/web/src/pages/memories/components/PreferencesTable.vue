@@ -56,7 +56,7 @@ const emit = defineEmits<{
           </div>
         </TableCell>
         <TableCell class="py-4 align-top whitespace-normal">
-          <p class="break-words leading-6 [overflow-wrap:anywhere]">
+          <p class="wrap-break-word leading-6">
             {{ formatPreferenceValue(preference) }}
           </p>
           <div

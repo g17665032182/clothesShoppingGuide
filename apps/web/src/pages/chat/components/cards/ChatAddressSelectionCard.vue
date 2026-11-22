@@ -296,7 +296,7 @@ function refreshDraft(): void {
         >
           <span class="grid min-w-0 gap-1">
             <span class="flex min-w-0 flex-wrap items-center gap-x-2 text-sm">
-              <span class="break-words font-medium">
+              <span class="wrap-break-word font-medium">
                 {{ address.label || address.recipientName }}
               </span>
               <span class="text-muted-foreground">{{ address.phone }}</span>
@@ -307,7 +307,7 @@ function refreshDraft(): void {
                 默认地址
               </span>
             </span>
-            <span class="break-words text-sm text-muted-foreground">
+            <span class="wrap-break-word text-sm text-muted-foreground">
               {{ address.address }}
             </span>
           </span>

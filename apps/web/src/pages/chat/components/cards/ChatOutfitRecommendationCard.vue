@@ -71,8 +71,8 @@ function emitFeedback(payload: RecommendationFeedbackPayload): void {
     <CardHeader class="gap-2">
       <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
-          <CardTitle class="break-words text-base">穿搭推荐</CardTitle>
-          <CardDescription class="break-words">
+          <CardTitle class="wrap-break-word text-base">穿搭推荐</CardTitle>
+          <CardDescription class="wrap-break-word">
             {{ props.card.data.styleSummary }}
           </CardDescription>
         </div>
@@ -113,7 +113,7 @@ function emitFeedback(payload: RecommendationFeedbackPayload): void {
           class="grid min-w-0 gap-3 rounded-md border p-3"
         >
           <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
-            <p class="min-w-0 break-words text-sm font-medium">
+            <p class="min-w-0 wrap-break-word text-sm font-medium">
               {{ outfit.styleSummary }}
             </p>
             <p v-if="outfit.total" class="shrink-0 text-sm font-semibold">
@@ -137,7 +137,7 @@ function emitFeedback(payload: RecommendationFeedbackPayload): void {
                   v-if="entry.item.imageUrl"
                   :src="entry.item.imageUrl"
                   :alt="entry.item.name"
-                  class="aspect-[4/3] w-full object-cover"
+                  class="aspect-4/3 w-full object-cover"
                   loading="lazy"
                 />
               </a>
@@ -145,16 +145,16 @@ function emitFeedback(payload: RecommendationFeedbackPayload): void {
                 <img
                   :src="entry.item.imageUrl"
                   :alt="entry.item.name"
-                  class="aspect-[4/3] w-full object-cover"
+                  class="aspect-4/3 w-full object-cover"
                   loading="lazy"
                 />
               </div>
               <div class="grid min-w-0 gap-1 p-3">
                 <p class="text-xs text-muted-foreground">{{ entry.slot }}</p>
-                <p class="break-words text-sm font-medium">
+                <p class="wrap-break-word text-sm font-medium">
                   {{ entry.item.name }}
                 </p>
-                <p class="break-words text-xs text-muted-foreground">
+                <p class="wrap-break-word text-xs text-muted-foreground">
                   {{ entry.item.sourceName }} ·
                   {{ formatObservedAt(entry.item.observedAt) }}
                 </p>
@@ -238,7 +238,7 @@ function emitFeedback(payload: RecommendationFeedbackPayload): void {
                 v-if="item.imageUrl"
                 :src="item.imageUrl"
                 :alt="item.name"
-                class="aspect-[4/3] w-full object-cover"
+                class="aspect-4/3 w-full object-cover"
                 loading="lazy"
               />
             </a>
@@ -246,13 +246,13 @@ function emitFeedback(payload: RecommendationFeedbackPayload): void {
               v-else-if="item.imageUrl"
               :src="item.imageUrl"
               :alt="item.name"
-              class="aspect-[4/3] w-full object-cover"
+              class="aspect-4/3 w-full object-cover"
               loading="lazy"
             />
             <div class="grid min-w-0 gap-1 p-3">
               <p class="text-xs text-muted-foreground">{{ item.slot }}</p>
-              <p class="break-words text-sm font-medium">{{ item.name }}</p>
-              <p class="break-words text-xs text-muted-foreground">
+              <p class="wrap-break-word text-sm font-medium">{{ item.name }}</p>
+              <p class="wrap-break-word text-xs text-muted-foreground">
                 {{ item.sourceName }} · {{ formatObservedAt(item.observedAt) }}
               </p>
               <p class="text-sm">

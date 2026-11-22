@@ -175,9 +175,7 @@ function formatSessionTime(createdAt: string): string {
             <Message v-if="message.role === 'user'" align="end">
               <MessageContent>
                 <Bubble align="end" variant="muted">
-                  <BubbleContent
-                    class="whitespace-pre-wrap [overflow-wrap:anywhere]"
-                  >
+                  <BubbleContent class="whitespace-pre-wrap wrap-anywhere">
                     {{ message.content }}
                   </BubbleContent>
                 </Bubble>

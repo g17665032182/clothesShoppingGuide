@@ -255,7 +255,7 @@ function openTryOnTasks() {
               <li
                 v-for="(item, itemIndex) in candidate.items"
                 :key="`${candidate.orderId}-${itemIndex}`"
-                class="break-words text-muted-foreground"
+                class="wrap-break-word text-muted-foreground"
               >
                 {{ item.productName }} · {{ item.color }} · {{ item.size }} ×
                 {{ item.quantity }}

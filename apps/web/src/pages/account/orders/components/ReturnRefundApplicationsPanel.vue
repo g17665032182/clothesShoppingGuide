@@ -719,7 +719,7 @@ onBeforeUnmount(() => {
             :key="item.orderItemId"
             class="flex min-w-0 flex-wrap justify-between gap-2 text-sm"
           >
-            <span class="min-w-0 break-words">
+            <span class="min-w-0 wrap-break-word">
               {{ item.productName }} · {{ item.color }} / {{ item.size }} ×
               {{ item.quantity }}
             </span>
@@ -730,7 +730,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="flex flex-col gap-1 text-sm">
           <h3 class="font-semibold">退货原因</h3>
-          <p class="whitespace-pre-wrap break-words text-muted-foreground">
+          <p class="whitespace-pre-wrap wrap-break-word text-muted-foreground">
             {{ selected.reason }}
           </p>
         </div>
@@ -753,7 +753,7 @@ onBeforeUnmount(() => {
           </div>
           <div v-if="selected.rejectionReason" class="sm:col-span-2">
             <dt class="text-muted-foreground">拒绝原因</dt>
-            <dd class="break-words">{{ selected.rejectionReason }}</dd>
+            <dd class="wrap-break-word">{{ selected.rejectionReason }}</dd>
           </div>
         </dl>
         <section class="flex flex-col gap-3 border-t pt-4">

@@ -143,7 +143,7 @@ function handleImageError() {
   >
     <header class="flex min-w-0 items-start gap-3">
       <div class="min-w-0 flex-1">
-        <p class="break-words text-sm font-medium">
+        <p class="wrap-break-word text-sm font-medium">
           {{ result.product.name }} · {{ result.product.color }}
         </p>
         <p class="text-xs text-muted-foreground">

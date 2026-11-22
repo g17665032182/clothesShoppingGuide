@@ -26,9 +26,7 @@ const open = ref<boolean>();
         <TraceTitle>公开推理摘要</TraceTitle>
       </TraceLine>
     </TraceCollapsibleTrigger>
-    <TraceCollapsibleContent
-      class="whitespace-pre-wrap [overflow-wrap:anywhere]"
-    >
+    <TraceCollapsibleContent class="whitespace-pre-wrap wrap-anywhere">
       {{ summary }}
     </TraceCollapsibleContent>
   </TraceCollapsible>

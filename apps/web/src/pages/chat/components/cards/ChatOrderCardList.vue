@@ -76,7 +76,7 @@ function formatOrderDate(value: string): string {
           <li
             v-for="(item, index) in order.items"
             :key="`${order.orderNo}-${index}`"
-            class="break-words text-muted-foreground"
+            class="wrap-break-word text-muted-foreground"
           >
             {{ item.productName }} · {{ item.color }} · {{ item.size }} ×
             {{ item.quantity }}

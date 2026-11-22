@@ -142,7 +142,7 @@ function copiedAddress(address: string): void {
         <CardHeader class="flex-row items-start justify-between gap-3">
           <div class="flex min-w-0 flex-col gap-2">
             <div class="flex flex-wrap items-center gap-2">
-              <CardTitle class="break-words text-base">
+              <CardTitle class="wrap-break-word text-base">
                 {{ address.recipientName }}
               </CardTitle>
               <Badge v-if="address.label" variant="secondary">
@@ -163,7 +163,7 @@ function copiedAddress(address: string): void {
           </Button>
         </CardHeader>
         <CardContent>
-          <p class="break-words text-sm leading-6">{{ address.address }}</p>
+          <p class="wrap-break-word text-sm leading-6">{{ address.address }}</p>
         </CardContent>
         <CardFooter class="flex flex-wrap justify-end gap-2">
           <Button
