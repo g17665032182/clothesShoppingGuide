@@ -71,8 +71,7 @@ export class Migration20261119100000 extends Migration {
       on "return_refund_applications" ("user_id", "created_at", "id");`);
     this.addSql(`create index "return_refund_applications_status_created_index"
       on "return_refund_applications" ("status", "created_at", "id");`);
-    this
-      .addSql(`create unique index "return_refund_applications_one_active_order_unique"
+    this.addSql(`create unique index "return_refund_applications_one_active_order_unique"
       on "return_refund_applications" ("order_id")
       where "status" not in ('rejected','cancelled','refunded');`);
 

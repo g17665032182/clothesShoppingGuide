@@ -27,7 +27,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { auth } from '@/lib/auth';
 
 type LoadStatus =
-  'idle' | 'loading' | 'success' | 'empty' | 'error' | 'unknown';
+  | 'idle'
+  | 'loading'
+  | 'success'
+  | 'empty'
+  | 'error'
+  | 'unknown';
 type SubmitStatus = 'idle' | 'submitting' | 'unknown' | 'error';
 
 const props = defineProps<{

@@ -2,7 +2,12 @@ import type { ProductSearchQuery } from '../../product-catalog/index.js';
 import type { FashionRecommendationCard } from './fashion-recommendation-card.js';
 
 export type JsonValue =
-  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 export type ChatActivity =
   | {
@@ -57,7 +62,10 @@ export type ChatOrderCardSummary = {
     | 'completed'
     | 'closed';
   closeReason:
-    'user_cancelled' | 'payment_expired' | 'product_unavailable' | null;
+    | 'user_cancelled'
+    | 'payment_expired'
+    | 'product_unavailable'
+    | null;
   itemsAmount: string;
   payableAmount: string;
   itemCount: number;

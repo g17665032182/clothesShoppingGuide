@@ -6,7 +6,10 @@ import { EntityRepository } from '@mikro-orm/postgresql';
 import { RecommendationGroup } from '../entity/recommendation-group.entity.js';
 
 export type RecommendationTargetType =
-  'recommendation' | 'outfit' | 'slot' | 'item';
+  | 'recommendation'
+  | 'outfit'
+  | 'slot'
+  | 'item';
 
 export type RecommendationTargetInput = {
   targetType: RecommendationTargetType;

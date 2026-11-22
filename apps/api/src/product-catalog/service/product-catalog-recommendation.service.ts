@@ -49,7 +49,8 @@ function toRecommendationItem(
     category: ProductCatalogRecommendationItem['category'];
   },
   attributes:
-    { styles: string[]; occasions: string[]; fits: string[] } | undefined,
+    | { styles: string[]; occasions: string[]; fits: string[] }
+    | undefined,
 ): ProductCatalogRecommendationItem {
   return {
     ...item,

@@ -30,8 +30,7 @@ export class Migration20261113100000 extends Migration {
       ),
       constraint "chat_dynamic_forms_revision_check" check ("revision" > 0)
     );`);
-    this
-      .addSql(`create index "chat_dynamic_forms_user_conversation_created_index"
+    this.addSql(`create index "chat_dynamic_forms_user_conversation_created_index"
       on "chat_dynamic_forms" ("user_id","conversation_id","created_at","id");`);
     this.addSql(`create index "chat_dynamic_forms_conversation_message_index"
       on "chat_dynamic_forms" ("conversation_id","assistant_message_id");`);

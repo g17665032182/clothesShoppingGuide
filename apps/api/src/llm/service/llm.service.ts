@@ -170,7 +170,7 @@ export class LlmService {
         traceContext || Object.keys(execution).length > 0
           ? {
               context: {
-                ...(traceContext ?? {}),
+                ...traceContext,
                 ...(execution.skipPersistInput
                   ? { skipPersistInput: true }
                   : {}),
@@ -270,7 +270,7 @@ export class LlmService {
           streamMode: ['custom', 'values'],
           signal: controller.signal,
           context: {
-            ...(traceContext ?? {}),
+            ...traceContext,
             streaming: true,
             eventStreaming: true,
             streamLifecycle: lifecycle,

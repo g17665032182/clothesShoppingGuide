@@ -1,9 +1,0 @@
-# 自动生成的文件由对应工具维护。
-pnpm-lock.yaml
-apps/api/src/database/migrations/.snapshot-clothes_guide.json
-apps/api/src/metadata.ts
-node_modules/
-.agents/
-dist/
-build/
-coverage/

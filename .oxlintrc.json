@@ -1,0 +1,7 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "rules": {
+    // 项目输入校验会主动拒绝 C0 控制字符，因此这些正则匹配属于预期行为。
+    "eslint/no-control-regex": "off"
+  }
+}

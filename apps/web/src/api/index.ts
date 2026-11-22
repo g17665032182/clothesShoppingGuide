@@ -130,7 +130,8 @@ function createApiClient(): AxiosInstance {
 
       const axiosError = error as AxiosError<unknown>;
       const originalConfig = axiosError.config as
-        ApiAxiosRequestConfig | undefined;
+        | ApiAxiosRequestConfig
+        | undefined;
       const shouldRefresh =
         axiosError.response?.status === 401 &&
         originalConfig?.allowRefresh !== false &&

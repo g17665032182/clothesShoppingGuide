@@ -53,7 +53,8 @@ export class ProductCatalogImportService {
           ],
         },
       );
-      existing ? updated++ : created++;
+      if (existing) updated++;
+      else created++;
 
       for (const sku of input.skus) {
         const existingSku = await entityManager.findOne(ProductSku, {

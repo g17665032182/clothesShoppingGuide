@@ -7,7 +7,13 @@ function isTruthy(value: string | undefined): boolean {
 }
 
 type LogLevel =
-  'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
+  | 'trace'
+  | 'debug'
+  | 'info'
+  | 'warn'
+  | 'error'
+  | 'fatal'
+  | 'silent';
 
 type TransportTarget = {
   level: LogLevel;

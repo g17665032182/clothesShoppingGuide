@@ -17,7 +17,12 @@ import type {
 import ChatRecommendationFeedback from '../ChatRecommendationFeedback.vue';
 
 type FeedbackStatus =
-  'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error';
+  | 'idle'
+  | 'submitting'
+  | 'accepted'
+  | 'duplicate'
+  | 'disabled'
+  | 'error';
 
 const props = withDefaults(
   defineProps<{

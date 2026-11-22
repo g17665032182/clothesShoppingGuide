@@ -569,9 +569,7 @@ export class OrdersService
   ): Promise<AdminOrderPageResponseDto> {
     return this.list(
       query,
-      {
-        ...(query.userId ? { userId: query.userId } : {}),
-      },
+      query.userId ? { userId: query.userId } : {},
       true,
     ) as Promise<AdminOrderPageResponseDto>;
   }

@@ -1,7 +1,11 @@
 import type { OrderDetail } from './orders';
 
 export type PurchaseDraftStatus =
-  'collecting' | 'ready' | 'submitted' | 'cancelled' | 'expired';
+  | 'collecting'
+  | 'ready'
+  | 'submitted'
+  | 'cancelled'
+  | 'expired';
 
 export type PurchaseIssueCode =
   | 'missing_field'

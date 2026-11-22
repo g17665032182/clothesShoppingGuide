@@ -194,7 +194,8 @@ test(
 
     const queries: string[] = [];
     let afterSettingLoaded:
-      ((transaction: EntityManager) => Promise<void>) | undefined;
+      | ((transaction: EntityManager) => Promise<void>)
+      | undefined;
     const orm = await MikroORM.init({
       ...config,
       dbName,
@@ -241,7 +242,8 @@ test(
     let app: INestApplication | undefined;
     let migrated = false;
     let afterSkuProductRead:
-      ((context: Transaction | undefined) => Promise<void>) | undefined;
+      | ((context: Transaction | undefined) => Promise<void>)
+      | undefined;
     const skuContexts: Array<Transaction | undefined> = [];
 
     try {
@@ -1112,7 +1114,8 @@ test(
         );
         return [...unique.values()].map((message) => {
           const result = JSON.parse(String(message.content)) as
-            ProductSkuLookupResult | PreferenceChatResult;
+            | ProductSkuLookupResult
+            | PreferenceChatResult;
           assert.equal(JSON.stringify(result).includes(PRIVATE_VALUE), false);
           return result;
         });

@@ -1,5 +1,10 @@
 export type DynamicFormFieldType =
-  'text' | 'textarea' | 'tel' | 'number' | 'select' | 'checkbox';
+  | 'text'
+  | 'textarea'
+  | 'tel'
+  | 'number'
+  | 'select'
+  | 'checkbox';
 
 export type DynamicFormOption = {
   value: string;
@@ -17,7 +22,10 @@ export type DynamicFormField = {
 };
 
 export type ChatDynamicFormStatus =
-  'open' | 'submitted' | 'expired' | 'cancelled';
+  | 'open'
+  | 'submitted'
+  | 'expired'
+  | 'cancelled';
 
 export type ChatDynamicFormReference = {
   formId: string;

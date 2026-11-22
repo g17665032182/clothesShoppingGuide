@@ -6,7 +6,8 @@ import type { RecommendationProduct } from '../context/recommendation-source.sch
 import type { RecommendationOutfitTarget } from '../context/recommendation-target.schema.js';
 
 export type OutfitTemplate =
-  'dress_shoes_outerwear' | 'tops_bottoms_shoes_outerwear';
+  | 'dress_shoes_outerwear'
+  | 'tops_bottoms_shoes_outerwear';
 
 type TemplateDefinition = {
   id: OutfitTemplate;

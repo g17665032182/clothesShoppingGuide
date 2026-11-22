@@ -47,11 +47,11 @@ test('trace 事件可以恢复用户、带工具调用的模型和工具结果�
   assert.equal(messages.length, 3);
   assert.equal(messages[0]?.message instanceof HumanMessage, true);
   assert.equal(messages[1]?.message instanceof AIMessage, true);
-  assert.deepEqual((messages[1]?.message as AIMessage).tool_calls, [
+  assert.deepEqual((messages[1]!.message as AIMessage).tool_calls, [
     { id: 'call-1', name: 'weather', args: { city: '上海' } },
   ]);
   assert.equal(messages[2]?.message instanceof ToolMessage, true);
-  assert.equal((messages[2]?.message as ToolMessage).tool_call_id, 'call-1');
+  assert.equal((messages[2]!.message as ToolMessage).tool_call_id, 'call-1');
 });
 
 test('天气查询调用及结果从后续模型历史隐藏', () => {
@@ -92,7 +92,7 @@ test('天气查询调用及结果从后续模型历史隐藏', () => {
   ]);
 
   assert.equal(messages.length, 1);
-  assert.deepEqual((messages[0]?.message as AIMessage).tool_calls, [
+  assert.deepEqual((messages[0]!.message as AIMessage).tool_calls, [
     { id: 'ordinary-call', name: 'ordinary_tool', args: { q: 'coat' } },
   ]);
   assert.equal(JSON.stringify(messages).includes('天气'), false);
@@ -163,7 +163,7 @@ test('售后查询和创建工具的调用及结果从后续模型历史成对�
   ]);
 
   assert.equal(messages.length, 1);
-  assert.deepEqual((messages[0]?.message as AIMessage).tool_calls, [
+  assert.deepEqual((messages[0]!.message as AIMessage).tool_calls, [
     { id: 'ordinary-call', name: 'ordinary_tool', args: { q: 'coat' } },
   ]);
   const serialized = JSON.stringify(messages);
@@ -276,13 +276,13 @@ test('购买调用及结果从历史移除，同批普通商品工具闭环保�
   ]);
 
   assert.equal(messages.length, 2);
-  const aiMessage = messages[0]?.message as AIMessage;
+  const aiMessage = messages[0]!.message as AIMessage;
   assert.deepEqual(
     aiMessage.tool_calls?.map((call) => call.id),
     ['catalog-call'],
   );
   assert.equal(
-    (messages[1]?.message as ToolMessage).tool_call_id,
+    (messages[1]!.message as ToolMessage).tool_call_id,
     'catalog-call',
   );
   assert.equal(JSON.stringify(messages).includes('private'), false);
@@ -345,13 +345,13 @@ test('用户信息查询及旧地址选择调用和结果从模型历史成对�
   ]);
 
   assert.equal(messages.length, 2);
-  const calls = (messages[0]?.message as AIMessage).tool_calls ?? [];
+  const calls = (messages[0]!.message as AIMessage).tool_calls ?? [];
   assert.deepEqual(
     calls.map((call) => call.name),
     ['weather'],
   );
   assert.equal(
-    (messages[1]?.message as ToolMessage).tool_call_id,
+    (messages[1]!.message as ToolMessage).tool_call_id,
     'weather-call',
   );
   assert.equal(JSON.stringify(messages).includes('private-address-id'), false);
@@ -408,10 +408,10 @@ test('试穿任务查询在混合工具历史中成对隐藏，最终正文继�
   ]);
   assert.equal(messages.length, 3);
   assert.deepEqual(
-    (messages[0]?.message as AIMessage).tool_calls?.map((call) => call.id),
+    (messages[0]!.message as AIMessage).tool_calls?.map((call) => call.id),
     ['catalog'],
   );
-  assert.equal((messages[1]?.message as ToolMessage).tool_call_id, 'catalog');
+  assert.equal((messages[1]!.message as ToolMessage).tool_call_id, 'catalog');
   assert.equal(
     messages[2]?.message.content,
     '最近任务已完成，请到我的试穿查看。',
@@ -481,11 +481,11 @@ test('规格和偏好查询在两种嵌套格式中成对隐藏，普通工具�
     ]);
     assert.equal(messages.length, 3);
     assert.deepEqual(
-      (messages[0]?.message as AIMessage).tool_calls?.map((call) => call.id),
+      (messages[0]!.message as AIMessage).tool_calls?.map((call) => call.id),
       ['catalog-call'],
     );
     assert.equal(
-      (messages[1]?.message as ToolMessage).tool_call_id,
+      (messages[1]!.message as ToolMessage).tool_call_id,
       'catalog-call',
     );
     assert.equal(messages[2]?.message.content, '已查到可选尺码和你的偏好。');
@@ -655,11 +655,11 @@ test('偏好表单调用和结果从模型历史成对隐藏，包括非法调�
 
   assert.equal(messages.length, 2);
   assert.deepEqual(
-    (messages[0]?.message as AIMessage).tool_calls?.map((call) => call.id),
+    (messages[0]!.message as AIMessage).tool_calls?.map((call) => call.id),
     ['ordinary-call'],
   );
   assert.equal(
-    (messages[1]?.message as ToolMessage).tool_call_id,
+    (messages[1]!.message as ToolMessage).tool_call_id,
     'ordinary-call',
   );
   assert.equal(JSON.stringify(messages).includes('private'), false);

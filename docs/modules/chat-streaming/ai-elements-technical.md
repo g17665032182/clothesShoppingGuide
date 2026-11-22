@@ -100,7 +100,12 @@ Code Block 官方组件使用 Shiki；若使用该组件，由 CLI 声明其依�
 
 ```ts
 type JsonValue =
-  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 type ChatActivity =
   | {

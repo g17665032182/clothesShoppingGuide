@@ -51,7 +51,11 @@ import {
 } from './preference-options';
 
 export type PreferencePageStatus =
-  'idle' | 'loading' | 'success' | 'empty' | 'error';
+  | 'idle'
+  | 'loading'
+  | 'success'
+  | 'empty'
+  | 'error';
 
 export type PreferenceEditorState = {
   category: PreferenceCategory;

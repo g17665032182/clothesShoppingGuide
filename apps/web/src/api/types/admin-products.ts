@@ -1,5 +1,9 @@
 export type AdminProductCategory =
-  'tops' | 'bottoms' | 'dresses' | 'outerwear' | 'shoes';
+  | 'tops'
+  | 'bottoms'
+  | 'dresses'
+  | 'outerwear'
+  | 'shoes';
 
 export type AdminProductQuery = {
   page: number;

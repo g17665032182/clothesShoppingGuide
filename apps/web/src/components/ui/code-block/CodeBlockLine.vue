@@ -41,7 +41,6 @@ function isEmpty() {
     :data-variant="variant"
     :class="cn(codeBlockLineVariants({ variant }), props.class)"
     ><span data-slot="code-block-line-content" class="min-w-0"
-      ><template v-if="isEmpty()">{{ '\n' }}</template
-      ><slot v-else /></span
+      ><template v-if="isEmpty()">{{ '\n' }}</template><slot v-else /></span
   ></span>
 </template>

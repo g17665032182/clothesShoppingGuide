@@ -33,11 +33,9 @@ export class Migration20261108044411 extends Migration {
         or ("status" <> 'submitted' and "order_id" is null and "submitted_version" is null)
       )
     );`);
-    this
-      .addSql(`create unique index "chat_purchase_drafts_active_conversation_unique"
+    this.addSql(`create unique index "chat_purchase_drafts_active_conversation_unique"
       on "chat_purchase_drafts" ("conversation_id") where "status" in ('collecting','ready');`);
-    this
-      .addSql(`create index "chat_purchase_drafts_conversation_id_created_at_id_index"
+    this.addSql(`create index "chat_purchase_drafts_conversation_id_created_at_id_index"
       on "chat_purchase_drafts" ("conversation_id","created_at","id");`);
   }
 

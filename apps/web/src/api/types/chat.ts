@@ -10,7 +10,12 @@ import type { FashionRecommendationCard } from './fashion-recommendation';
 export type MessageRole = 'assistant' | 'user';
 
 export type JsonValue =
-  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 export type ChatActivity =
   | {
@@ -78,7 +83,10 @@ export type ChatOrderCardSummary = {
     | 'completed'
     | 'closed';
   closeReason:
-    'user_cancelled' | 'payment_expired' | 'product_unavailable' | null;
+    | 'user_cancelled'
+    | 'payment_expired'
+    | 'product_unavailable'
+    | null;
   itemsAmount: string;
   payableAmount: string;
   itemCount: number;
@@ -190,7 +198,12 @@ export type ChatContextUsage = {
 };
 
 export type ChatTurnStatus =
-  'submitted' | 'streaming' | 'saved' | 'failed' | 'interrupted' | 'uncertain';
+  | 'submitted'
+  | 'streaming'
+  | 'saved'
+  | 'failed'
+  | 'interrupted'
+  | 'uncertain';
 
 export interface ChatMessage {
   id: string;

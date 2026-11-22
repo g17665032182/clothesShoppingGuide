@@ -6,7 +6,8 @@ export class PurchaseVersionDto {
 }
 export class PurchaseRecipientDto {
   @ApiProperty({ type: String, nullable: true, maxLength: 100 }) public name!:
-    string | null;
+    | string
+    | null;
   @ApiProperty({ type: String, nullable: true, pattern: '^\\+?\\d{6,20}$' })
   public phone!: string | null;
   @ApiProperty({ type: String, nullable: true, maxLength: 500 })
@@ -40,7 +41,8 @@ export class PurchaseConfirmationDto {
   @ApiProperty() public color!: string;
   @ApiProperty() public size!: string;
   @ApiProperty({ type: String, nullable: true }) public imageUrl!:
-    string | null;
+    | string
+    | null;
   @ApiProperty({ minimum: 1, maximum: 99 }) public quantity!: number;
   @ApiProperty() public unitPrice!: string;
   @ApiProperty({ enum: ['CNY'] }) public currency!: string;
@@ -55,7 +57,8 @@ export class PurchaseDraftDto {
   @ApiProperty({ format: 'uuid' }) public conversationId!: string;
   @ApiProperty() public productExternalId!: string;
   @ApiProperty({ type: String, nullable: true, format: 'uuid' }) public skuId!:
-    string | null;
+    | string
+    | null;
   @ApiProperty({ minimum: 1, maximum: 99 }) public quantity!: number;
   @ApiProperty({ type: PurchaseRecipientDto })
   public recipient!: PurchaseRecipientDto;

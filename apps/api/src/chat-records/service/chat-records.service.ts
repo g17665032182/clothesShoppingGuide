@@ -946,7 +946,9 @@ export class ChatRecordsService {
           width: summary.width as number,
           height: summary.height as number,
           mimeType: summary.mimeType as
-            'image/png' | 'image/jpeg' | 'image/webp',
+            | 'image/png'
+            | 'image/jpeg'
+            | 'image/webp',
         },
         image: result.image,
       },
@@ -1560,7 +1562,7 @@ export class ChatRecordsService {
       messages: {
         items: messages.map((item) => ({
           ...this.toMessageResponse(item),
-          ...(displays.get(item.id) ?? {}),
+          ...displays.get(item.id),
         })),
         total,
         page: pagination.normalizedPage,

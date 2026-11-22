@@ -14,7 +14,12 @@ import type {
 } from '@/api/types/fashion-recommendation';
 
 type FeedbackStatus =
-  'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error';
+  | 'idle'
+  | 'submitting'
+  | 'accepted'
+  | 'duplicate'
+  | 'disabled'
+  | 'error';
 
 const props = withDefaults(
   defineProps<{

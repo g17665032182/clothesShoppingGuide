@@ -5,7 +5,7 @@
   "description": "服装购物指南 Monorepo",
   "packageManager": "pnpm@12.14.0",
   "engines": {
-    "node": ">=22",
+    "node": ">=22.12.0",
     "pnpm": "12.14.0"
   },
   "scripts": {
@@ -25,12 +25,15 @@
     "migration:fresh": "pnpm --filter @clothes-shopping-guide/api migration:fresh",
     "seeder:create": "pnpm --filter @clothes-shopping-guide/api seeder:create",
     "seed": "pnpm -r --if-present run seed",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm typecheck && pnpm build"
+    "lint": "oxlint --vue-plugin",
+    "lint:fix": "oxlint --vue-plugin --fix",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm build"
   },
   "devDependencies": {
     "concurrently": "^10.0.6",
-    "prettier": "3.9.10"
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0"
   }
 }

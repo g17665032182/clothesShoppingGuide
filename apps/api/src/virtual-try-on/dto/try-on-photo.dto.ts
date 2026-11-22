@@ -28,7 +28,10 @@ export class TryOnPhotoDto {
 }
 
 export type TryOnAvailability =
-  'disabled' | 'test_images_unconfigured' | 'test_only' | 'available';
+  | 'disabled'
+  | 'test_images_unconfigured'
+  | 'test_only'
+  | 'available';
 
 // 聊天信息查询只暴露图片元数据，不包含图片内容或对象存储位置。
 export type TryOnSavedPhotoMetadataItemDto = {

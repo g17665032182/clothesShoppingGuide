@@ -45,7 +45,12 @@ const props = withDefaults(
     recommendationFeedbackStatus?: (
       targetRef: string,
     ) =>
-      'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error';
+      | 'idle'
+      | 'submitting'
+      | 'accepted'
+      | 'duplicate'
+      | 'disabled'
+      | 'error';
     recommendationFeedbackError?: (targetRef: string) => string;
   }>(),
   {

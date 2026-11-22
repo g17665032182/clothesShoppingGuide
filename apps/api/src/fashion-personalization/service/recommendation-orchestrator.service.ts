@@ -35,7 +35,8 @@ export class RecommendationOrchestratorService {
   public constructor(
     @Inject(RECOMMENDATION_PRODUCT_SOURCE)
     private readonly source:
-      RecommendationProductSource | RecommendationProductSource[],
+      | RecommendationProductSource
+      | RecommendationProductSource[],
     private readonly composer: OutfitComposerService,
     private readonly registry: RecommendationSourceRegistryService,
   ) {}

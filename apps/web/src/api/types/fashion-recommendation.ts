@@ -1,6 +1,10 @@
 export type RecommendationMode = 'item' | 'outfit' | 'both';
 export type RecommendationSlot =
-  'tops' | 'bottoms' | 'dresses' | 'outerwear' | 'shoes';
+  | 'tops'
+  | 'bottoms'
+  | 'dresses'
+  | 'outerwear'
+  | 'shoes';
 export type RecommendationSourceType = 'local_catalog' | 'online_api' | 'mcp';
 
 export interface FashionRecommendationItem {
@@ -50,7 +54,10 @@ export interface FashionRecommendationCard {
 
 export type RecommendationFeedbackType = 'positive' | 'negative' | 'dismissed';
 export type RecommendationFeedbackTargetType =
-  'recommendation' | 'outfit' | 'slot' | 'item';
+  | 'recommendation'
+  | 'outfit'
+  | 'slot'
+  | 'item';
 export type RecommendationFeedbackReason =
   | 'style'
   | 'color'

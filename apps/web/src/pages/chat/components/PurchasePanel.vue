@@ -314,7 +314,8 @@ function updateQuantity(value: string): void {
             class="flex flex-wrap items-center justify-between gap-2"
           >
             <span
-              >已生成订单 <strong class="break-all">{{ order.orderNo }}</strong
+              >已生成订单
+              <strong class="break-all">{{ order.orderNo }}</strong
               >，当前状态：<OrderStatusBadge :status="order.status" />。</span
             >
             <Button

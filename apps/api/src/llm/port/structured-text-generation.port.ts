@@ -14,7 +14,9 @@ export type StructuredTextGenerationResult = {
 };
 
 export type StructuredTextGenerationErrorCode =
-  'MODEL_TIMEOUT' | 'MODEL_UNAVAILABLE' | 'INVALID_OUTPUT';
+  | 'MODEL_TIMEOUT'
+  | 'MODEL_UNAVAILABLE'
+  | 'INVALID_OUTPUT';
 
 export class StructuredTextGenerationError extends Error {
   public constructor(public readonly code: StructuredTextGenerationErrorCode) {

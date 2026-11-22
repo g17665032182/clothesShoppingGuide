@@ -26,7 +26,8 @@ export type WeatherForecastFailure = {
 };
 
 export type WeatherForecastResponse =
-  WeatherForecastResult | WeatherForecastFailure;
+  | WeatherForecastResult
+  | WeatherForecastFailure;
 
 export interface WeatherMcpPort {
   isEnabled(): boolean;

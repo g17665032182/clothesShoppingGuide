@@ -1,5 +1,9 @@
 export type PurchaseStatus =
-  'collecting' | 'ready' | 'submitted' | 'cancelled' | 'expired';
+  | 'collecting'
+  | 'ready'
+  | 'submitted'
+  | 'cancelled'
+  | 'expired';
 export type PurchaseRecipient = {
   name: string | null;
   phone: string | null;

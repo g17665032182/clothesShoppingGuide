@@ -4,10 +4,22 @@ import type { OrderDetail } from '@/api/types/orders';
 import type { PreferenceCategory } from '@/api/types/preferences';
 
 export type ChatPageStatus =
-  'idle' | 'loading' | 'streaming' | 'success' | 'empty' | 'error' | 'unknown';
+  | 'idle'
+  | 'loading'
+  | 'streaming'
+  | 'success'
+  | 'empty'
+  | 'error'
+  | 'unknown';
 
 export type PurchaseAsyncStatus =
-  'idle' | 'loading' | 'success' | 'empty' | 'error' | 'submitting' | 'unknown';
+  | 'idle'
+  | 'loading'
+  | 'success'
+  | 'empty'
+  | 'error'
+  | 'submitting'
+  | 'unknown';
 
 export interface ChatPurchaseState {
   status: PurchaseAsyncStatus;

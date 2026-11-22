@@ -51,7 +51,11 @@ const emit = defineEmits<{
   'update:rejectionReason': [value: string];
   action: [
     action:
-      'approve' | 'reject' | 'received' | 'refund-processing' | 'refunded',
+      | 'approve'
+      | 'reject'
+      | 'received'
+      | 'refund-processing'
+      | 'refunded',
   ];
 }>();
 const confirmRefundOpen = ref(false);

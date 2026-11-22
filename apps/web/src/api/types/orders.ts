@@ -6,7 +6,10 @@ export type OrderStatus =
   | 'closed';
 
 export type OrderCloseReason =
-  'user_cancelled' | 'payment_expired' | 'product_unavailable' | null;
+  | 'user_cancelled'
+  | 'payment_expired'
+  | 'product_unavailable'
+  | null;
 
 export type OrderQuery = {
   page: number;

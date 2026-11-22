@@ -23,7 +23,7 @@
 
 ## 环境与目录
 
-- Node.js 22 或以上，开发基线见 [`.node-version`](./.node-version)。
+- Node.js 22.12 或以上，开发基线见 [`.node-version`](./.node-version)。
 - pnpm 12.14.0，与根 `package.json` 的 `packageManager` 一致。
 - PostgreSQL 17；本地可通过 Docker Compose 启动。
 
@@ -104,7 +104,7 @@ Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库
 和部署步骤见部署手册。
 
 CI 在发往 `main` 的 PR、`main`、`codex/feature/*`、`codex/test/*` 和
-`codex/render-test-env` 推送时运行格式/类型/构建、API 自动化测试及临时 PostgreSQL
+`codex/render-test-env` 推送时运行 Oxlint、Oxfmt 格式检查、类型检查和构建、API 自动化测试及临时 PostgreSQL
 迁移和管理员 Seeder 验证，并为显式 Redis 集成测试准备隔离服务。`main` 要求 PR 和
 `check` 状态通过；Render 测试与生产服务在 GitHub 检查通过后自动部署，且测试和生产
 各自使用 Redis Key Value。当前没有自动 Kubernetes/GHCR 发布 workflow；Kubernetes

@@ -12,7 +12,12 @@ import type { OrderDetail } from '@/api/types/orders';
 import { auth } from '@/lib/auth';
 
 type DetailStatus =
-  'idle' | 'loading' | 'success' | 'empty' | 'error' | 'unknown';
+  | 'idle'
+  | 'loading'
+  | 'success'
+  | 'empty'
+  | 'error'
+  | 'unknown';
 type ActionStatus = 'idle' | 'submitting' | 'unknown' | 'error';
 type OrderAction = 'pay' | 'cancel' | 'receipt';
 

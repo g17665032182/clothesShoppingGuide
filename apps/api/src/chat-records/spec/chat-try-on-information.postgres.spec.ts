@@ -162,7 +162,8 @@ test(
     assert.notEqual(dbName, 'clothes_guide');
     const queries: string[] = [];
     let afterTaskLoaded:
-      ((transaction: EntityManager) => Promise<void>) | undefined;
+      | ((transaction: EntityManager) => Promise<void>)
+      | undefined;
     // 只在快照用例中于真实任务读取后提交并发变更，不替换 reader 的数据库调用。
     const orm = await MikroORM.init({
       ...config,

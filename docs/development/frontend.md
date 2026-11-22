@@ -22,7 +22,7 @@
 - 工具按钮优先使用现有图标库图标并提供可访问名称/必要 Tooltip；选项、模式、开关和数值分别使用菜单、分段控件、Toggle/Checkbox 与输入控件。避免用装饰性文字胶囊代替熟悉控件，不嵌套卡片，也不把业务工具做成营销式落地页。
 - 操作结果反馈使用 Sonner Toast，全局仅挂载一个 Toaster；请求错误复用 `useErrorToast`，不在 Axios 拦截器重复提示。取消/过期响应不提示；失败、冲突或结果未知时保留页面状态和重试入口，成功提示只在接口确认成功后触发。
 - 页面路由懒加载；大型列表考虑分页或增量加载。不要为未测量的性能问题添加复杂缓存。
-- 使用 ESLint 与 Vue 3 规则检查 Vue/TypeScript；格式化交由 Prettier。新增前端包提供 `lint` / `lint:fix` 脚本；未安装依赖时不自行制作替代检查器。
+- 使用根目录 Oxlint 检查 JavaScript/TypeScript 和 Vue 单文件组件中的 `<script>`，启用 Vue 规则；Vue 模板类型由 `vue-tsc` 检查，格式化交由 Oxfmt。Oxfmt 配置由仓库原 Prettier 配置迁移生成；Oxlint 的 Vue 模板规则覆盖尚不完整，不以 lint 结果替代模板类型检查。`pnpm check` 会执行 lint 和格式检查；修复可运行 `pnpm lint:fix` 或 `pnpm format`，审阅自动修改后再提交。
 
 ## 测试
 

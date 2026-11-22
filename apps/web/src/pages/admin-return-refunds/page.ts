@@ -187,7 +187,11 @@ export function useAdminReturnRefundsPage() {
 
   async function runAction(
     action:
-      'approve' | 'reject' | 'received' | 'refund-processing' | 'refunded',
+      | 'approve'
+      | 'reject'
+      | 'received'
+      | 'refund-processing'
+      | 'refunded',
   ): Promise<void> {
     const token = auth.state.token;
     const current = selected.value;

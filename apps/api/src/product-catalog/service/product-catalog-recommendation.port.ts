@@ -1,5 +1,9 @@
 export type ProductCatalogRecommendationCategory =
-  'tops' | 'bottoms' | 'dresses' | 'outerwear' | 'shoes';
+  | 'tops'
+  | 'bottoms'
+  | 'dresses'
+  | 'outerwear'
+  | 'shoes';
 
 export type ProductCatalogRecommendationSearchInput = {
   category?: ProductCatalogRecommendationCategory;

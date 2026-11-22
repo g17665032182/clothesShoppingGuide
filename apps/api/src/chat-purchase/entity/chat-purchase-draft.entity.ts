@@ -38,9 +38,11 @@ export class ChatPurchaseDraft {
   @Property({ type: 'uuid' }) @Unique() public submissionKey: string =
     randomUUID();
   @Property({ type: 'integer', nullable: true }) public submittedVersion:
-    number | null = null;
+    | number
+    | null = null;
   @Property({ type: 'uuid', nullable: true }) @Unique() public orderId:
-    string | null = null;
+    | string
+    | null = null;
   @Property({ type: 'timestamptz' }) public createdAt: Date = new Date();
   // 仅有效用户修改续期，不配置通用 onUpdate。
   @Property({ type: 'timestamptz' }) public updatedAt: Date = new Date();
