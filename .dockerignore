@@ -15,5 +15,7 @@ coverage
 *.log
 tmp
 private
+**/.local-private
+**/logs
 apps/web/test-results
 apps/web/playwright-report

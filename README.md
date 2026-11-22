@@ -93,14 +93,15 @@ Web 开发服务器将 `/api` 代理到本机 3000 端口。前端路由使用 h
 
 Render、Neon 与 Redis 的固定部署配置、环境变量映射、迁移/Seeder 顺序和故障处理见
 [部署手册](./docs/development/deployment.md)。提交到 `main` 后，
-Render 按仓库根目录 [`render.yaml`](./render.yaml) 自动构建 API 和 Web；生产环境
-发布前只执行增量 `migration:up` 和幂等 `seed`。Web 版本号以
+Render 按 [`render.yaml`](./render.yaml) 使用仓库 Dockerfile 自动构建 API 和 Web；
+生产 API 容器启动时执行增量 `migration:up` 和幂等管理员 `seed`。Web 版本号以
 `apps/web/package.json` 为准，版本递增和发布标签规则见部署手册。
 
 测试环境使用独立的 [`render.test.yaml`](./render.test.yaml)，创建时在 Render
 Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库和测试密钥。它不
 复用生产 Render 服务或数据库。测试 API 部署时，在增量迁移和管理员初始化通过后
-自动导入测试商品；首次创建和部署步骤见部署手册。
+自动导入测试商品；该 Seeder 在每次测试 API 容器启动时更新测试 SKU 库存，首次创建
+和部署步骤见部署手册。
 
 CI 在发往 `main` 的 PR、`main`、`codex/feature/*`、`codex/test/*` 和
 `codex/render-test-env` 推送时运行格式/类型/构建、API 自动化测试及临时 PostgreSQL
