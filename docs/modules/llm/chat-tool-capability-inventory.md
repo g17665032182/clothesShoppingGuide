@@ -15,7 +15,7 @@
 
 ## 当前已接入的模型工具
 
-以下工具由 [`ChatRecordsService`](../../../apps/api/src/chat-records/service/chat-records.service.ts) 在每轮聊天中组装。2026-11-19 新增 `get_weather_forecast`，经真实 XingYuWeather SSE smoke test 验证可返回近三天预报；自动化与构建结果见[天气实施记录](./chat-tool-weather-implementation.md)。
+以下工具由 [`ChatRecordsService`](../../../apps/api/src/chat-records/service/chat-records.service.ts) 在每轮聊天中组装。2026-11-19 新增 `get_weather_forecast`；天气来源现为本地 stdio 启动的高德地图 MCP，切换后的外部验收见[天气实施记录](./chat-tool-weather-implementation.md)。
 
 | 工具                               | 当前能力                                                                                               | 边界                                                                                                                |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
@@ -34,7 +34,7 @@
 | `list_my_return_refund_orders`     | 用户提出退货退款时查询本人最近订单摘要，协助确定订单。                                                 | 最多 5 笔；不返回收件/发货物流信息；查询轮退出自动记忆和摘要来源。                                                  |
 | `get_my_return_refund_items`       | 查询本人订单商品快照、单价和未退款数量。                                                               | 只读初筛，不判断商家或法律资格，不接收 userId。                                                                     |
 | `create_return_refund_application` | 用户确认订单、商品、数量、金额和原因摘要后，创建待用户提交申请草稿。                                   | 必须经已注册工具；不正式提交、审核或实际退款；工具原因和输入输出从 trace/activity/history 投影中隐藏。              |
-| `get_weather_forecast`             | 按用户明确指定城市查询 XingYuWeather 近 3 天预报，作为当轮穿搭参考。                                   | 仅远程工具开关启用时注册；结果经过白名单投影，不是实时实况；查询轮排除记忆/摘要，不使用自动定位。                   |
+| `get_weather_forecast`             | 按用户明确指定城市查询高德地图天气预报，最多向助手提供 3 天，作为当轮穿搭参考。                        | 需要远程工具开关和服务端高德 Key；结果经过白名单投影，不是实时实况，不使用自动定位。                                |
 | `get_my_information`               | 查询本人地址引用、订单摘要、已保存图片元数据，或显式请求的试穿任务摘要；下单缺地址时启动地址选择流程。 | 省略 sections 仍为原三类；试穿只返回本人未删除任务，每页5条、最多10页，不返回图片/结果ID/存储键，不触发生成或下载。 |
 | `request_dynamic_form`             | 请求前端渲染服务端注册的动态表单；目前购买收件信息使用 `purchase_recipient`。                          | 工具只发出表单定义和安全引用；不能读取或提交用户填写值。                                                            |
 | `display_chat_card`                | 展示本轮已查询并登记的商品卡或只读订单卡。                                                             | 只接受可信查询结果的引用，不接受模型编写的商品、订单事实。                                                          |

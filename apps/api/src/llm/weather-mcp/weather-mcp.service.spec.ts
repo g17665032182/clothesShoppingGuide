@@ -4,18 +4,17 @@ import { ConfigService } from '@nestjs/config';
 
 import {
   projectWeatherForecast,
-  resolveWeatherMcpUrl,
   WeatherMcpService,
 } from './weather-mcp.service.js';
 
 const providerResponse =
-  "{'results': [{'location': {'name': '上海', 'country': 'CN'}, 'daily': [{'date': '2026-11-18', 'text_day': '多云', 'text_night': '晴', 'high': '14', 'low': '6', 'precip': '0.00', 'wind_direction': '东', 'wind_speed': '8.4', 'wind_scale': '2', 'humidity': '83'}, {'date': '2026-11-19', 'text_day': '阴', 'text_night': '阴', 'high': '12', 'low': '6', 'precip': '0.00', 'wind_direction': '西北', 'wind_speed': '8.4', 'wind_scale': '2', 'humidity': '51'}, {'date': '2026-11-20', 'text_day': '多云', 'text_night': '晴', 'high': '12', 'low': '6', 'precip': '0.00', 'wind_direction': '西北', 'wind_speed': '3.0', 'wind_scale': '1', 'humidity': '54'}, {'date': '2026-11-21', 'text_day': '晴', 'text_night': '晴', 'high': '13', 'low': '7'}]}], 'last_update': '2026-11-18T08:00:00+08:00'}";
+  '{"city":"上海市","forecasts":[{"date":"2026-11-18","dayweather":"多云","nightweather":"晴","daytemp":"14","nighttemp":"6","daywind":"东","daypower":"2"},{"date":"2026-11-19","dayweather":"阴","nightweather":"阴","daytemp":"12","nighttemp":"6","daywind":"西北","daypower":"2"},{"date":"2026-11-20","dayweather":"多云","nightweather":"晴","daytemp":"12","nighttemp":"6","daywind":"西北","daypower":"1"},{"date":"2026-11-21","dayweather":"晴","nightweather":"晴","daytemp":"13","nighttemp":"7"}]}';
 
 test('天气预报安全投影最多保留三天并忽略非白名单字段', () => {
   const result = projectWeatherForecast(providerResponse);
   assert.deepEqual(result, {
     ok: true,
-    location: '上海',
+    location: '上海市',
     days: [
       {
         date: '2026-11-18',
@@ -23,11 +22,11 @@ test('天气预报安全投影最多保留三天并忽略非白名单字段', ()
         nightCondition: '晴',
         highC: 14,
         lowC: 6,
-        precipitationMm: 0,
+        precipitationMm: null,
         windDirection: '东',
         windSpeedKmh: null,
         windScale: 2,
-        humidityPercent: 83,
+        humidityPercent: null,
       },
       {
         date: '2026-11-19',
@@ -35,11 +34,11 @@ test('天气预报安全投影最多保留三天并忽略非白名单字段', ()
         nightCondition: '阴',
         highC: 12,
         lowC: 6,
-        precipitationMm: 0,
+        precipitationMm: null,
         windDirection: '西北',
         windSpeedKmh: null,
         windScale: 2,
-        humidityPercent: 51,
+        humidityPercent: null,
       },
       {
         date: '2026-11-20',
@@ -47,81 +46,60 @@ test('天气预报安全投影最多保留三天并忽略非白名单字段', ()
         nightCondition: '晴',
         highC: 12,
         lowC: 6,
-        precipitationMm: 0,
+        precipitationMm: null,
         windDirection: '西北',
         windSpeedKmh: null,
         windScale: 1,
-        humidityPercent: 54,
+        humidityPercent: null,
       },
     ],
-    updatedAt: '2026-11-18T08:00:00+08:00',
+    updatedAt: null,
   });
-  assert.equal(JSON.stringify(result).includes('wind_speed'), false);
-  assert.equal(JSON.stringify(result).includes('country'), false);
+  assert.equal(JSON.stringify(result).includes('reporttime'), false);
+  assert.equal(JSON.stringify(result).includes('city'), false);
 });
 
 test('天气预报拒绝错误结构、日期、过长响应和复杂输入', () => {
   for (const value of [
     '{}',
-    "{'results': [], 'last_update': 'now'}",
-    "{'results': [{'location': {'name': '上海'}, 'daily': [{'date': 'tomorrow'}]}]}",
-    "{'results': [{'location': {'name': '上海'}, 'daily': [{'date': '2026-11-18\\nBAD'}]}]}",
+    '{"status":"0","forecasts":[]}',
+    '{"city":"上海","forecasts":[{"date":"tomorrow"}]}',
+    '{"city":"上海","forecasts":[{"date":"2026-11-18\\nBAD"}]}',
     'x'.repeat(40_000),
   ]) {
     assert.throws(() => projectWeatherForecast(value));
   }
   const extraField = projectWeatherForecast(
-    "{'results': [{'location': {'name': '上海'}, 'daily': [{'date': '2026-11-18', 'text_day': '晴'}]}], 'extra': !!js/function}",
+    '{"city":"上海","forecasts":[{"date":"2026-11-18","dayweather":"晴"}],"extra":"untrusted"}',
   );
-  assert.equal(JSON.stringify(extraField).includes('js/function'), false);
+  assert.equal(JSON.stringify(extraField).includes('untrusted'), false);
 });
 
-test('天气 MCP endpoint 只接受 HTTPS 固定主机和路径', () => {
-  assert.equal(
-    resolveWeatherMcpUrl(undefined),
-    'https://nihaochen123-cxy.ms.show/gradio_api/mcp/sse',
-  );
-  assert.equal(
-    resolveWeatherMcpUrl('https://nihaochen123-cxy.ms.show/gradio_api/mcp/sse'),
-    'https://nihaochen123-cxy.ms.show/gradio_api/mcp/sse',
-  );
-  for (const url of [
-    'http://nihaochen123-cxy.ms.show/gradio_api/mcp/sse',
-    'https://evil.example/gradio_api/mcp/sse',
-    'https://nihaochen123-cxy.ms.show/other',
-    'https://user:pass@nihaochen123-cxy.ms.show/gradio_api/mcp/sse',
-    'https://nihaochen123-cxy.ms.show/gradio_api/mcp/sse?token=secret',
-  ]) {
-    assert.throws(() => resolveWeatherMcpUrl(url));
-  }
-});
-
-test('天气工具受远程开关及已批准 endpoint 配置控制', async () => {
+test('天气工具仅在远程工具开关开启且配置高德 API Key 时注册', async () => {
   const enabled = new WeatherMcpService(
     new ConfigService({
       LLM_ENABLE_REMOTE_TOOLS: 'true',
-      WEATHER_MCP_URL: 'https://nihaochen123-cxy.ms.show/gradio_api/mcp/sse',
+      AMAP_MAPS_API_KEY: 'test-key',
     }),
   );
   const disabledByFlag = new WeatherMcpService(
     new ConfigService({
       LLM_ENABLE_REMOTE_TOOLS: 'false',
-      WEATHER_MCP_URL: 'https://nihaochen123-cxy.ms.show/gradio_api/mcp/sse',
+      AMAP_MAPS_API_KEY: 'test-key',
     }),
   );
-  const disabledByUrl = new WeatherMcpService(
+  const disabledByKey = new WeatherMcpService(
     new ConfigService({
       LLM_ENABLE_REMOTE_TOOLS: 'true',
-      WEATHER_MCP_URL: 'https://unapproved.example/mcp',
     }),
   );
 
   assert.equal(enabled.isEnabled(), true);
   assert.equal(disabledByFlag.isEnabled(), false);
-  assert.equal(disabledByUrl.isEnabled(), false);
+  assert.equal(disabledByKey.isEnabled(), false);
   await Promise.all([
     enabled.onModuleDestroy(),
     disabledByFlag.onModuleDestroy(),
-    disabledByUrl.onModuleDestroy(),
+    disabledByKey.onModuleDestroy(),
   ]);
 });

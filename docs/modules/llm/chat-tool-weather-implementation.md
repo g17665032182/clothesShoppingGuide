@@ -2,10 +2,9 @@
 
 ## 开发流程总览
 
-- 状态：已实现并完成验证
-- 已确认设计与天气工具契约；已确认 `@dangahagan/weather-mcp` 与 XingYuWeather 的对比结果，并选择 XingYuWeather。
-- 已确认技术方案：通过 XingYuWeather 的 SSE MCP endpoint 调用 `predict({ city })`，只向模型返回项目自有白名单结果。
-- 实施文档已于 2026-11-19 获得确认；主代理完成依赖、环境配置、API 接线、自动化测试、真实 MCP smoke test 和最终验证。
+- 状态：已切换至高德地图 stdio MCP，等待有效 `AMAP_MAPS_API_KEY` 后进行外部验收。
+- 原实施方案曾通过 XingYuWeather SSE 查询；2026-11-23 按用户最新指示改为本地启动 `@amap/amap-maps-mcp-server`。
+- 新链路调用 `maps_weather({ city })`，仅向模型返回项目自有白名单结果；不复用或保存此前对话中暴露的凭据。
 
 ## 子代理角色和文件所有权
 
@@ -28,15 +27,15 @@
 - `llm` 层通过 `WeatherMcpPort` 管理懒连接和 SSE 生命周期；`chat-records` 不依赖 MCP adapter 私有实现。
 - 已注册 `get_weather_forecast`，严格校验城市、每轮限一次、白名单输出并统一安全降级。
 - JSON/SSE 共用天气工具和来源隔离；历史隐藏天气调用及结果，下一普通轮恢复记忆/摘要来源。
-- 已配置 `WEATHER_MCP_URL` 和本地远程工具开关；移除了本功能不使用的 OpenWeatherMap Key 环境变量，真实 Key 不写入仓库文件。
+- 本地配置使用固定版本 `@amap/amap-maps-mcp-server@0.0.8` 的 stdio transport 和 `maps_weather` 工具；Render Blueprint 默认关闭远程工具，并将 `AMAP_MAPS_API_KEY` 作为 Secret 槽位。启用前需在 Render 配置有效 Key。
 - 已更新天气能力清单、LLM 系统上下文、README、环境模板和本实施记录。
 - 未新增数据库实体、迁移、公开 HTTP API、前端功能或订单/地址/定位权限。
 
 ## 按顺序排列的实施阶段
 
 1. **依赖与响应核实（已完成）**
-   - 阅读仓库本地包文档及适配器官方文档，确认依赖版本、SSE 调用响应结构、工具 timeout 和 close 生命周期。
-   - 核对 XingYuWeather `wind_speed` 单位与上游服务条款。单位无法确认时将 `windSpeedKmh` 留为 `null`，不做转换。
+   - 阅读仓库本地包文档及适配器官方文档，确认 MCP 包版本、stdio 调用响应结构、工具 timeout 和 close 生命周期。
+   - 核对天气数据字段和单位。来源未提供或无法确认时对应字段留为 `null`，不做猜测。
    - 检查当前可用解析依赖。若 MCP content 只有 Python dict 文本，优先使用现成且安全的解析库；没有合适库时先停止并重新评审技术文档，不使用 `eval`、`Function` 或不受限自制解析器。
 2. **适配器与配置（已完成）**
    - 添加 `@langchain/mcp-adapters` 并更新 lockfile。
@@ -44,14 +43,14 @@
    - 为 client/provider 编写完全使用 fake transport 的单元测试。
 3. **聊天工具与安全投影（已完成）**
    - 新增 `get_weather_forecast(city)` Zod schema 和包装工具。
-   - 固定调用 MCP `predict`，最多保留 3 天且只输出契约白名单字段；限制原始返回字节、结构深度和数组长度。
+   - 固定调用 MCP `maps_weather`，最多保留 3 天且只输出契约白名单字段；限制原始返回字节、结构深度和数组长度。
    - 实现每轮一次、失败安全结构及天气查询来源隔离；不在日志、trace/activity 写入完整 MCP 参数/结果/异常。
 4. **聊天链路集成（已完成）**
-   - 按配置开关与 URL 可用性装配工具；未配置时不注册，MCP 运行时故障不影响未请求天气的普通对话。
+   - 按配置开关与 API Key 装配工具；未配置时不注册，MCP 运行时故障不影响未请求天气的普通对话。
    - 使用现有 fake model + 实际 ToolNode 覆盖 JSON、SSE、trace/history、记忆/摘要隔离与下一轮恢复。
 5. **最终验证与交付（已完成）**
    - 串行执行格式、API typecheck、API 测试、API build、`pnpm check` 和 `git diff --check`。
-   - 手动执行 ModelScope SSE smoke test，记录工具发现与指定城市返回情况；该外部检查不作为稳定 CI 依赖。
+   - 手动执行高德 MCP smoke test，记录工具发现与指定城市返回情况；该外部检查不作为稳定 CI 依赖。
    - 审查差异，确认无 Key、无不必要的数据库或用户数据变更，更新能力清单和实施记录。
 
 ## 验收标准
@@ -75,13 +74,19 @@
 - `pnpm check`：通过，包含全仓 Prettier、递归类型检查和 API/Web/shared 构建。
 - `git diff --check`：通过。
 - trace/history 专项回归：58 项通过、0 失败；trace 仅留状态与预报天数，后续历史隐藏天气调用和结果。
-- 真实 MCP smoke test：使用项目 `WeatherMcpService` 经 XingYuWeather SSE 查询上海，成功返回 3 天，首日 `2026-11-19`。本次上游响应未提供更新时间，`updatedAt` 安全返回 `null`；风速单位未确认，`windSpeedKmh` 为 `null`。
+- 历史真实 MCP smoke test：2026-11-19 曾经由 XingYuWeather SSE 成功查询上海近三天预报；这不代表新高德 stdio 链路已验证。
 - 数据库、迁移、默认开发库和浏览器登录流程未运行。
+
+## 供应商切换记录（2026-11-23）
+
+- 已将适配器改为本地 stdio，调用固定包版本 `@amap/amap-maps-mcp-server@0.0.8` 的 `maps_weather` 工具；按高德天气字段映射最高/最低温、天气描述和风向，不提供来源缺失的降水量、湿度及风速单位。
+- `AMAP_MAPS_API_KEY` 仅通过环境变量传给子进程，Render Blueprint 提供 Secret 配置项；未将用户消息中的任何凭据写入仓库。
+- 尚未配置有效 API Key，未执行高德外部 Smoke Test；API Key 需在 Render Secret 中配置后再验收。
 
 ## 风险和停止条件
 
-- ModelScope 是第三方托管 SSE endpoint；目前的手工成功结果不构成 SLA、数据授权或持续可用性保证。
+- 高德 API Key 缺失时天气工具保持未注册；当前等待有效 Key 后做真实供应商验收。
 - `wind_speed` 单位无法从可信说明或响应元数据确认，当前 `windSpeedKmh` 返回 `null`，不映射为 km/h。
 - MCP 返回 Python 风格映射文本，已使用受限的 YAML failsafe schema 安全解析；不执行返回文本。
-- 若 SSE transport、连接重试或 client 生命周期与锁定版本不兼容，暂停并重新评估技术方案，不用临时底层协议实现绕过。
+- 若 npx 安装或 stdio 生命周期与锁定版本不兼容，暂停并重新评估，不绕过 MCPAdapter 自行实现协议。
 - 不运行真实默认数据库迁移、`migration:fresh`、持久化用户数据写入或任何会打印真实环境变量的命令。

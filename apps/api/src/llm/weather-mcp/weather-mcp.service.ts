@@ -10,11 +10,10 @@ import type {
   WeatherMcpPort,
 } from './weather-mcp.port.js';
 
-const DEFAULT_WEATHER_MCP_URL =
-  'https://nihaochen123-cxy.ms.show/gradio_api/mcp/sse';
-const WEATHER_MCP_HOST = 'nihaochen123-cxy.ms.show';
-const WEATHER_MCP_PATH = '/gradio_api/mcp/sse';
+const WEATHER_TOOL_NAME = 'maps_weather';
+const AMAP_MCP_PACKAGE = '@amap/amap-maps-mcp-server@0.0.8';
 const WEATHER_TOOL_TIMEOUT_MS = 10_000;
+const WEATHER_DISCOVERY_TIMEOUT_MS = 30_000;
 const MAX_RESPONSE_BYTES = 32_768;
 const MAX_PARSE_DEPTH = 12;
 const MAX_PARSE_NODES = 2_000;
@@ -95,7 +94,7 @@ async function withTimeout<T>(
   }
 }
 
-function parsePythonMapping(text: string): unknown {
+function parseWeatherMcpResponse(text: string): unknown {
   if (Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES)
     throw new Error('response_limit');
 
@@ -141,7 +140,7 @@ function safeCondition(value: unknown): string | null {
   return text;
 }
 
-function safeDay(value: unknown): WeatherForecastDay | null {
+function safeAmapDay(value: unknown): WeatherForecastDay | null {
   const day = asRecord(value);
   if (!day) return null;
   const date = boundedText(day.date, 10);
@@ -149,56 +148,54 @@ function safeDay(value: unknown): WeatherForecastDay | null {
 
   return {
     date,
-    dayCondition: safeCondition(day.text_day),
-    nightCondition: safeCondition(day.text_night),
-    highC: numberWithin(day.high, -100, 70),
-    lowC: numberWithin(day.low, -100, 70),
-    precipitationMm: numberWithin(day.precip, 0, 2_000),
-    windDirection: boundedText(day.wind_direction, 16),
-    // 上游未声明 wind_speed 单位，不能把数值伪装成 km/h。
+    dayCondition: safeCondition(day.dayweather ?? day.dayWeather),
+    nightCondition: safeCondition(day.nightweather ?? day.nightWeather),
+    highC: numberWithin(day.daytemp ?? day.dayTemp, -100, 70),
+    lowC: numberWithin(day.nighttemp ?? day.nightTemp, -100, 70),
+    precipitationMm: null,
+    windDirection: boundedText(day.daywind ?? day.dayWindDir, 16),
     windSpeedKmh: null,
-    windScale: numberWithin(day.wind_scale, 0, 17),
-    humidityPercent: numberWithin(day.humidity, 0, 100),
+    windScale: numberWithin(day.daypower ?? day.dayWindPower, 0, 17),
+    humidityPercent: null,
   };
 }
 
 export function projectWeatherForecast(text: string): WeatherForecastResult {
-  const response = asRecord(parsePythonMapping(text));
-  const results = response?.results;
-  if (!Array.isArray(results) || results.length === 0)
+  const response = asRecord(parseWeatherMcpResponse(text));
+  if (!response || response.status === '0' || response.status === 0)
     throw new Error('response_shape');
-  const firstResult = asRecord(results[0]);
-  const location = asRecord(firstResult?.location);
-  const city = boundedText(location?.name, 100);
-  const daily = firstResult?.daily;
+  const forecast = asRecord(response.forecast);
+  const upstreamForecasts = Array.isArray(response.forecasts)
+    ? response.forecasts
+    : null;
+  const firstForecast = upstreamForecasts
+    ? asRecord(upstreamForecasts[0])
+    : null;
+  const packageDays =
+    boundedText(response.city, 100) && firstForecast?.date
+      ? upstreamForecasts
+      : null;
+  const city = boundedText(
+    response.city ?? firstForecast?.city ?? forecast?.city,
+    100,
+  );
+  const daily =
+    packageDays ??
+    firstForecast?.casts ??
+    forecast?.casts ??
+    forecast?.forecasts ??
+    response.casts;
   if (!city || !Array.isArray(daily) || daily.length === 0)
     throw new Error('response_shape');
-  const days = daily.slice(0, 3).map(safeDay);
+  const days = daily.slice(0, 3).map(safeAmapDay);
   if (days.some((day) => day === null)) throw new Error('response_shape');
 
   return {
     ok: true,
     location: city,
     days: days as WeatherForecastDay[],
-    updatedAt: safeTimestamp(response?.last_update),
+    updatedAt: safeTimestamp(forecast?.reporttime ?? response.reporttime),
   };
-}
-
-export function resolveWeatherMcpUrl(value: string | undefined): string {
-  const candidate = value?.trim() || DEFAULT_WEATHER_MCP_URL;
-  const parsed = new URL(candidate);
-  if (
-    parsed.protocol !== 'https:' ||
-    parsed.hostname !== WEATHER_MCP_HOST ||
-    parsed.pathname !== WEATHER_MCP_PATH ||
-    parsed.username ||
-    parsed.password ||
-    parsed.search ||
-    parsed.hash
-  ) {
-    throw new Error('WEATHER_MCP_URL is not an approved endpoint');
-  }
-  return parsed.toString();
 }
 
 @Injectable()
@@ -212,17 +209,18 @@ export class WeatherMcpService implements WeatherMcpPort, OnModuleDestroy {
   public isEnabled(): boolean {
     return (
       this.config.get<string>('LLM_ENABLE_REMOTE_TOOLS') === 'true' &&
-      Boolean(this.config.get<string>('WEATHER_MCP_URL')?.trim()) &&
-      this.hasApprovedEndpoint()
+      Boolean(this.config.get<string>('AMAP_MAPS_API_KEY')?.trim())
     );
   }
 
   public async getForecast(city: string): Promise<WeatherForecastResponse> {
     try {
       const tools = await this.getWeatherTools();
-      const predict = tools.find((candidate) => candidate.name === 'predict');
-      if (!predict) return this.unavailable('tool_missing');
-      const output = await predict.invoke(
+      const weatherTool = tools.find(
+        (candidate) => candidate.name === WEATHER_TOOL_NAME,
+      );
+      if (!weatherTool) return this.unavailable('tool_missing');
+      const output = await weatherTool.invoke(
         { city },
         { signal: AbortSignal.timeout(WEATHER_TOOL_TIMEOUT_MS) },
       );
@@ -239,27 +237,25 @@ export class WeatherMcpService implements WeatherMcpPort, OnModuleDestroy {
     this.toolsPromise = undefined;
   }
 
-  private hasApprovedEndpoint(): boolean {
-    try {
-      resolveWeatherMcpUrl(this.config.get<string>('WEATHER_MCP_URL'));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   private async getWeatherTools() {
     if (!this.toolsPromise) {
-      const url = resolveWeatherMcpUrl(
-        this.config.get<string>('WEATHER_MCP_URL'),
-      );
       this.adapter ??= new MCPAdapter({
         prefixToolNameWithServerName: false,
         servers: {
           weather: {
-            transport: 'sse',
-            mode: 'legacy',
-            url,
+            transport: 'stdio',
+            command: 'npx',
+            args: ['-y', AMAP_MCP_PACKAGE],
+            // 仅传递高德 Key，并丢弃第三方进程输出，避免凭据进入应用日志。
+            env: {
+              PATH: process.env.PATH ?? '',
+              ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+              ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
+              AMAP_MAPS_API_KEY: this.config
+                .get<string>('AMAP_MAPS_API_KEY')!
+                .trim(),
+            },
+            stderr: 'ignore',
             defaultToolTimeout: WEATHER_TOOL_TIMEOUT_MS,
           },
         },
@@ -269,7 +265,7 @@ export class WeatherMcpService implements WeatherMcpPort, OnModuleDestroy {
       const adapter = this.adapter;
       this.toolsPromise = withTimeout(
         adapter.listTools('weather'),
-        WEATHER_TOOL_TIMEOUT_MS,
+        WEATHER_DISCOVERY_TIMEOUT_MS,
       ).catch(async (error) => {
         this.toolsPromise = undefined;
         await adapter.close();

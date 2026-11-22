@@ -58,6 +58,10 @@ services:
         sync: false
       - key: LLM_MODEL
         sync: false
+      - key: LLM_ENABLE_REMOTE_TOOLS
+        value: 'false'
+      - key: AMAP_MAPS_API_KEY
+        sync: false
       - key: TRY_ON_STORAGE_DRIVER
         value: qiniu
       - key: TRY_ON_ENABLED

@@ -111,6 +111,9 @@ CI 在发往 `main` 的 PR、`main`、`codex/feature/*`、`codex/test/*` 和
 清单仅用于本地 kind 和未来手动迁移。测试验证通过后再通过 PR 合并到 `main`，
 测试数据库数据不会回灌生产库。
 
+聊天天气查询需在 API 环境启用 `LLM_ENABLE_REMOTE_TOOLS=true`，并通过部署平台
+Secret 配置 `AMAP_MAPS_API_KEY`。Key 不可提交到仓库。
+
 ### 本地隔离测试环境
 
 测试环境使用独立 PostgreSQL 容器项目、端口 `55435`、账号 `clothes_test` 和数据库 `clothes_guide_test`，与日常开发数据库（端口 `5432`、数据库 `clothes_guide`）分离。它只提供测试数据库，不会自动启动 API/Web，也不会自动运行迁移或业务测试。
@@ -143,7 +146,9 @@ Seeder 不会自动开启试穿或填充本地私有图片。商品导入使用 
 
 在后端配置 `LLM_PROVIDER`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`，并按模型设置必填的 `LLM_CONTEXT_WINDOW_TOKENS`；其余超时及 token 编码见 [`.env.example`](./.env.example)。登录后访问 `/chat` 使用导购、购买与订单查询功能；未配置有效模型时不能完成真实对话生成。
 
-启用聊天中的近三天天气预报需设置 `LLM_ENABLE_REMOTE_TOOLS=true` 和 `WEATHER_MCP_URL`。工具通过 XingYuWeather MCP 查询用户指定城市，不需要 OpenWeatherMap Key；服务不可用时仅当前天气查询失败。
+启用聊天中的近三天天气预报需设置 `LLM_ENABLE_REMOTE_TOOLS=true`、
+`AMAP_MAPS_API_KEY`。工具通过高德地图 MCP Server 查询用户指定城市；服务不可用时
+仅当前天气查询失败。
 
 `get_my_information` 由服务端绑定当前用户，不接受模型提供的 `userId`；地址和订单只返回安全摘要，图片只返回已保存元数据。购买草稿缺少收件信息时会查询本人地址簿：有地址则展示选择卡，由用户显式选择；地址簿为空时才展示动态表单收集草稿缺少的字段。地址查询失败不会按空列表处理，用户明确选择手动填写后才可改用动态表单。完整地址由前端临时读取，不发送给模型。
 

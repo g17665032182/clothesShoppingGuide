@@ -102,7 +102,10 @@ CAPTCHA_HMAC_SECRET=<Render 为该环境生成的独立密钥>
 3. 为 API 服务填写所有 `sync: false` 变量。至少包括：
    `DB_HOST`、`DB_USER`、`DB_PASSWORD`、`DB_NAME`、`JWT_SECRET`、
    `PRODUCT_QUERY_CURSOR_SECRET`、`LLM_API_KEY`、`LLM_BASE_URL`、
-   `LLM_MODEL` 和 `SEED_ADMIN_*`。`CAPTCHA_STORAGE`、`CAPTCHA_REDIS_URL` 和
+   `LLM_MODEL` 和 `SEED_ADMIN_*`。需要聊天天气查询时，在 Render Dashboard
+   将 `LLM_ENABLE_REMOTE_TOOLS` 设为 `true`，并在 Render Secret 配置
+   `AMAP_MAPS_API_KEY`。Key 不得提交到仓库；没有有效 Key 时天气工具保持关闭。
+   `CAPTCHA_STORAGE`、`CAPTCHA_REDIS_URL` 和
    `CAPTCHA_HMAC_SECRET` 由 Blueprint 自动配置，不要手动改成内存模式。
 4. 如果启用七牛试穿，再填写 `QINIU_*`，并按业务契约补齐试穿供应商配置；
    默认 `TRY_ON_ENABLED=false`，不会开启真实试穿。
