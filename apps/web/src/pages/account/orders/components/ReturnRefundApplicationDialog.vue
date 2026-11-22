@@ -312,7 +312,9 @@ onBeforeUnmount(() => {
                 class="size-12 shrink-0 rounded-sm object-cover"
               />
               <div class="min-w-0">
-                <p class="wrap-break-word font-medium">{{ item.productName }}</p>
+                <p class="wrap-break-word font-medium">
+                  {{ item.productName }}
+                </p>
                 <p class="text-sm text-muted-foreground">
                   {{ item.color }} / {{ item.size }} · ¥{{ item.unitPrice }}
                 </p>
