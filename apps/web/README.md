@@ -8,6 +8,8 @@ pnpm --filter @clothes-shopping-guide/web typecheck
 pnpm --filter @clothes-shopping-guide/web build
 ```
 
+顶栏显示的 Web 版本号来自本包 `package.json` 的 `version` 字段；发布新版本时更新该字段即可同步。
+
 ## Markdown 展示组件
 
 `src/components/MarkdownRenderer.vue` 已内置 GFM、代码高亮和 HTML 安全过滤：
