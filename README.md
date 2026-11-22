@@ -94,7 +94,8 @@ Web 开发服务器将 `/api` 代理到本机 3000 端口。前端路由使用 h
 Render、Neon 与 Redis 的固定部署配置、环境变量映射、迁移/Seeder 顺序和故障处理见
 [部署手册](./docs/development/deployment.md)。提交到 `main` 后，
 Render 按仓库根目录 [`render.yaml`](./render.yaml) 自动构建 API 和 Web；生产环境
-发布前只执行增量 `migration:up` 和幂等 `seed`。
+发布前只执行增量 `migration:up` 和幂等 `seed`。Web 版本号以
+`apps/web/package.json` 为准，版本递增和发布标签规则见部署手册。
 
 测试环境使用独立的 [`render.test.yaml`](./render.test.yaml)，创建时在 Render
 Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库和测试密钥。它不

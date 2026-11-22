@@ -8,7 +8,8 @@ pnpm --filter @clothes-shopping-guide/web typecheck
 pnpm --filter @clothes-shopping-guide/web build
 ```
 
-顶栏显示的 Web 版本号来自本包 `package.json` 的 `version` 字段；发布新版本时更新该字段即可同步。
+顶栏显示的 Web 版本号来自本包 `package.json` 的 `version` 字段，当前起始版本为
+`0.1.0`。版本递增与发布步骤见[部署手册的 Web 版本规则](../../docs/development/deployment.md#web-版本号与发布)。
 
 ## Markdown 展示组件
 

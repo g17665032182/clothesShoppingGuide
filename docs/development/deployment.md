@@ -126,6 +126,30 @@ API 自动化测试，并在隔离 PostgreSQL 中验证迁移、管理员和测�
 
 ## 每次发布
 
+### Web 版本号与发布
+
+Web 使用语义化版本 `MAJOR.MINOR.PATCH`，唯一版本来源是
+[`apps/web/package.json`](../../apps/web/package.json) 的 `version` 字段；Vite 构建时
+将其写入前端，顶栏负责添加 `v` 前缀。根目录和 API 的包版本不随 Web 版本变更。
+`0.0.0` 是占位值，Web 正式版本从 `0.1.0` 开始。
+
+进入 `1.0.0` 前属于初始开发阶段，版本保持 `0.MINOR.PATCH`：修复问题递增
+`PATCH`，新增功能递增 `MINOR`；此阶段若有不兼容变化，也递增 `MINOR`，并在 PR
+中明确标记影响。达到 `1.0.0` 并承诺稳定兼容后，按常规规则递增：不兼容变更递增
+`MAJOR`，向后兼容的新功能递增 `MINOR`，缺陷修复、安全修复和不改变行为的调整递增
+`PATCH`。每次只按最高影响级别递增一次；不要为普通开发提交逐次改号。
+
+发布步骤：
+
+1. 准备发布 PR 时，根据上述规则更新 Web 包的 `version`，并在 PR 描述列出版本号和
+   变更摘要；该版本随候选提交部署到测试环境并完成业务验收。
+2. 验收通过后合并到 `main`。Render 在 CI 通过后自动部署生产 API 和 Web；生产
+   Web 部署完成后确认顶栏显示的版本与 `apps/web/package.json` 一致。
+3. 确认生产部署成功后，在对应生产部署提交上创建 `web-vX.Y.Z` Git 标签，例如
+   `web-v0.1.0`。标签只标记已发布版本，不触发或替代 Render 部署。
+4. 已发布版本不可复用。若发布后发现问题，修复并递增 `PATCH`，再按完整流程验收和
+   发布；回滚部署到旧版本时也保留原版本号及其标签。
+
 PR 合并到 `main` 后，GitHub Actions 会运行格式/类型/构建校验、API 自动化测试、
 隔离 PostgreSQL 迁移和管理员 Seeder 验证。检查通过后，Render 自动部署生产
 API 和 Web。Render 生产服务的 Auto-Deploy 设置必须为 **After CI Checks
