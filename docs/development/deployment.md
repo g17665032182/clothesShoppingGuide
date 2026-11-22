@@ -2,32 +2,61 @@
 
 [返回开发文档索引](./README.md) · [返回项目文档总览](../README.md)
 
-核对日期：2026-11-22。当前生产部署使用 GitHub 仓库
+核对日期：2026-11-23。仓库 Blueprint 的目标配置使用 GitHub 仓库
 `https://github.com/g17665032182/clothesShoppingGuide.git`，由 Render
-运行 API Web Service、Web Static Site 和生产 Key Value，数据库使用外部 Neon
-PostgreSQL。Kubernetes 清单仅作为后续可选迁移方案，当前不参与发布。
+运行 API/Web Docker Web Service 和生产 Key Value，数据库使用外部 Neon
+PostgreSQL。现有 Render 服务仍需按“现有 Render 服务切换”完成 Dashboard 同步和
+Web 入口切换；本手册描述目标配置，不代表线上服务已完成切换。Kubernetes 清单仍用于
+本地 kind 和后续可选迁移方案。
 
 ## 固定配置
 
 仓库根目录的 [`render.yaml`](../../render.yaml) 是部署配置的唯一维护入口：
 
-| 服务                           | Render 类型      | 构建                                                                                | 启动/发布                |
-| ------------------------------ | ---------------- | ----------------------------------------------------------------------------------- | ------------------------ |
-| `clothes-shopping-guide-api`   | Node Web Service | 安装依赖、构建 API、执行 `deploy:prepare:built`                                     | 启动 `pnpm start:prod`   |
-| `clothes-shopping-guide-web`   | Static Site      | `pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build` | 发布目录 `apps/web/dist` |
-| `clothes-shopping-guide-redis` | Key Value        | Render 托管 Redis 兼容服务                                                          | 仅允许私网连接           |
+| 服务                                | Render 类型        | Dockerfile                     | 启动/发布                                         |
+| ----------------------------------- | ------------------ | ------------------------------ | ------------------------------------------------- |
+| `clothes-shopping-guide-api`        | Docker Web Service | `deploy/docker/api.Dockerfile` | 启动时执行增量迁移和管理员 Seeder，然后启动 API   |
+| `clothes-shopping-guide-web-docker` | Docker Web Service | `deploy/docker/web.Dockerfile` | Nginx 提供 Vue 构建产物；API 地址在镜像构建时写入 |
+| `clothes-shopping-guide-redis`      | Key Value          | Render 托管 Redis 兼容服务     | 仅允许私网连接                                    |
 
-API 健康检查固定为 `/api/health`。Web 配置了 `/* -> /index.html` 回退，以支持
-Vue Router 的 history 路由。
+API 健康检查固定为 `/api/health`。Web Nginx 配置了 `try_files` 回退到
+`/index.html`，以支持 Vue Router 的 history 路由。
 
-两个服务都从仓库根目录构建，不设置 `rootDir`。这样 Render 可以读取根目录
-`pnpm-workspace.yaml`、`package.json` 和 `pnpm-lock.yaml`。
+API 和 Web 都使用仓库根目录作为 Docker build context，Render 按 Blueprint 中的
+Dockerfile 路径构建镜像。Render 环境变量 `VITE_API_BASE_URL` 作为 Docker build
+argument 提供给 Vite；Web 镜像中的 Nginx 监听 `8080`，API 监听 `3000`。
 
-当前 API 保留 Render Native Node runtime，Web 保留 Static Site。Blueprint 在构建
-阶段执行 API 增量迁移、管理员 Seeder 和测试商品 Seeder。Render Free 不支持
-`preDeployCommand`；直接改成 Docker runtime 会把迁移移到容器启动阶段，并可能在
-每次重启时重复执行测试商品 Seeder。因此当前 Render 服务不切换为 Docker runtime；
-Docker 镜像仍供本地 kind 使用，或在另行设计迁移/Seeder 作业后再用于 Render。
+API 镜像入口脚本在每次容器启动时执行：
+
+```text
+增量 migration:up -> 默认管理员 Seeder ->（测试环境）测试商品 Seeder -> 启动 API
+```
+
+增量迁移和默认管理员 Seeder 可重复执行。测试环境设置
+`RUN_TEST_CATALOG_SEEDER=true`，因此测试商品 Seeder 会在**每次测试 API 启动**时
+运行并更新对应商品和 SKU，可能重置测试 SKU 库存；若种子库存低于当前预占量，Seeder
+会失败并阻止 API 启动。生产环境不设置该变量，不导入测试商品。该流程不使用
+`preDeployCommand`；服务发布和容器重启都会运行 API 启动脚本。
+Docker API 将应用日志写入标准输出，由 Render 收集；本地私有试穿目录和日志目录
+不会打进镜像。
+每个 API 副本启动时都会运行迁移和 Seeder；扩容到多个副本前，应先验证并发启动时的
+迁移和初始化行为。
+
+## 现有 Render 服务切换
+
+更新仓库 Blueprint 不会自动完成现有服务的运行时切换。部署前应在 Render Dashboard
+核对服务来源、分支、Blueprint 管理状态和域名：
+
+- API Web Service 可将 runtime 改为 Docker，并使用 `deploy/docker/api.Dockerfile`。
+- Render Static Site 不能原地改成 Docker Web Service；Blueprint 使用新的
+  `*-web-docker` 服务名创建 Docker Web Service，用对应环境的分支和
+  `deploy/docker/web.Dockerfile` 构建。验证 `/`、Vue 深链接和 API 请求后，再切换
+  自定义域名或完成服务替换。
+- 切换期间保留旧 Web Static Site，直到新 Docker Web Service 验收通过。若站点只用
+  Render 默认域名，替换服务时先确认新的服务名和访问地址，并相应更新对外入口。
+
+生产服务此前不是由 Blueprint 管理的。首次将这两份 Blueprint 同步到已有环境时，
+逐项核对 Render 的变更预览；不要假设 Blueprint 同步会自动接管或替换所有既有服务。
 
 ## Neon 配置
 
@@ -82,7 +111,8 @@ CAPTCHA_HMAC_SECRET=<Render 为该环境生成的独立密钥>
 当前部署地址：
 
 - API：`https://clothes-shopping-guide-api.onrender.com`
-- Web：`https://clothes-shopping-guide-web.onrender.com`
+- 现有 Static Site：`https://clothes-shopping-guide-web.onrender.com`
+- Docker Web 验收服务：`https://clothes-shopping-guide-web-docker.onrender.com`
 
 ## 测试环境
 
@@ -96,7 +126,7 @@ Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App
 1. 在 Neon 创建与生产项目隔离的测试项目或分支，并准备专用数据库用户。不要复制
    生产连接变量或把生产连接串用于测试。
 2. 在 Render 选择 New > Blueprint，连接本仓库及 `codex/render-test-env` 分支，
-   Blueprint Path 填 `render.test.yaml`，确认只创建测试 API、测试 Web 和
+   Blueprint Path 填 `render.test.yaml`，确认创建测试 API、Docker 测试 Web 和
    `clothes-shopping-guide-test-redis`。
 3. 为测试 API 填入 Neon 测试库的 `DB_HOST`、`DB_USER`、`DB_PASSWORD`、
    `DB_NAME`，并设置独立的 `SEED_ADMIN_EMAIL`、`SEED_ADMIN_PASSWORD` 和
@@ -112,16 +142,19 @@ Render 的 GitHub App 必须保持启用，并且仅需授权此仓库；若 App
    重新部署现有构建。虚拟试穿保持关闭，不填写七牛或真实试穿凭据。
 5. 部署完成后确认 API 健康检查通过，再验证测试 Web 的登录及目标业务流程。
 
-测试 API 在构建成功后，先执行 `pnpm deploy:prepare:built` 完成增量迁移和管理员
-初始化，再执行 `pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built`
-导入测试商品。任一步骤失败都会阻止该次 API 发布。确认 Render API 环境变量仅含
-测试库凭据后，才可首次部署或手动触发部署。重复部署会更新对应测试商品与 SKU，
-包括库存；当种子库存低于当前预占量时，商品 Seeder 会拒绝写入并使该次部署失败。
-Web API 地址在 `render.test.yaml` 中指向 `clothes-shopping-guide-test-api.onrender.com`。
+测试 API 启动时，入口脚本先执行增量迁移和管理员初始化，再导入测试商品。任一步骤
+失败都会使容器启动失败，API 健康检查无法通过。确认 Render API 环境变量仅含测试库
+凭据后，才可首次部署或手动触发部署。每次测试 API 容器重启都会更新对应测试商品与
+SKU，包括库存；当种子库存低于当前预占量时，Seeder 会拒绝写入并阻止 API 启动。
+Web API 地址在 `render.test.yaml` 中指向
+`clothes-shopping-guide-test-api.onrender.com`，并在 Web Docker 镜像构建时写入。
+新 Docker 测试 Web 服务名为 `clothes-shopping-guide-test-web-docker`；旧 Static Site
+保留到新服务完成验收。
 
 向 `codex/render-test-env` 推送后，GitHub Actions 依次执行格式/类型/构建校验、
 API 自动化测试，并在隔离 PostgreSQL 中验证迁移、管理员和测试商品 Seeder。所有
-检查通过后，Render 自动部署测试 API 和 Web；API 健康检查路径为 `/api/health`。
+检查通过后，Render 自动构建并部署测试 API/Web Docker 镜像；API 健康检查路径为
+`/api/health`。
 检查失败时 Render 不会自动部署。
 
 ## 每次发布
@@ -151,23 +184,20 @@ Web 使用语义化版本 `MAJOR.MINOR.PATCH`，唯一版本来源是
    发布；回滚部署到旧版本时也保留原版本号及其标签。
 
 PR 合并到 `main` 后，GitHub Actions 会运行格式/类型/构建校验、API 自动化测试、
-隔离 PostgreSQL 迁移和管理员 Seeder 验证。检查通过后，Render 自动部署生产
-API 和 Web。Render 生产服务的 Auto-Deploy 设置必须为 **After CI Checks
-Pass**，不能为 **On Commit**。现有生产服务不是由 Blueprint 管理的，需在两个生产
-服务的 Dashboard Settings 中分别确认此选项。这样迁移只会在生产 API 的检查通过后
-由其部署命令执行。为兼容 Render Free 计划（该计划不支持
-`preDeployCommand`），API 的构建命令在编译成功后继续执行迁移和 Seeder。发布顺序
-固定为：
+隔离 PostgreSQL 迁移和管理员 Seeder 验证。检查通过后，Render 自动构建并部署生产
+API/Web Docker 镜像。Render 生产服务的 Auto-Deploy 设置必须为
+**After CI Checks Pass**，不能为 **On Commit**。生产 API 容器启动时执行增量迁移和
+幂等管理员 Seeder；迁移或 Seeder 失败时 API 不会通过健康检查。发布顺序为：
 
 ```text
-安装依赖 -> 构建 API -> migration:up -> seed -> 启动 API
+GitHub CI 通过 -> Render 构建 API/Web 镜像 -> API 容器启动时 migration:up -> seed -> API 健康检查
 ```
 
-Render 使用根目录 `pnpm deploy:prepare:built`：
+API 镜像通过程序化初始化脚本运行 ORM 迁移和 Seeder，不需要在运行镜像中安装
+MikroORM CLI：
 
 ```bash
-pnpm --dir apps/api exec mikro-orm migration:up --config ./dist/mikro-orm.config.js
-pnpm --dir apps/api exec mikro-orm seeder:run --config ./dist/mikro-orm.config.js
+node ./api-bootstrap.mjs
 ```
 
 `migration:up` 只应用尚未执行的增量迁移；`seed` 使用幂等的默认
@@ -197,12 +227,10 @@ Docker/Kubernetes 资源位于 [`deploy/`](../../deploy/)，当前 Render 是唯
 级权限、独立 Redis 和生产审批；Render 本身不是 Kubernetes 集群，也不提供
 `kubectl` kubeconfig。
 
-Dockerfile 继续用于本地构建、kind 验收和未来迁移，不改变当前 Render API 的
-迁移/Seeder 顺序。
-
-Render 发布顺序为：分支 CI 通过 → 测试 Blueprint 自动部署并执行迁移、Seeder 和
-测试商品 Seeder → 测试验收 → PR 合并 `main` → 生产 Blueprint 在 GitHub 检查通过后
-自动部署。API/Web 使用 Render 当前构建，验证码使用对应环境的 Key Value。
+Render 发布顺序为：分支 CI 通过 → 测试 Blueprint 自动构建并启动 API/Web Docker
+镜像（API 启动时执行迁移、Seeder 和测试商品 Seeder）→ 测试验收 → PR 合并 `main`
+→ 生产 Blueprint 在 GitHub 检查通过后自动构建并启动 API/Web Docker 镜像。验证码
+使用对应环境的 Key Value。
 
 本地 Docker/kind 验证可直接使用 `kind-clothes-guide-dev` 集群和
 [`deploy/k8s/local/README.md`](../../deploy/k8s/local/README.md)。本地 namespace 为
@@ -211,19 +239,15 @@ Neon、Render 或 GHCR 凭据。
 
 ## 手工执行迁移或 Seeder
 
-优先使用 Render 的 API Shell，并确认当前 Shell 属于 API 服务。手工脚本会先构建
-API，再执行增量迁移和 Seeder：
+优先使用 Render 的 API Shell，并确认当前 Shell 属于 API 服务。Docker API 镜像工作
+目录为 `/app`。手动运行同一套增量迁移和 Seeder 初始化流程：
 
 ```bash
-pnpm deploy:prepare
+node ./api-bootstrap.mjs
 ```
 
-如果只需要其中一步：
-
-```bash
-pnpm --filter @clothes-shopping-guide/api migration:up
-pnpm --filter @clothes-shopping-guide/api seed
-```
+测试 API 设置了 `RUN_TEST_CATALOG_SEEDER=true`，因此该命令也会运行测试商品 Seeder；
+生产环境未设置时只执行迁移和管理员 Seeder。
 
 不要在本地把生产 Neon 密码写进 `.env` 后执行 destructive 命令。执行迁移前先
 审查对应 Migration 的 SQL 和回滚影响；执行后查看部署日志，确认迁移完成、Seeder
@@ -235,7 +259,7 @@ pnpm --filter @clothes-shopping-guide/api seed
 
 ```bash
 curl -fsS https://clothes-shopping-guide-api.onrender.com/api/health
-curl -I https://clothes-shopping-guide-web.onrender.com/
+curl -I https://clothes-shopping-guide-web-docker.onrender.com/
 ```
 
 健康检查失败时按顺序检查：

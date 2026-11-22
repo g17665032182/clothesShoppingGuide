@@ -48,3 +48,12 @@ export {
   type ProductCatalogSkuIdentity,
   type ProductCatalogSkuExternalKey,
 } from './service/product-catalog-order.port.js';
+export {
+  PRODUCT_CATALOG_RECOMMENDATION_PORT,
+  type ProductCatalogRecommendationPort,
+  type ProductCatalogRecommendationCategory,
+  type ProductCatalogRecommendationItem,
+  type ProductCatalogRecommendationSearchInput,
+  type ProductCatalogRecommendationSearchResult,
+} from './service/product-catalog-recommendation.port.js';
+export { ProductCatalogRecommendationService } from './service/product-catalog-recommendation.service.js';

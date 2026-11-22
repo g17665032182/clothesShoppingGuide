@@ -6,7 +6,7 @@
 
 ## 1. 目标与现状
 
-目标是让多人并行开发，每个变更都能追踪到通过 CI、业务验收和部署的具体版本；当前以 Render 完成测试/生产发布，并用 Redis Key Value 解决 API 多副本之间的验证码共享问题。Docker 与 Kubernetes 作为本地验收和后续迁移能力保留。
+目标是让多人并行开发，每个变更都能追踪到通过 CI、业务验收和部署的具体版本；当前以 Render Docker Web Service 完成测试/生产发布，并用 Redis Key Value 解决 API 多副本之间的验证码共享问题。Kubernetes 仍用于本地 kind 验收和后续迁移能力。
 
 | 事项       | 当前状态                                                                                           | 本设计                                                        |
 | ---------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -36,10 +36,10 @@
             └─ 其他路径 ─ Web Service ── Nginx Pods：Vue dist
 ```
 
-- **镜像**：从 pnpm monorepo 根目录做多阶段构建，沿用仓库 Node/pnpm 版本与锁文件。API 运行 `node dist/main.js`，保留编译后迁移文件、Prompt Markdown 和必要运行依赖，并验证 Linux 镜像中的 `sharp` 可用。Web 由 Nginx 提供 Vite 构建产物，保留 Vue Router 的 `index.html` 回退。`.dockerignore` 排除真实 `.env*`、私有图片和其他非构建资产；不把凭据写进镜像层。
+- **镜像**：从 pnpm monorepo 根目录做多阶段构建，沿用仓库 Node/pnpm 版本与锁文件。API 入口通过程序化 ORM 初始化脚本执行增量迁移和环境对应的 Seeder，再启动 `node dist/main.js`；运行镜像保留编译后迁移文件、Prompt Markdown 和必要运行依赖，并验证 Linux 镜像中的 `sharp` 可用。Web 由 Nginx 提供 Vite 构建产物，保留 Vue Router 的 `index.html` 回退。`.dockerignore` 排除真实 `.env*`、私有图片和其他非构建资产；不把凭据写进镜像层。
 - **Kubernetes**：API 与 Web 各用一个 `Deployment` 和一个 `Service`。选定平台支持的 HTTPS 网关，同域转发 `/api`，不剥离 API 前缀；Web 保持默认 `/api`，同一 Web 镜像可跨环境使用。验证登录 Cookie、客户端 IP 与代理信任配置；为 SSE 验证网关不会缓冲事件，空闲超时和连接下线符合业务需求。
 - **环境隔离**：`staging` 和 `production` 的工作负载、Neon 数据库、Redis 及凭据相互隔离，部署身份按环境授权。生产密钥从受控密钥存储注入，不提交到仓库，不提供给 PR 检查。托管集群、网络出口、证书及成本待确认。
-- **Render 主线**：测试和生产 API 继续使用 Render Node Web Service，Web 使用 Static Site，验证码使用同 region 的私网 Key Value。当前 API 保留 Render 的构建阶段迁移/Seeder 顺序，不把数据库迁移挪到 Docker 容器启动命令。
+- **Render 主线**：测试和生产 API/Web 均由 Dockerfile 构建为 Render Docker Web Service，验证码使用同 region 的私网 Key Value。API 容器启动时执行增量迁移和管理员 Seeder；测试环境额外自动执行测试商品 Seeder。
 - **健康与副本**：测试阶段可从单 API 副本开始验证镜像。现有 `/api/health` 只表示进程能响应，不代表数据库或 Redis 可用；就绪策略和冒烟验证应覆盖必要依赖，存活探针不因外部依赖短暂抖动重启整个应用。启用 API 多副本或新旧版本共存前，先验证验证码共享、限流策略、后台任务竞争、优雅下线和数据库连接数。
 
 ## 4. 验证码共享存储
@@ -61,11 +61,11 @@ Redis 只使用私网连接和受限账户，监控可用性、延迟、容量�
 | 触发点                                                         | 流水线                                                                                                                                 |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `codex/feature/*`、可选 `codex/test/*` 推送及发往 `main` 的 PR | 复用根 `pnpm check`、API 自动化测试、CI 临时 PostgreSQL 迁移校验；增加 Redis 集成用例。保留稳定的 `check` 名称，不给 PR 作业部署权限。 |
-| `codex/render-test-env` CI 通过                                | Render 自动部署测试 API/Web；API 执行增量迁移、Seeder、测试商品 Seeder，再做业务验收。                                                 |
-| 合并到 `main`                                                  | 对合并提交再跑 CI；检查通过后 Render 自动部署生产 API/Web，生产 API 使用独立 Neon 和 Key Value。                                       |
+| `codex/render-test-env` CI 通过                                | Render 自动构建并部署测试 API/Web Docker 镜像；API 容器启动时执行增量迁移、Seeder 和测试商品 Seeder，再做业务验收。                    |
+| 合并到 `main`                                                  | 对合并提交再跑 CI；检查通过后 Render 自动部署生产 API/Web Docker 镜像，生产 API 使用独立 Neon 和 Key Value。                           |
 
 - **权限**：公开仓库的 fork PR 只运行无生产凭据的 CI。不在高权限 `pull_request_target` 作业中构建或执行 PR 代码。Render 生产部署由 GitHub `check` 和 Render `checksPass` 双重门控。
-- **数据库**：Render API 部署继续执行增量 `migration:up` 和幂等 Seeder；测试商品只在隔离测试库导入，生产不执行 `migration:fresh`。Kubernetes Migration Job 仅在将来迁移时重新启用。
+- **数据库**：Render API 容器每次启动都执行增量 `migration:up` 和幂等管理员 Seeder；测试商品 Seeder 仅在隔离测试环境运行，且会在每次测试 API 容器启动时更新 SKU。生产不执行 `migration:fresh`。Kubernetes Migration Job 仅在将来迁移时重新启用。
 - **切流与回退**：当前不切换外部流量到 Kubernetes；Render 继续服务测试和生产。未来迁移前需再验证生产网络、域名、证书、数据备份和回切路径，并采用向后兼容迁移。
 
 ## 6. 实施顺序与验收
@@ -79,7 +79,7 @@ Redis 只使用私网连接和受限账户，监控可用性、延迟、容量�
 
 **待确认**：是否确实需要每功能测试分支；共享测试环境的审批与占用规则；Render Key Value 计划与持久化策略；是否未来迁移到自管 Kubernetes。
 
-**本次交付**：已实现功能/测试分支 CI 触发、Render 测试/生产 Blueprint、两套私网 Key Value、Redis 验证码存储、API/Web/迁移 Docker 镜像和本地 kind 资源。Kubernetes 基础/本地清单保留；自动 Kubernetes/GHCR 发布 workflow 已移除，当前不参与线上发布。实际实施时按[环境与验证约定](./validation.md)记录通过、失败、跳过及未执行项。
+**本次交付**：已实现功能/测试分支 CI 触发、Render 测试/生产 Docker Blueprint、两套私网 Key Value、Redis 验证码存储、API/Web/迁移 Docker 镜像和本地 kind 资源。Kubernetes 基础/本地清单保留；自动 Kubernetes/GHCR 发布 workflow 已移除，当前不参与线上发布。实际实施时按[环境与验证约定](./validation.md)记录通过、失败、跳过及未执行项。
 
 ## 参考
 

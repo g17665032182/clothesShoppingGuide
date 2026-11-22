@@ -20,6 +20,7 @@ import type {
   ChatTryOnStatus,
   ChatDynamicFormReference,
 } from './chat-display.types.js';
+import { fashionRecommendationCardSchema } from './fashion-recommendation-card.js';
 
 export const MAX_DISPLAY_BYTES = 16_384;
 export const MAX_TRACE_PAYLOAD_BYTES = 32_768;
@@ -257,6 +258,7 @@ export const chatCardSchema = z.discriminatedUnion('name', [
   productChatCardSchema,
   orderChatCardSchema,
   addressSelectionChatCardSchema,
+  fashionRecommendationCardSchema,
 ]);
 
 function uniqueReferences(maxLength: number) {
@@ -650,6 +652,31 @@ export function restoreChatCard(value: unknown): ChatCard | null {
   const parsed = chatCardSchema.safeParse(value);
   if (!parsed.success) return null;
   const card = parsed.data;
+  if (card.name === 'outfit_recommendation') {
+    const projectItem = (item: (typeof card.data.items)[number]) => ({
+      ...item,
+      imageUrl: item.imageUrl
+        ? (publicSourceUrl(item.imageUrl)?.toString() ?? null)
+        : null,
+      productUrl: item.productUrl
+        ? (publicSourceUrl(item.productUrl)?.toString() ?? null)
+        : null,
+    });
+    return {
+      ...card,
+      data: {
+        ...card.data,
+        items: card.data.items.map(projectItem),
+        outfits: card.data.outfits.map((outfit) => ({
+          ...outfit,
+          items: outfit.items.map((entry) => ({
+            ...entry,
+            item: projectItem(entry.item),
+          })),
+        })),
+      },
+    };
+  }
   if (card.name === 'product') {
     return {
       ...card,

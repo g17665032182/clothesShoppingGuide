@@ -61,6 +61,12 @@ export const router = createRouter({
           name: 'my-try-ons',
           component: () => import('@/pages/my-try-ons/index.vue'),
         },
+        {
+          path: 'recommendation-settings',
+          name: 'account-recommendation-settings',
+          component: () =>
+            import('@/pages/account/recommendation-settings/index.vue'),
+        },
       ],
     },
     {

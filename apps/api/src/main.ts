@@ -50,7 +50,8 @@ async function bootstrap(): Promise<void> {
   });
 
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port);
+  // Render 容器需要监听所有网卡，才能接收平台转发的请求。
+  await app.listen(port, '0.0.0.0');
 }
 
 await bootstrap();

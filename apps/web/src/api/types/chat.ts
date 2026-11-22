@@ -5,6 +5,7 @@ import type {
   ChatDynamicFormResult,
 } from './chat-dynamic-form';
 import type { PreferenceCategory } from './preferences';
+import type { FashionRecommendationCard } from './fashion-recommendation';
 
 export type MessageRole = 'assistant' | 'user';
 
@@ -122,7 +123,8 @@ export type ChatCard =
       type: 'card';
       name: 'address_selection';
       data: ChatAddressSelectionCard;
-    };
+    }
+  | FashionRecommendationCard;
 
 export type ChatProductResults = {
   items: ChatProductCard[];

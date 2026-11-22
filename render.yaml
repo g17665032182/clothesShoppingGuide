@@ -11,17 +11,18 @@ services:
 
   - type: web
     name: clothes-shopping-guide-api
-    runtime: node
+    runtime: docker
+    dockerfilePath: ./deploy/docker/api.Dockerfile
+    dockerContext: .
     region: singapore
     branch: main
     autoDeployTrigger: checksPass
-    # Free 计划不支持 preDeployCommand，因此在编译完成后执行增量迁移和幂等 Seeder。
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/api build && pnpm deploy:prepare:built
-    startCommand: pnpm start:prod
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: '3000'
       - key: DB_HOST
         sync: false
       - key: DB_PORT
@@ -81,17 +82,15 @@ services:
         sync: false
 
   - type: web
-    name: clothes-shopping-guide-web
-    runtime: static
+    name: clothes-shopping-guide-web-docker
+    runtime: docker
+    dockerfilePath: ./deploy/docker/web.Dockerfile
+    dockerContext: .
     branch: main
     autoDeployTrigger: checksPass
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build
-    staticPublishPath: apps/web/dist
+    healthCheckPath: /
     envVars:
+      - key: PORT
+        value: '8080'
       - key: VITE_API_BASE_URL
         value: https://clothes-shopping-guide-api.onrender.com/api
-    routes:
-      # Vue Router 使用 history 模式，未知路径统一回退到入口页面。
-      - type: rewrite
-        source: /*
-        destination: /index.html

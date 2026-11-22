@@ -24,7 +24,7 @@ FROM dependencies AS build
 COPY . .
 RUN pnpm --filter @clothes-shopping-guide/api build
 
-# 迁移 Job 需要 MikroORM CLI，因此保留完整依赖；API 运行镜像只复制生产依赖。
+# 本地迁移 Job 保留完整依赖；运行镜像通过程序化入口执行迁移和 Seeder。
 FROM build AS migration
 
 ENV NODE_ENV=production
@@ -40,13 +40,18 @@ FROM node:22.19.0-alpine AS runtime
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV LOG_FILE_ENABLED=false
 
 WORKDIR /app
 
-COPY --from=production-dependencies /app ./
+COPY --from=production-dependencies /app/package.json ./package.json
+COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY --from=build /workspace/apps/api/dist ./dist
+COPY deploy/docker/api-bootstrap.mjs ./api-bootstrap.mjs
+COPY deploy/docker/api-entrypoint.sh ./entrypoint.sh
+COPY deploy/docker/mikro-orm.production.config.js ./mikro-orm.production.config.js
 
 USER node
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["/bin/sh", "/app/entrypoint.sh"]

@@ -10,22 +10,21 @@ services:
 
   - type: web
     name: clothes-shopping-guide-test-api
-    runtime: node
+    runtime: docker
+    dockerfilePath: ./deploy/docker/api.Dockerfile
+    dockerContext: .
     region: oregon
     plan: free
     branch: codex/render-test-env
     autoDeployTrigger: checksPass
-    # 仅测试 API 在增量迁移和管理员初始化成功后导入测试商品。
-    buildCommand: >-
-      pnpm install --frozen-lockfile &&
-      pnpm --filter @clothes-shopping-guide/api build &&
-      pnpm deploy:prepare:built &&
-      pnpm --filter @clothes-shopping-guide/api catalog:seed:test:built
-    startCommand: pnpm start:prod
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: '3000'
+      - key: RUN_TEST_CATALOG_SEEDER
+        value: 'true'
       - key: DB_HOST
         sync: false
       - key: DB_PORT
@@ -73,16 +72,15 @@ services:
         value: 测试管理员
 
   - type: web
-    name: clothes-shopping-guide-test-web
-    runtime: static
+    name: clothes-shopping-guide-test-web-docker
+    runtime: docker
+    dockerfilePath: ./deploy/docker/web.Dockerfile
+    dockerContext: .
     branch: codex/render-test-env
     autoDeployTrigger: checksPass
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @clothes-shopping-guide/web build
-    staticPublishPath: apps/web/dist
+    healthCheckPath: /
     envVars:
+      - key: PORT
+        value: '8080'
       - key: VITE_API_BASE_URL
         value: https://clothes-shopping-guide-test-api.onrender.com/api
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html

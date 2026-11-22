@@ -20,6 +20,7 @@ import { VirtualTryOnModule } from './virtual-try-on/virtual-try-on.module.js';
 import { UserAddressesModule } from './user-addresses/index.js';
 import { ReturnRefundModule } from './return-refund/index.js';
 import { parseRateLimitConfig } from './common/rate-limit/rate-limit.config.js';
+import { FashionPersonalizationModule } from './fashion-personalization/index.js';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { parseRateLimitConfig } from './common/rate-limit/rate-limit.config.js';
     AuthModule,
     LlmModule,
     ChatRecordsModule,
+    FashionPersonalizationModule,
     ReturnRefundModule,
     VirtualTryOnModule,
     UserAddressesModule,

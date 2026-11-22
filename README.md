@@ -46,7 +46,7 @@ AGENTS.md              开发与验证约定
 
 ## 开发协作
 
-较大功能采用 Agent Team 协作：主代理负责需求边界、拆分、集成和最终验证；团队代理按模块或文件承担相互独立的设计、实现或审查任务。小型或强耦合改动可由主代理直接完成。派发任务时明确文件所有权与验收标准；共享数据库、端口和构建目录等资源应隔离或串行使用。主代理审阅并验证集成结果后，才能报告整体完成。具体开发约定见 [`AGENTS.md`](./AGENTS.md)。
+较大功能采用 Agent Team 协作，主代理负责需求边界、拆分、集成和最终验证。小型或强耦合改动可由主代理直接完成。前后端分别在 `apps/web` 和 `apps/api` 内查阅任务相关源码，主代理派发时明确读写范围、契约要点与验收标准。共享数据库、端口和构建目录等资源应隔离或串行使用。主代理审阅并验证集成结果后，才能报告整体完成。具体开发约定见 [子代理阅读范围](./AGENTS.md#子代理阅读范围)。
 
 分支协作、CI/CD、Render、Docker 及 Redis 验证码见[多人协作与 Kubernetes 发布设计](./docs/development/ci-cd-kubernetes-design.md)。当前 Render 是测试和生产的主部署平台，Kubernetes 仅作为后续可选迁移方案。
 
@@ -93,14 +93,15 @@ Web 开发服务器将 `/api` 代理到本机 3000 端口。前端路由使用 h
 
 Render、Neon 与 Redis 的固定部署配置、环境变量映射、迁移/Seeder 顺序和故障处理见
 [部署手册](./docs/development/deployment.md)。提交到 `main` 后，
-Render 按仓库根目录 [`render.yaml`](./render.yaml) 自动构建 API 和 Web；生产环境
-发布前只执行增量 `migration:up` 和幂等 `seed`。Web 版本号以
+Render 按 [`render.yaml`](./render.yaml) 使用仓库 Dockerfile 自动构建 API 和 Web；
+生产 API 容器启动时执行增量 `migration:up` 和幂等管理员 `seed`。Web 版本号以
 `apps/web/package.json` 为准，版本递增和发布标签规则见部署手册。
 
 测试环境使用独立的 [`render.test.yaml`](./render.test.yaml)，创建时在 Render
 Blueprint Path 指定该文件，并为 API 配置单独的 Neon 测试数据库和测试密钥。它不
 复用生产 Render 服务或数据库。测试 API 部署时，在增量迁移和管理员初始化通过后
-自动导入测试商品；首次创建和部署步骤见部署手册。
+自动导入测试商品；该 Seeder 在每次测试 API 容器启动时更新测试 SKU 库存，首次创建
+和部署步骤见部署手册。
 
 CI 在发往 `main` 的 PR、`main`、`codex/feature/*`、`codex/test/*` 和
 `codex/render-test-env` 推送时运行格式/类型/构建、API 自动化测试及临时 PostgreSQL

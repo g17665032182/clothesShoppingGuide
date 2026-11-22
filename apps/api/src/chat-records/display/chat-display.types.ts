@@ -1,4 +1,5 @@
 import type { ProductSearchQuery } from '../../product-catalog/index.js';
+import type { FashionRecommendationCard } from './fashion-recommendation-card.js';
 
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -82,7 +83,8 @@ export type ChatCard =
       type: 'card';
       name: 'address_selection';
       data: { draftId: string; draftVersion: number };
-    };
+    }
+  | FashionRecommendationCard;
 
 export type ChatCardSelection =
   | { name: 'product'; externalIds: string[] }

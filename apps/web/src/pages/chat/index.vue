@@ -71,6 +71,9 @@ const {
   dynamicFormError,
   submitDynamicForm,
   cancelDynamicForm,
+  recommendationFeedbackStatus,
+  recommendationFeedbackError,
+  submitRecommendationFeedback,
   retryPurchaseAddresses,
   discardPurchase,
   confirmPurchaseOrder,
@@ -171,6 +174,8 @@ const {
               :address-selection-error="addressSelectionError"
               :dynamic-form-submitting="dynamicFormSubmitting"
               :dynamic-form-error="dynamicFormError"
+              :recommendation-feedback-status="recommendationFeedbackStatus"
+              :recommendation-feedback-error="recommendationFeedbackError"
               @load-earlier="loadEarlierMessages"
               @more-products="loadMoreProducts"
               @buy-product="buyProduct"
@@ -182,6 +187,7 @@ const {
               @retry-history="loadEarlierMessages"
               @submit-dynamic-form="submitDynamicForm"
               @cancel-dynamic-form="cancelDynamicForm"
+              @recommendation-feedback="submitRecommendationFeedback"
             />
           </div>
           <div

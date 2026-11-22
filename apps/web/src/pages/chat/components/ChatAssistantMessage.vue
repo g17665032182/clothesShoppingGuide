@@ -9,6 +9,7 @@ import type {
   ChatTryOnAction,
   ChatTryOnStatus,
 } from '@/api/types/chat';
+import type { RecommendationFeedbackPayload } from '@/api/types/fashion-recommendation';
 import type {
   ChatDynamicForm,
   DynamicFormValues,
@@ -43,6 +44,10 @@ const props = defineProps<{
   addressSelectionError?: (draftId: string, draftVersion: number) => string;
   dynamicFormSubmitting?: (formId: string) => boolean;
   dynamicFormError?: (formId: string) => string;
+  recommendationFeedbackStatus?: (
+    targetRef: string,
+  ) => 'idle' | 'submitting' | 'accepted' | 'duplicate' | 'disabled' | 'error';
+  recommendationFeedbackError?: (targetRef: string) => string;
 }>();
 const router = useRouter();
 const tryOnDialogOpen = ref(false);
@@ -61,6 +66,10 @@ const emit = defineEmits<{
     values: DynamicFormValues,
   ): void;
   (event: 'cancelDynamicForm', form: ChatDynamicForm): void;
+  (
+    event: 'recommendationFeedback',
+    payload: RecommendationFeedbackPayload,
+  ): void;
 }>();
 
 const isRunning = computed(
@@ -152,6 +161,9 @@ function openTryOnTasks() {
         :cards="message.cards"
         :disabled="isSending || isRunning"
         :conversation-id="conversationId"
+        :assistant-message-id="message.id"
+        :recommendation-feedback-status="recommendationFeedbackStatus"
+        :recommendation-feedback-error="recommendationFeedbackError"
         :address-selection-status="addressSelectionStatus"
         :address-selection-error="addressSelectionError"
         @buy-product="(externalId) => emit('buyProduct', externalId)"
@@ -160,6 +172,9 @@ function openTryOnTasks() {
           (conversationId) => emit('refreshPurchaseDraft', conversationId)
         "
         @try-on="openTryOn"
+        @recommendation-feedback="
+          (payload) => emit('recommendationFeedback', payload)
+        "
       />
       <p
         v-else-if="isRunning && !message.activities.length"
