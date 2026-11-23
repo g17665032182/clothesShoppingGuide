@@ -11,6 +11,7 @@ import type {
 } from './weather-mcp.port.js';
 
 const WEATHER_TOOL_NAME = 'maps_weather';
+const IP_LOCATION_TOOL_NAME = 'maps_ip_location';
 const AMAP_MCP_PACKAGE = '@amap/amap-maps-mcp-server@0.0.8';
 const WEATHER_TOOL_TIMEOUT_MS = 10_000;
 const WEATHER_DISCOVERY_TIMEOUT_MS = 30_000;
@@ -198,6 +199,17 @@ export function projectWeatherForecast(text: string): WeatherForecastResult {
   };
 }
 
+export function projectIpLocationCity(output: unknown): string | null {
+  if (
+    typeof output !== 'string' ||
+    Buffer.byteLength(output) > MAX_RESPONSE_BYTES
+  )
+    return null;
+  const location = asRecord(JSON.parse(output));
+  const city = boundedText(location?.city, 50);
+  return city && /^[\p{Script=Han}·]+$/u.test(city) ? city : null;
+}
+
 @Injectable()
 export class WeatherMcpService implements WeatherMcpPort, OnModuleDestroy {
   private readonly logger = new Logger(WeatherMcpService.name);
@@ -228,6 +240,24 @@ export class WeatherMcpService implements WeatherMcpPort, OnModuleDestroy {
       return projectWeatherForecast(output);
     } catch {
       return this.unavailable('request_failed');
+    }
+  }
+
+  public async locateCity(ip: string): Promise<string | null> {
+    try {
+      const tools = await this.getWeatherTools();
+      const tool = tools.find(
+        (candidate) => candidate.name === IP_LOCATION_TOOL_NAME,
+      );
+      // 定位只返回城市候选，屏蔽高德响应的行政编码、矩形范围和原始错误。
+      const output = await tool?.invoke(
+        { ip },
+        { signal: AbortSignal.timeout(WEATHER_TOOL_TIMEOUT_MS) },
+      );
+      return projectIpLocationCity(output);
+    } catch {
+      this.logger.warn('天气 MCP 城市定位不可用');
+      return null;
     }
   }
 

@@ -27,6 +27,19 @@ type TransportTarget = {
   };
 };
 
+export function serializeRequest(request: {
+  id: unknown;
+  method?: string;
+  url?: string;
+}) {
+  const path = request.url?.split('?', 1)[0];
+  if (path && /^\/api\/llm\/weather\/location\/?$/i.test(path)) {
+    // 定位请求仅记录路由元数据，避免把连接地址、转发头或查询参数写入日志。
+    return { id: request.id, method: request.method, url: path };
+  }
+  return request;
+}
+
 const logLevels = new Set<LogLevel>([
   'trace',
   'debug',
@@ -62,6 +75,7 @@ const logLevels = new Set<LogLevel>([
 
         const pinoHttp: {
           level: LogLevel;
+          serializers: { req: typeof serializeRequest };
           redact: {
             paths: string[];
             censor: string;
@@ -71,6 +85,7 @@ const logLevels = new Set<LogLevel>([
           };
         } = {
           level,
+          serializers: { req: serializeRequest },
           redact: {
             // 日志中禁止保留可复用的认证凭据。
             paths: ['req.headers.authorization', 'req.headers.cookie'],

@@ -65,7 +65,8 @@ apps/api/src/chat-records/
 
 ## 安全和可观测性
 
-- 天气城市只来自本轮用户明确输入或确认，不通过 IP、浏览器、地址簿或长期记忆推断。
+- 天气城市来自本轮用户明确输入或确认。天气弹窗支持按次同意调用认证接口 `POST /api/llm/weather/location` 获取城市候选，模型没有定位工具。
+- 定位接口使用现有 JWT Guard、Zod 校验和限流。`proxy-addr` 按连接端向外检查明确配置的 `WEATHER_LOCATION_TRUSTED_PROXIES`，留空时使用直接连接地址。回环、内网和其他不可用 IPv4 返回空候选。接口把公网 IPv4 发给同一高德 MCP 子进程的 `maps_ip_location`，只返回经校验的城市名，定位请求日志仅记录路由元数据。
 - 高德 API Key 仅通过 `AMAP_MAPS_API_KEY` 注入固定 MCP 子进程；不进入模型、trace、activity、history 或应用日志。
 - 禁止日志/trace/activity/history 记录完整 MCP 请求、响应和异常；持久化 trace 只保留固定状态及有界预报天数。
 - 不允许 MCP 返回的描述覆盖系统/开发指令；内容作为不可信天气数据使用。输出字段白名单避免远端任意文本进入 trace/activity。

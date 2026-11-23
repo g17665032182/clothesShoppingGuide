@@ -8,9 +8,11 @@ import {
   InputGroupTextarea,
 } from '@/components/ui/input-group';
 import ChatContextUsageIndicator from './ChatContextUsage.vue';
+import ChatWeatherDialog from './ChatWeatherDialog.vue';
 
 defineProps<{
   canSend: boolean;
+  canQueryWeather: boolean;
   draft: string;
   isSending: boolean;
   context: ChatContextUsage | null;
@@ -19,6 +21,7 @@ defineProps<{
 
 const emit = defineEmits<{
   (event: 'submit'): void;
+  (event: 'query-weather', city: string): void;
   (event: 'stop'): void;
   (event: 'update:draft', value: string): void;
   (event: 'keydown', keyboardEvent: KeyboardEvent): void;
@@ -39,6 +42,10 @@ const emit = defineEmits<{
         @update:model-value="emit('update:draft', String($event))"
       />
       <InputGroupAddon align="block-end">
+        <ChatWeatherDialog
+          :disabled="!canQueryWeather"
+          @confirm="emit('query-weather', $event)"
+        />
         <ChatContextUsageIndicator
           :context="context"
           :is-previous="contextIsPrevious"

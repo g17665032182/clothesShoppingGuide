@@ -51,6 +51,7 @@
     "js-tiktoken": "^1.0.21",
     "nestjs-pino": "^5.3.1",
     "pino-pretty": "^13.2.0",
+    "proxy-addr": "2.0.8",
     "qiniu": "7.15.2",
     "redis": "6.3.1",
     "reflect-metadata": "0.2.2",
@@ -69,6 +70,7 @@
     "@swc/core": "1.16.20",
     "@types/node": "26.6.5",
     "@types/pg": "8.16.0",
+    "@types/proxy-addr": "2.0.3",
     "typescript": "6.0.3"
   }
 }

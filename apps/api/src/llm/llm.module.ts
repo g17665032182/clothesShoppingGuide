@@ -15,11 +15,12 @@ import { LLM_MODEL_NAME } from './port/structured-text-generation.tokens.js';
 import { StructuredTextGenerationService } from './port/structured-text-generation.service.js';
 import { STRUCTURED_TEXT_GENERATION_PORT } from './port/structured-text-generation.port.js';
 import { WEATHER_MCP_PORT } from './weather-mcp/weather-mcp.port.js';
+import { WeatherLocationController } from './weather-mcp/weather-location.controller.js';
 import { WeatherMcpService } from './weather-mcp/weather-mcp.service.js';
 
 @Module({
   imports: [ConfigModule],
-  controllers: [],
+  controllers: [WeatherLocationController],
   providers: [
     ChatModelFactory,
     WeatherMcpService,

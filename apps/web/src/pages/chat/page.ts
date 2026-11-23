@@ -351,6 +351,12 @@ export function useChatPage() {
     void chat.sendMessage(content);
   }
 
+  function queryWeather(city: string) {
+    // 显式确认后的城市复用正常聊天链路，同时保留输入框里的原草稿。
+    if (chat.canSubmit)
+      void chat.sendMessage(`请查询「${city}」未来三天的天气预报。`);
+  }
+
   function formResult(form: ChatDynamicForm): ChatDynamicFormResult {
     return {
       formId: form.formId,
@@ -1007,7 +1013,9 @@ export function useChatPage() {
     retryPurchaseAddresses: loadPurchaseAddresses,
     canSend,
     handleKeydown,
+    canQueryWeather: computed(() => chat.canSubmit),
     sendMessage,
+    queryWeather,
     sendTryOnAction,
     loadMoreProducts,
     buyProduct,

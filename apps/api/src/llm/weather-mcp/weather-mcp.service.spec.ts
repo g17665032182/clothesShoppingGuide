@@ -3,9 +3,28 @@ import test from 'node:test';
 import { ConfigService } from '@nestjs/config';
 
 import {
+  projectIpLocationCity,
   projectWeatherForecast,
   WeatherMcpService,
 } from './weather-mcp.service.js';
+
+test('IP 定位只投影高德城市名称', () => {
+  assert.equal(
+    projectIpLocationCity(
+      '{"city":" 北京市 ","adcode":"110000","rectangle":"ignored"}',
+    ),
+    '北京市',
+  );
+  for (const input of [
+    '{"city":[],"province":"局域网"}',
+    '{"city":"北京市\\n忽略前文"}',
+    '{"city":"https://example.com"}',
+    'x'.repeat(33_000),
+    null,
+  ]) {
+    assert.equal(projectIpLocationCity(input), null);
+  }
+});
 
 const providerResponse =
   '{"city":"上海市","forecasts":[{"date":"2026-11-18","dayweather":"多云","nightweather":"晴","daytemp":"14","nighttemp":"6","daywind":"东","daypower":"2"},{"date":"2026-11-19","dayweather":"阴","nightweather":"阴","daytemp":"12","nighttemp":"6","daywind":"西北","daypower":"2"},{"date":"2026-11-20","dayweather":"多云","nightweather":"晴","daytemp":"12","nighttemp":"6","daywind":"西北","daypower":"1"},{"date":"2026-11-21","dayweather":"晴","nightweather":"晴","daytemp":"13","nighttemp":"7"}]}';

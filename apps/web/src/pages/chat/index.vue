@@ -17,6 +17,7 @@ const {
   activeConversationId,
   canDeleteConversations,
   canSend,
+  canQueryWeather,
   conversations,
   conversationListError,
   conversationListStatus,
@@ -33,6 +34,7 @@ const {
   refreshUncertainTurn,
   selectConversation,
   sendMessage,
+  queryWeather,
   sendTryOnAction,
   startNewConversation,
   status,
@@ -223,6 +225,7 @@ const {
             <ChatComposer
               :key="activeConversationId ?? 'new'"
               :can-send="canSend"
+              :can-query-weather="canQueryWeather"
               :draft="draft"
               :is-sending="isSending"
               :context="context"
@@ -230,6 +233,7 @@ const {
               @keydown="handleKeydown"
               @stop="stopGeneration"
               @submit="sendMessage"
+              @query-weather="queryWeather"
               @update:draft="draft = $event"
             />
           </div>
@@ -270,12 +274,14 @@ const {
             <ChatComposer
               key="new"
               :can-send="canSend"
+              :can-query-weather="canQueryWeather"
               :draft="draft"
               :is-sending="isSending"
               :context="context"
               :context-is-previous="contextIsPrevious"
               @keydown="handleKeydown"
               @submit="sendMessage"
+              @query-weather="queryWeather"
               @stop="stopGeneration"
               @update:draft="draft = $event"
             />
