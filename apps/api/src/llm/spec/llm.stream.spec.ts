@@ -7,6 +7,7 @@ import { ChatGenerationChunk } from '@langchain/core/outputs';
 import { tool } from '@langchain/core/tools';
 import { BadGatewayException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PinoLogger } from 'nestjs-pino';
 import { z } from 'zod';
 
 import { createLlmGraph, normalizeUsage } from '../graph/llm.graph.js';
@@ -280,19 +281,34 @@ test('工具参数聚合并持久化后才公开调用，正文按所有轮次�
 
 test('工具失败公开失败状态并终止本轮，不再次请求模型', async () => {
   const model = toolModel();
-  const service = createService(model, [
-    tool(
-      async () => {
-        throw new Error('供应商内部失败');
-      },
-      {
-        name: 'echo_tool',
-        description: '测试失败工具',
-        schema: z.object({ value: z.string() }),
-      },
-    ),
-  ]);
-  const stream = service.streamEventsPrepared(input);
+  const logEntries: Array<[unknown, string]> = [];
+  const logger = {
+    error: (fields: unknown, message: string) =>
+      logEntries.push([fields, message]),
+  } as unknown as PinoLogger;
+  const service = new LlmService(
+    createLlmGraph(model, [
+      tool(
+        async () => {
+          throw new Error('敏感的工具错误内容');
+        },
+        {
+          name: 'echo_tool',
+          description: '测试失败工具',
+          schema: z.object({ value: z.string() }),
+        },
+      ),
+    ]),
+    new ConfigService({ LLM_MODEL: 'fake-model' }),
+    undefined,
+    logger,
+  );
+  const stream = service.streamEventsPrepared(input, undefined, {
+    conversationId: 'conversation-1',
+    runId: 'run-1',
+    model: 'fake-model',
+    writer: { writeEvents: async () => undefined },
+  });
   const events: LlmStreamEvent[] = [];
   await assert.rejects(async () => {
     for await (const event of stream) events.push(event);
@@ -303,6 +319,21 @@ test('工具失败公开失败状态并终止本轮，不再次请求模型', as
     (events.at(-1) as Extract<LlmStreamEvent, { type: 'tool-result' }>).status,
     'error',
   );
+  assert.deepEqual(logEntries[0]?.[0], {
+    event: 'llm_call_failed',
+    stage: 'tool',
+    toolName: 'echo_tool',
+    toolCallId: 'call-1',
+    conversationId: 'conversation-1',
+    runId: 'run-1',
+    model: 'fake-model',
+    errorType: 'ToolExecutionError',
+  });
+  assert.equal(
+    JSON.stringify(logEntries).includes('敏感的工具错误内容'),
+    false,
+  );
+  assert.equal(logEntries.length, 1);
 });
 
 test('token 使用量只接受非负安全整数', () => {

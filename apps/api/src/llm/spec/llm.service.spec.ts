@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SystemMessage } from '@langchain/core/messages';
+import { PinoLogger } from 'nestjs-pino';
 
 import { createLlmGraph } from '../graph/llm.graph.js';
 import { LlmService } from '../service/llm.service.js';
@@ -17,8 +18,14 @@ import { SYSTEM_CONTEXT } from '../context/system-context.js';
 function serviceWithModel(
   model: FakeChatModel,
   config: Record<string, unknown> = { LLM_MODEL: 'fake-model' },
+  logger?: PinoLogger,
 ): LlmService {
-  return new LlmService(createLlmGraph(model), new ConfigService(config));
+  return new LlmService(
+    createLlmGraph(model),
+    new ConfigService(config),
+    undefined,
+    logger,
+  );
 }
 
 test('LlmService 转换消息并返回统一响应', async () => {
@@ -97,19 +104,49 @@ test('LlmService 将超时映射为 504 且不泄露上游错误详情', async (
 });
 
 test('LlmService 将普通供应商异常映射为 502', async () => {
+  const logEntries: Array<[unknown, string]> = [];
+  const logger = {
+    error: (fields: unknown, message: string) =>
+      logEntries.push([fields, message]),
+  } as unknown as PinoLogger;
   const service = serviceWithModel(
     new FakeChatModel({
-      error: new Error('secret API key sk-test provider failure'),
+      error: Object.assign(
+        new Error('secret API key sk-test provider failure'),
+        { status: 429 },
+      ),
     }),
+    { LLM_MODEL: 'fake-model' },
+    logger,
   );
 
   await assert.rejects(
-    service.chat({ messages: [{ role: 'user', content: 'hello' }] }),
+    service.chatPrepared(
+      { messages: [{ role: 'user', content: 'hello' }] },
+      {
+        conversationId: 'conversation-1',
+        runId: 'run-1',
+        model: 'fake-model',
+        writer: { writeEvents: async () => undefined },
+      },
+    ),
     (error: unknown) =>
       error instanceof BadGatewayException &&
       error.getStatus() === 502 &&
       !JSON.stringify(error.getResponse()).includes('sk-test'),
   );
+  assert.equal(logEntries.length, 1);
+  assert.deepEqual(logEntries[0]?.[0], {
+    event: 'llm_call_failed',
+    stage: 'model',
+    conversationId: 'conversation-1',
+    runId: 'run-1',
+    model: 'fake-model',
+    errorType: 'Error',
+    statusCode: 429,
+  });
+  assert.equal(JSON.stringify(logEntries).includes('sk-test'), false);
+  assert.equal(JSON.stringify(logEntries).includes('provider failure'), false);
 });
 
 test('LlmService 在供应商未返回 token 时返回 null usage', async () => {

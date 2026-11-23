@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PinoLogger } from 'nestjs-pino';
 import {
   AIMessage,
   BaseMessage,
@@ -18,6 +19,8 @@ import { ChatMessageRole } from '../dto/chat.dto.js';
 import {
   createLlmGraph,
   normalizeUsage,
+  toLlmFailureMetadata,
+  type LlmFailureEvent,
   type LlmTool,
 } from '../graph/llm.graph.js';
 import { LLM_GRAPH, LLM_GRAPH_FACTORY } from '../graph/llm.tokens.js';
@@ -133,6 +136,9 @@ export class LlmService {
     @Optional()
     @Inject(LLM_GRAPH_FACTORY)
     private readonly graphFactory?: LlmGraphFactory,
+    @Optional()
+    @Inject(PinoLogger)
+    private readonly logger?: PinoLogger,
   ) {}
 
   public async chat(
@@ -159,6 +165,7 @@ export class LlmService {
     const model = this.assertConfigured();
 
     let result: LlmStateValue;
+    let failureReported = false;
     try {
       result = await this.activeGraph(extraTools).invoke(
         {
@@ -179,11 +186,26 @@ export class LlmService {
                       ephemeralModelMessages: execution.ephemeralModelMessages,
                     }
                   : {}),
+                onFailure: (event: LlmFailureEvent) => {
+                  failureReported = true;
+                  this.logFailure(event);
+                },
               } as any,
             }
           : undefined,
       );
     } catch (error) {
+      if (!failureReported) {
+        this.logFailure({
+          stage: 'execution',
+          ...(traceContext?.conversationId
+            ? { conversationId: traceContext.conversationId }
+            : {}),
+          ...(traceContext?.runId ? { runId: traceContext.runId } : {}),
+          model,
+          ...toLlmFailureMetadata(error),
+        });
+      }
       this.rethrowMappedError(error);
       throw new BadGatewayException('上游大模型调用失败');
     }
@@ -257,6 +279,7 @@ export class LlmService {
     let fullMessage: BaseMessage | undefined;
     let finalTraceSequence: number | null = null;
     let content = '';
+    let failureReported = false;
     try {
       controller.signal.throwIfAborted();
       const stream = await this.activeGraph(extraTools).stream(
@@ -275,6 +298,10 @@ export class LlmService {
             eventStreaming: true,
             streamLifecycle: lifecycle,
             signal: controller.signal,
+            onFailure: (event: LlmFailureEvent) => {
+              failureReported = true;
+              this.logFailure(event);
+            },
             ...(execution.skipPersistInput ? { skipPersistInput: true } : {}),
             ...(execution.ephemeralModelMessages
               ? {
@@ -312,6 +339,17 @@ export class LlmService {
         (error instanceof Error && error.name === 'AbortError')
       ) {
         throw error;
+      }
+      if (!failureReported) {
+        this.logFailure({
+          stage: 'execution',
+          ...(traceContext?.conversationId
+            ? { conversationId: traceContext.conversationId }
+            : {}),
+          ...(traceContext?.runId ? { runId: traceContext.runId } : {}),
+          model,
+          ...toLlmFailureMetadata(error),
+        });
       }
       this.rethrowMappedError(error);
     } finally {
@@ -351,6 +389,14 @@ export class LlmService {
       throw new ServiceUnavailableException('大模型服务尚未完成配置');
     }
     return model;
+  }
+
+  private logFailure(event: LlmFailureEvent): void {
+    // 只记录失败阶段和白名单元数据，不写入原始异常、提示词或工具参数/结果。
+    this.logger?.error(
+      { event: 'llm_call_failed', ...event },
+      'LLM call failed',
+    );
   }
 
   private rethrowMappedError(error: unknown): never {

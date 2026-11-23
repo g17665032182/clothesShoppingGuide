@@ -42,11 +42,24 @@ import {
 import type { LlmStreamEvent } from '../stream/llm-stream.types.js';
 
 type UnknownRecord = Record<string, unknown>;
+
+export type LlmFailureEvent = {
+  stage: 'model' | 'tool' | 'execution';
+  conversationId?: string;
+  runId?: string;
+  model?: string;
+  toolName?: string;
+  toolCallId?: string;
+  errorType: string;
+  statusCode?: number;
+};
+
 export type GraphTraceContext = {
   conversationId?: string;
   runId?: string;
   writer?: LlmTraceContext['writer'];
   model?: string;
+  onFailure?: (event: LlmFailureEvent) => void;
   signal?: AbortSignal;
   streaming?: boolean;
   eventStreaming?: boolean;
@@ -77,6 +90,41 @@ function pickNumber(source: UnknownRecord, keys: string[]): number | null {
   return null;
 }
 
+export function toLlmFailureMetadata(error: unknown): {
+  errorType: string;
+  statusCode?: number;
+} {
+  const record = asRecord(error);
+  const name = typeof record.name === 'string' ? record.name : '';
+  const status = record.status ?? record.statusCode;
+  return {
+    errorType: /^[A-Za-z][A-Za-z0-9_.]{0,63}$/u.test(name)
+      ? name
+      : 'UnknownError',
+    ...(typeof status === 'number' &&
+    Number.isInteger(status) &&
+    status >= 100 &&
+    status <= 599
+      ? { statusCode: status }
+      : {}),
+  };
+}
+
+function reportFailure(
+  runtime: Runtime<Record<string, unknown>>,
+  event: Omit<LlmFailureEvent, 'conversationId' | 'runId' | 'model'>,
+): void {
+  const context = runtime.context as GraphTraceContext | undefined;
+  context?.onFailure?.({
+    ...event,
+    ...(context?.conversationId
+      ? { conversationId: context.conversationId }
+      : {}),
+    ...(context?.runId ? { runId: context.runId } : {}),
+    ...(context?.model ? { model: context.model } : {}),
+  });
+}
+
 export type LlmTool = ClientTool;
 
 const LlmTraceContextSchema = new StateSchema({
@@ -84,6 +132,7 @@ const LlmTraceContextSchema = new StateSchema({
   runId: z.string().optional(),
   writer: z.custom<LlmTraceContext['writer']>().optional(),
   model: z.string().optional(),
+  onFailure: z.custom<GraphTraceContext['onFailure']>().optional(),
   signal: z.custom<AbortSignal>().optional(),
   streaming: z.boolean().optional(),
   eventStreaming: z.boolean().optional(),
@@ -300,13 +349,28 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
         const response = toAiMessage(aggregate);
         const usage = normalizeUsage(response);
         return { messages: [response], usage };
+      } catch (error) {
+        reportFailure(runtime, {
+          stage: 'model',
+          ...toLlmFailureMetadata(error),
+        });
+        throw error;
       } finally {
         finish?.();
       }
     }
 
     // 非流式路径保持 invoke，兼容不实现 _streamResponseChunks 的模型。
-    const response = await modelWithTools.invoke(modelMessages);
+    let response: AIMessage;
+    try {
+      response = await modelWithTools.invoke(modelMessages);
+    } catch (error) {
+      reportFailure(runtime, {
+        stage: 'model',
+        ...toLlmFailureMetadata(error),
+      });
+      throw error;
+    }
     const usage = normalizeUsage(response);
     return { messages: [response], usage };
   };
@@ -394,6 +458,15 @@ export function createLlmGraph(model: BaseChatModel, tools: LlmTool[] = []) {
       return event;
     });
     await writeTraceEvents(runtime, events);
+    for (const event of events) {
+      if (event.type !== 'tool_result' || event.status !== 'failed') continue;
+      reportFailure(runtime, {
+        stage: 'tool',
+        ...(event.toolName ? { toolName: event.toolName } : {}),
+        toolCallId: event.toolCallId,
+        errorType: 'ToolExecutionError',
+      });
+    }
     for (const event of events) {
       if (event.type !== 'tool_result') continue;
       await emitEvent(runtime, {

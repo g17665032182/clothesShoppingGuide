@@ -23,3 +23,9 @@
 - API 提交前执行 `pnpm format:check`、API `typecheck`、API `test`、API `build` 和 `pnpm check`；按需阅读 [`validation.md`](validation.md) 确认隔离库与门控。
 
 API 使用原生 ESM；TypeScript 相对导入保留 `.js` 后缀。
+
+## 运行失败日志
+
+聊天模型或工具执行失败时，API 通过 Pino 记录 `llm_call_failed` 结构化事件，包含失败阶段、模型名、会话/运行 ID、工具名/调用 ID、错误类型和有效 HTTP 状态码。错误详情仍通过统一异常映射对客户端隐藏。
+
+日志不得记录原始异常消息或堆栈、模型提示词与响应正文、工具参数与结果、认证信息或第三方密钥。排查失败时使用会话/运行 ID 关联内部 trace；trace 的业务字段仍遵守[安全与业务边界](./security-and-business-boundaries.md)中的白名单要求。
